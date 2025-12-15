@@ -1,0 +1,6 @@
+{
+  "framework": "tanstack-start",
+  "regions": ["sin1"],
+  "bunVersion": "1.x",
+  "outputDirectory": ".vercel/output"
+}

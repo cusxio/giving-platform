@@ -1,0 +1,14 @@
+# https://moonrepo.dev/docs/config/workspace
+$schema: './cache/schemas/workspace.json'
+
+projects:
+  app: '.'
+
+vcs:
+  defaultBranch: main
+  manager: 'git'
+  hooks:
+    commit-msg:
+      - 'bun commitlint --edit $1'
+    pre-commit:
+      - 'bun moon run :lint :format --affected --status=staged'

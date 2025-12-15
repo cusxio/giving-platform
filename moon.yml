@@ -1,0 +1,81 @@
+fileGroups:
+  sources:
+    - 'src/**/*'
+  configs:
+    - '*.{js,ts,json}'
+
+tasks:
+  lint:
+    command: 'eslint'
+    args:
+      - '--max-warnings=0'
+      - '.'
+    inputs:
+      - '/.gitignore'
+      - '@group(sources)'
+      - '@group(configs)'
+      - '/eslint.config.ts'
+
+  fix/lint:
+    extends: 'lint'
+    options:
+      mergeArgs: 'prepend'
+    args:
+      - '--fix'
+
+  format:
+    command: 'prettier'
+    args:
+      - '--check'
+      - '--log-level=warn'
+      - '--ignore-path'
+      - '@in(0)'
+      - '.'
+    inputs:
+      - '/.gitignore'
+      - '@group(sources)'
+      - '@group(configs)'
+      - '/prettier.config.js'
+
+  fix/format:
+    extends: 'format'
+    options:
+      mergeArgs: 'prepend'
+    args:
+      - '--write'
+
+  fix/all:
+    command: 'noop'
+    deps:
+      - 'fix/lint'
+      - 'fix/format'
+    inputs: []
+    options:
+      runDepsInParallel: false
+
+  typecheck:
+    command: 'tsc'
+    args:
+      - '--noEmit'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - '/tsconfig.json'
+
+  test:
+    command: 'vitest'
+    args:
+      - '--run'
+    inputs:
+      - '@group(sources)'
+      - '/vite.config.ts'
+      - '/tsconfig.json'
+
+  build:
+    command: 'bunx vercel build'
+    inputs:
+      - '@group(sources)'
+      - '/vite.config.ts'
+      - '/tsconfig.json'
+    outputs:
+      - .vercel/output

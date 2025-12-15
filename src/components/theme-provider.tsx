@@ -1,0 +1,119 @@
+// https://github.com/dotnize/react-tanstarter/blob/b445787f7251ac2eb89d9eca4ba9c13c2e0806b0/src/components/theme-provider.tsx
+import { ScriptOnce } from '@tanstack/react-router'
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
+
+type Theme = 'dark' | 'light' | 'system'
+const MEDIA = '(prefers-color-scheme: dark)'
+
+interface ThemeProviderProps {
+  children: React.ReactNode
+  defaultTheme?: Theme
+  storageKey?: string
+}
+
+interface ThemeProviderState {
+  setTheme: (theme: Theme) => void
+  theme: Theme
+}
+
+const initialState: ThemeProviderState = {
+  theme: 'system',
+  setTheme: () => null,
+}
+
+const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
+
+// references:
+// https://ui.shadcn.com/docs/dark-mode/vite
+// https://github.com/pacocoursey/next-themes/blob/main/next-themes/src/index.tsx
+export function ThemeProvider({
+  children,
+  defaultTheme = 'system',
+  storageKey = 'theme',
+  ...props
+}: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>(
+    () =>
+      (typeof window === 'undefined'
+        ? null
+        : (localStorage.getItem(storageKey) as Theme)) ?? defaultTheme,
+  )
+
+  const handleMediaQuery = useCallback(
+    (e: MediaQueryList | MediaQueryListEvent) => {
+      if (theme !== 'system') return
+      const root = globalThis.document.documentElement
+      const targetTheme = e.matches ? 'dark' : 'light'
+      if (!root.classList.contains(targetTheme)) {
+        root.classList.remove('light', 'dark')
+        root.classList.add(targetTheme)
+      }
+    },
+    [theme],
+  )
+
+  // Listen for system preference changes
+  useEffect(() => {
+    const media = globalThis.matchMedia(MEDIA)
+
+    media.addEventListener('change', handleMediaQuery)
+    handleMediaQuery(media)
+
+    return () => {
+      media.removeEventListener('change', handleMediaQuery)
+    }
+  }, [handleMediaQuery])
+
+  useEffect(() => {
+    const root = globalThis.document.documentElement
+
+    let targetTheme: string
+
+    if (theme === 'system') {
+      localStorage.removeItem(storageKey)
+      targetTheme = globalThis.matchMedia(MEDIA).matches ? 'dark' : 'light'
+    } else {
+      localStorage.setItem(storageKey, theme)
+      targetTheme = theme
+    }
+
+    // Only update if the target theme is not already applied
+    if (!root.classList.contains(targetTheme)) {
+      root.classList.remove('light', 'dark')
+      root.classList.add(targetTheme)
+    }
+  }, [theme, storageKey])
+
+  const value = useMemo(() => ({ theme, setTheme }), [theme])
+
+  return (
+    <ThemeProviderContext {...props} value={value}>
+      <ScriptOnce>
+        {/* Apply theme early to avoid FOUC */}
+        {`document.documentElement.classList.toggle(
+            'dark',
+            localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)
+            )`}
+      </ScriptOnce>
+      {children}
+    </ThemeProviderContext>
+  )
+}
+
+export const useTheme = () => {
+  const context = use(ThemeProviderContext)
+
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider')
+  }
+
+  return context
+}

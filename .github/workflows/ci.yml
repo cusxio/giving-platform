@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  BUN_VERSION: latest
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_PROD_FLAG: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+
+jobs:
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-repo
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Run moon tasks
+        env:
+          MOON_TOOLCHAIN_FORCE_GLOBALS: true
+        run: bun moon ci :lint :format :typecheck :test
+
+  deploy:
+    name: Deploy to Vercel
+    needs: static-analysis
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+      url: ${{ steps.vercel-deploy.outputs.url }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-repo
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Pull Vercel Environment Information
+        env:
+          VERCEL_ENV: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bunx vercel pull --yes --environment=$VERCEL_ENV --token=$VERCEL_TOKEN
+
+      - name: Build Project Artifacts
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bun moon run build -- $VERCEL_PROD_FLAG --token=$VERCEL_TOKEN
+
+      - name: Deploy Project Artifacts
+        id: vercel-deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          URL=$(bunx vercel deploy --prebuilt $VERCEL_PROD_FLAG --token=$VERCEL_TOKEN)
+          echo "Deployed to: $URL"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"

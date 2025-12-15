@@ -1,0 +1,141 @@
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/lora';
+
+:root {
+  --chart-1: var(--fg-1);
+  --chart-2: oklch(0.5279 0.0124 291.7);
+  --chart-3: oklch(0.8489 0.144 90.64);
+  --chart-4: oklch(0.722 0.1773 41.28);
+  --chart-5: oklch(0.8333 0.176 143.44);
+
+  --chart-6: #70b8ff;
+  --chart-7: #ffa057;
+  --chart-8: #3dd68c;
+  --chart-9: #ff92ad;
+  --chart-10: #b1a9ff;
+}
+
+.dark {
+  --base-0: oklch(0 0 0);
+  --base-1: oklch(0.1543 0 0);
+  --surface: oklch(0.1822 0 0);
+  --elevated: oklch(0.243 0 0);
+
+  --fg-1: oklch(0.9851 0 0);
+  --fg-default: oklch(0.8248 0 0);
+  --fg-muted: oklch(0.7048 0 0);
+  --fg-subtle: oklch(0.5048 0 0);
+
+  --border: oklch(0.2705 0 0);
+
+  --chart-1: oklch(0.9128 0 0);
+
+  --fg-info: hsl(210, 100%, 62%);
+  --base-info: color-mix(in srgb, var(--fg-info) 15%, var(--base-0));
+
+  --fg-success: hsl(151, 65%, 54%);
+  --base-success: color-mix(in srgb, var(--fg-success) 15%, var(--base-0));
+
+  --fg-error: hsl(358, 75%, 59%);
+  --base-error: color-mix(in srgb, var(--fg-error) 15%, var(--base-0));
+
+  --fg-warning: hsl(53, 90%, 62%);
+  --base-warning: color-mix(in srgb, var(--fg-warning) 15%, var(--base-0));
+
+  --brown-bg: #1c1816;
+  --brown-fg: #dbb594;
+  --purple-bg: #1e1523;
+  --purple-fg: #d19dff;
+  --lime-bg: #151a10;
+  --lime-fg: #bde56c;
+  --red-bg: #201314;
+  --red-fg: #ff9592;
+  --yellow-bg: #1b180f;
+  --yellow-fg: #f5e147;
+}
+
+@theme {
+  --font-sans: 'Geist Variable';
+  --font-serif: 'Lora Variable', ui-serif;
+
+  --color-base-0: var(--base-0);
+  --color-base-1: var(--base-1);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+
+  --color-fg-1: var(--fg-1);
+  --color-fg-default: var(--fg-default);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+
+  --color-border: var(--border);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+  --color-chart-9: var(--chart-9);
+  --color-chart-10: var(--chart-10);
+
+  --color-fg-success: var(--fg-success);
+  --color-base-success: var(--base-success);
+  --color-fg-error: var(--fg-error);
+  --color-base-error: var(--base-error);
+  --color-fg-warning: var(--fg-warning);
+  --color-base-warning: var(--base-warning);
+  --color-fg-info: var(--fg-info);
+  --color-base-info: var(--base-info);
+
+  --color-brown-bg: var(--brown-bg);
+  --color-brown-fg: var(--brown-fg);
+  --color-purple-bg: var(--purple-bg);
+  --color-purple-fg: var(--purple-fg);
+  --color-lime-bg: var(--lime-bg);
+  --color-lime-fg: var(--lime-fg);
+  --color-red-bg: var(--red-bg);
+  --color-red-fg: var(--red-fg);
+  --color-yellow-bg: var(--yellow-bg);
+  --color-yellow-fg: var(--yellow-fg);
+
+  --breakpoint-bp-overview-2col: 52rem;
+}
+
+@utility no-scrollbar {
+  @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
+}
+
+@keyframes plop {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  20% {
+    opacity: 1;
+  }
+}
+
+@keyframes blink {
+  0%,
+  70%,
+  100% {
+    opacity: 1;
+  }
+  20%,
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}

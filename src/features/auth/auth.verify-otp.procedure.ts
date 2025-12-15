@@ -1,0 +1,132 @@
+import { redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { setResponseHeader } from '@tanstack/react-start/server'
+import { Type } from 'typebox'
+import type { Static } from 'typebox'
+import { Compile } from 'typebox/compile'
+
+import { assertExhaustive } from '#/core/assert-exhaustive'
+import { createParseError } from '#/core/errors'
+import type {
+  BusinessErrorResponse,
+  ServerErrorResponse,
+  SuccessResponse,
+  ValidationErrorResponse,
+} from '#/core/procedure-response-types'
+import { trySync } from '#/core/result'
+import { authServiceMiddleware } from '#/server/middleware'
+
+const schema = Compile(
+  Type.Object({
+    otp: Type.String({ pattern: '^[0-9]{6}$' }),
+    email: Type.String({ format: 'email' }),
+    mode: Type.Union([Type.Literal('login'), Type.Literal('signup')]),
+  }),
+)
+
+export type VerifyOtpInput = Static<typeof schema>
+
+export type VerifyOtpResponse =
+  | BusinessErrorResponse<VerifyOtpBusinessErrorCode>
+  | ServerErrorResponse
+  | SuccessResponse
+  | ValidationErrorResponse
+
+type VerifyOtpBusinessErrorCode = 'INVALID_OTP' | 'INVALID_REQUEST'
+
+export const verifyOtp = createServerFn()
+  .middleware([authServiceMiddleware])
+  .inputValidator((v: VerifyOtpInput) => v)
+  .handler(
+    async ({ context, data }): Promise<undefined | VerifyOtpResponse> => {
+      const { session, authService, logger } = context
+
+      if (session !== null) {
+        logger.info(
+          { event: 'auth.verify_otp.redirected', user_id: session.userId },
+          'User already logged in',
+        )
+        throw redirect({ to: '/' })
+      }
+
+      const parseResult = trySync(() => schema.Parse(data), createParseError)
+
+      if (!parseResult.ok) {
+        logger.warn(
+          {
+            event: 'auth.verify_otp.validation_failed',
+            err: parseResult.error.error,
+            error_type: parseResult.error.type,
+          },
+          'Input validation failed',
+        )
+        return {
+          type: 'VALIDATION_ERROR',
+          errors: parseResult.error.error.cause.errors.map((v) => {
+            return { path: v.instancePath, message: v.message }
+          }),
+        }
+      }
+
+      const { mode, otp, email } = data
+
+      logger.info(
+        { event: 'auth.verify_otp.attempt', email, mode },
+        'Attempting to verify code',
+      )
+
+      const userResult = await authService.validateOtp(email, otp, mode)
+
+      if (!userResult.ok) {
+        const { type } = userResult.error
+        switch (type) {
+          case 'InvalidOtpError': {
+            logger.warn(
+              { event: 'auth.verify_otp.invalid', email, reason: 'wrong_code' },
+              'Invalid code provided',
+            )
+            return { type: 'BUSINESS_ERROR', error: { code: 'INVALID_OTP' } }
+          }
+          case 'InvalidRequestError': {
+            logger.warn(
+              {
+                event: 'auth.verify_otp.invalid',
+                email,
+                reason: 'expired_or_missing',
+              },
+              'Invalid Request (Expired or missing)',
+            )
+            return {
+              type: 'BUSINESS_ERROR',
+              error: { code: 'INVALID_REQUEST' },
+            }
+          }
+          case 'DBQueryError':
+          case 'TransactionRollbackError': {
+            logger.error(
+              {
+                event: 'auth.verify_otp.failed',
+                err: userResult.error.error,
+                error_type: userResult.error.type,
+              },
+              'System Error during OTP verification',
+            )
+            return { type: 'SERVER_ERROR' }
+          }
+          default: {
+            assertExhaustive(userResult.error)
+          }
+        }
+      }
+
+      const serializedCookie = userResult.value
+      setResponseHeader('Set-Cookie', serializedCookie)
+
+      logger.info(
+        { event: 'auth.verify_otp.success', email, mode },
+        'Verification success, session created',
+      )
+
+      return { type: 'SUCCESS' }
+    },
+  )

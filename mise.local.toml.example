@@ -1,0 +1,32 @@
+[env]
+MOON_TOOLCHAIN_FORCE_GLOBALS       = true
+
+BASE_URL                           = ""
+SESSION_SECRET                     = ""
+NODE_ENV                           = "development"
+
+DATABASE_URL                       = ""
+DATABASE_AUTH_TOKEN                = ""
+
+# Mailersend
+# MAILERSEND_ROOT_DOMAIN           = ""
+# MAILERSEND_API_KEY               = ""
+
+# EGHL
+EGHL_SERVICE_ID                    = ""
+EGHL_URL                           = ""
+EGHL_PASSWORD                      = ""
+
+# this just makes life easier tbh, the world runs on UTC
+TZ                                 = "UTC"
+
+# https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
+OTEL_LOG_LEVEL                     = "NONE"
+
+# https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
+OTEL_EXPORTER_OTLP_ENDPOINT        = ""
+OTEL_EXPORTER_OTLP_HEADERS         = ""
+OTEL_EXPORTER_OTLP_METRICS_HEADERS = ""
+OTEL_TRACES_EXPORTER               = "none"
+OTEL_LOGS_EXPORTER                 = "none"
+OTEL_METRICS_EXPORTER              = "none"
