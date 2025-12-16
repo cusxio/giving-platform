@@ -41,11 +41,7 @@ export const updatePrivacyMode = createServerFn()
     }
 
     logger.info(
-      {
-        event: 'user.update_privacy.attempt',
-        user_id: userId,
-        privacy_mode: privacyMode,
-      },
+      { event: 'user.update_privacy.attempt', privacy_mode: privacyMode },
       'Updating privacy mode',
     )
 
@@ -81,7 +77,7 @@ export const updatePrivacyMode = createServerFn()
     }
 
     logger.info(
-      { event: 'user.update_privacy.success', userId },
+      { event: 'user.update_privacy.success' },
       'Privacy mode updated',
     )
 
