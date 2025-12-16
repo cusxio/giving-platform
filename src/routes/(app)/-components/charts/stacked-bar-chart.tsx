@@ -32,13 +32,11 @@ type TooltipPayload = { payload: Data }[]
 export function StackedBarChart(props: StackedBarChartProps) {
   const { privacyMode, ...rest } = props
 
-  const xTickFormatter = useCallback(
-    (value: number) =>
-      createDateFormatter({ month: 'short' }).format(
-        new Date(value.toString()),
-      ),
-    [],
-  )
+  const xTickFormatter = useCallback((value: number) => {
+    return createDateFormatter({ month: 'short' }).format(
+      now(clientTz).setMonth(value - 1),
+    )
+  }, [])
 
   const yTickFormatter = useCallback(
     (value: number) => {

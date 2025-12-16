@@ -5,6 +5,7 @@ import type { TooltipContentProps } from 'recharts'
 import type { CartesianChartProps } from 'recharts/types/util/types'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'
+import { clientTz, TZDate } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 
 import { CartesianGrid } from './cartesian-grid'
@@ -39,7 +40,7 @@ export function AreaChart(props: AreaChartProps) {
 
   const xTickFormatter = useCallback((value: string) => {
     return createDateFormatter({ month: 'short', year: '2-digit' }).format(
-      new Date(value),
+      new TZDate(value, clientTz),
     )
   }, [])
 

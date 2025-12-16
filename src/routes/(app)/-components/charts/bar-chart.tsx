@@ -31,7 +31,7 @@ export function BarChart(props: BarChartProps) {
   const xTickFormatter = useCallback(
     (value: number) =>
       createDateFormatter({ month: 'short' }).format(
-        new Date(value.toString()),
+        now(clientTz).setMonth(value - 1),
       ),
     [],
   )
