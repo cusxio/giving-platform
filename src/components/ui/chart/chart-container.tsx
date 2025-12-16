@@ -13,7 +13,7 @@ export function ChartContainer(props: ChartContainerProps) {
       className={cx(
         'flex flex-col',
         'overflow-hidden border border-border bg-base-0/50',
-        '[&_.recharts-wrapper]:aspect-video',
+        '[&_.recharts-wrapper]:aspect-video [&_.recharts-wrapper]:min-w-0',
         '[&_.recharts-wrapper]:px-4 [&_.recharts-wrapper]:pt-4 [&_.recharts-wrapper]:pb-2',
         '[&_.recharts-surface]:outline-hidden',
         '[&_.recharts-sector]:outline-hidden',
