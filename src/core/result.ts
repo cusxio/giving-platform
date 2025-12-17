@@ -12,7 +12,7 @@ export type Result<T, E> = Err<E> | Ok<T>
 
 export function ok(): Ok<void>
 export function ok<T>(value: T): Ok<T>
-export function ok<T>(value = undefined): Ok<T> {
+export function ok<T>(value?: T): Ok<T> {
   return { ok: true, value: value as T }
 }
 

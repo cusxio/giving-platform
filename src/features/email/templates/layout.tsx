@@ -25,6 +25,8 @@ export interface LayoutProps {
  * preview server will treat it as an email template and load it automatically.
  */
 export function Layout(props: LayoutProps) {
+  // For react email preview server
+  // eslint-disable-next-line @typescript-eslint/no-useless-default-assignment
   const { previewText, text, otp = '777555', mode } = props
 
   return (
