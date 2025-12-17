@@ -20,6 +20,7 @@ import { Route as appOverviewRouteRouteImport } from './routes/(app)/overview/ro
 import { Route as appsuRouteRouteImport } from './routes/(app)/(su)/route'
 import { Route as TransactionReceiptTransactionIdRouteImport } from './routes/transaction/receipt/$transactionId'
 import { Route as ApiEghlReturnRouteImport } from './routes/api/eghl.return'
+import { Route as ApiEghlCronRouteImport } from './routes/api/eghl.cron'
 import { Route as ApiEghlCallbackRouteImport } from './routes/api/eghl.callback'
 import { Route as authWelcomeSignupRouteImport } from './routes/(auth)/welcome.signup'
 import { Route as authAuthLoginRouteImport } from './routes/(auth)/auth.login'
@@ -80,6 +81,11 @@ const ApiEghlReturnRoute = ApiEghlReturnRouteImport.update({
   path: '/api/eghl/return',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEghlCronRoute = ApiEghlCronRouteImport.update({
+  id: '/api/eghl/cron',
+  path: '/api/eghl/cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiEghlCallbackRoute = ApiEghlCallbackRouteImport.update({
   id: '/api/eghl/callback',
   path: '/api/eghl/callback',
@@ -125,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
   '/api/eghl/callback': typeof ApiEghlCallbackRoute
+  '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
   '/transaction/receipt/$transactionId': typeof TransactionReceiptTransactionIdRoute
 }
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
   '/api/eghl/callback': typeof ApiEghlCallbackRoute
+  '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
   '/transaction/receipt/$transactionId': typeof TransactionReceiptTransactionIdRoute
 }
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/(auth)/auth/login': typeof authAuthLoginRoute
   '/(auth)/welcome/signup': typeof authWelcomeSignupRoute
   '/api/eghl/callback': typeof ApiEghlCallbackRoute
+  '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
   '/transaction/receipt/$transactionId': typeof TransactionReceiptTransactionIdRoute
 }
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/welcome/signup'
     | '/api/eghl/callback'
+    | '/api/eghl/cron'
     | '/api/eghl/return'
     | '/transaction/receipt/$transactionId'
   fileRoutesByTo: FileRoutesByTo
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/welcome/signup'
     | '/api/eghl/callback'
+    | '/api/eghl/cron'
     | '/api/eghl/return'
     | '/transaction/receipt/$transactionId'
   id:
@@ -214,6 +225,7 @@ export interface FileRouteTypes {
     | '/(auth)/auth/login'
     | '/(auth)/welcome/signup'
     | '/api/eghl/callback'
+    | '/api/eghl/cron'
     | '/api/eghl/return'
     | '/transaction/receipt/$transactionId'
   fileRoutesById: FileRoutesById
@@ -225,6 +237,7 @@ export interface RootRouteChildren {
   WelcomeRouteRoute: typeof WelcomeRouteRoute
   UhOhRoute: typeof UhOhRoute
   ApiEghlCallbackRoute: typeof ApiEghlCallbackRoute
+  ApiEghlCronRoute: typeof ApiEghlCronRoute
   ApiEghlReturnRoute: typeof ApiEghlReturnRoute
   TransactionReceiptTransactionIdRoute: typeof TransactionReceiptTransactionIdRoute
 }
@@ -306,6 +319,13 @@ declare module '@tanstack/react-router' {
       path: '/api/eghl/return'
       fullPath: '/api/eghl/return'
       preLoaderRoute: typeof ApiEghlReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/eghl/cron': {
+      id: '/api/eghl/cron'
+      path: '/api/eghl/cron'
+      fullPath: '/api/eghl/cron'
+      preLoaderRoute: typeof ApiEghlCronRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/eghl/callback': {
@@ -408,6 +428,7 @@ const rootRouteChildren: RootRouteChildren = {
   WelcomeRouteRoute: WelcomeRouteRoute,
   UhOhRoute: UhOhRoute,
   ApiEghlCallbackRoute: ApiEghlCallbackRoute,
+  ApiEghlCronRoute: ApiEghlCronRoute,
   ApiEghlReturnRoute: ApiEghlReturnRoute,
   TransactionReceiptTransactionIdRoute: TransactionReceiptTransactionIdRoute,
 }

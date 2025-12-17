@@ -13,6 +13,7 @@ const schema = Type.Object({
     Type.Literal('production'),
   ]),
   SESSION_SECRET: Type.String(),
+  CRON_SECRET: Type.Optional(Type.String()),
   //
   DATABASE_AUTH_TOKEN: Type.Optional(Type.String()),
   DATABASE_URL: Type.String(),
@@ -36,6 +37,7 @@ export const {
   BASE_URL: BASE_URL_ENV,
   NODE_ENV,
   SESSION_SECRET,
+  CRON_SECRET,
   //
   DATABASE_AUTH_TOKEN,
   DATABASE_URL,

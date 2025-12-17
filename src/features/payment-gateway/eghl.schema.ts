@@ -128,4 +128,22 @@ export const EghlPaymentResponseSchema = Compile(
   }),
 )
 
+export enum EghlTxnExists {
+  Exists = '0',
+  InternalError = '2',
+  NotFound = '1',
+}
+
+export const EghlQueryResponseSchema = Compile(
+  Type.Intersect([
+    EghlPaymentResponseSchema,
+    Type.Object({
+      TxnExists: Type.Enum(EghlTxnExists),
+      QueryDesc: Type.Optional(Type.String()),
+      TotalRefundAmount: Type.Optional(Type.String()),
+    }),
+  ]),
+)
+
 export type EghlPaymentResponse = Static<typeof EghlPaymentResponseSchema>
+export type EghlQueryResponse = Static<typeof EghlQueryResponseSchema>
