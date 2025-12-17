@@ -2,8 +2,8 @@ import { sha256 } from '@oslojs/crypto/sha2'
 import { encodeHexLowerCase } from '@oslojs/encoding'
 import { describe, expect, it, vi } from 'vitest'
 
-import { EghlTxnStatus } from './eghl.schema'
 import type { EghlPaymentResponse } from './eghl.schema'
+import { EghlTxnStatus } from './eghl.schema'
 
 const mockedEnv = vi.hoisted(() => ({
   BASE_URL: 'https://app.give.test',

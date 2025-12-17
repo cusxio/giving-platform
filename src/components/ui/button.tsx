@@ -1,5 +1,5 @@
-import { Button as BaseButton } from '@ariakit/react'
 import type { ButtonProps } from '@ariakit/react'
+import { Button as BaseButton } from '@ariakit/react'
 
 import { cx } from '#/styles/cx'
 

@@ -1,5 +1,5 @@
-import { Type } from 'typebox'
 import type { Static } from 'typebox'
+import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
 // Success

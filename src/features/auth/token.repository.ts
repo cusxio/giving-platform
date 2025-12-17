@@ -4,8 +4,8 @@ import { addMinutes, now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { DB, DBTransaction } from '#/db/client'
-import { tokens } from '#/db/schema'
 import type { Token, TokenInsert, User } from '#/db/schema'
+import { tokens } from '#/db/schema'
 
 export class TokenRepository {
   #db: DB

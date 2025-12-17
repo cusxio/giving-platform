@@ -1,12 +1,12 @@
-import { FormError, FormInput } from '@ariakit/react'
 import type { FormStore } from '@ariakit/react'
+import { FormError, FormInput } from '@ariakit/react'
 import { EnvelopeSimpleIcon } from '@phosphor-icons/react/dist/ssr'
 
 import { Alert } from '#/components/ui/alert'
 import { buttonVariants } from '#/components/ui/button'
 import { FormSubmitButton } from '#/components/ui/form-submit-button'
-import { InputOtp } from '#/components/ui/input-otp'
 import type { InputOtpProps } from '#/components/ui/input-otp'
+import { InputOtp } from '#/components/ui/input-otp'
 import { cx } from '#/styles/cx'
 
 interface AuthFormOtpProps {

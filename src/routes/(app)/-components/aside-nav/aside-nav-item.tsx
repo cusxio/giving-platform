@@ -1,7 +1,7 @@
 import { Button } from '@ariakit/react'
 import type { Icon } from '@phosphor-icons/react'
-import { Link } from '@tanstack/react-router'
 import type { LinkProps } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { createElement } from 'react'
 
 import { cx } from '#/styles/cx'

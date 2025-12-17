@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 
 import { Button } from '#/components/ui/button'
-import { FUND_COLOR_MAP } from '#/core/brand/funds'
 import type { Fund } from '#/core/brand/funds'
+import { FUND_COLOR_MAP } from '#/core/brand/funds'
 import { cx } from '#/styles/cx'
 
 const quickFillSuggestions: Record<Fund, number[]> = {

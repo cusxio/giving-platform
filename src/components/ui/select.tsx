@@ -1,12 +1,12 @@
-import {
-  Select as AriakitSelect,
-  SelectItem as AriakitSelectItem,
-  SelectPopover as AriakitSelectPopover,
-} from '@ariakit/react'
 import type {
   SelectItemProps,
   SelectPopoverProps,
   SelectProps,
+} from '@ariakit/react'
+import {
+  Select as AriakitSelect,
+  SelectItem as AriakitSelectItem,
+  SelectPopover as AriakitSelectPopover,
 } from '@ariakit/react'
 
 import { cx } from '#/styles/cx'

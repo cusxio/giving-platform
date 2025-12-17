@@ -1,5 +1,5 @@
-import { Layout } from './layout'
 import type { LayoutProps } from './layout'
+import { Layout } from './layout'
 
 interface EmailVerificationProps extends Pick<LayoutProps, 'otp'> {}
 

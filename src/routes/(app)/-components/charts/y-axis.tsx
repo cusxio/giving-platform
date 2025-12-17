@@ -1,5 +1,5 @@
-import { YAxis as RechartYAxis } from 'recharts'
 import type { YAxisProps as RechartYAxisProps } from 'recharts'
+import { YAxis as RechartYAxis } from 'recharts'
 
 type YAxisProps = Pick<RechartYAxisProps, 'tickFormatter'>
 

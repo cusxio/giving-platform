@@ -1,5 +1,5 @@
-import { OTPInput } from 'input-otp'
 import type { OTPInputProps, SlotProps } from 'input-otp'
+import { OTPInput } from 'input-otp'
 
 import { cx } from '#/styles/cx'
 

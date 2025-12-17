@@ -1,7 +1,7 @@
 import { HandHeartIcon, ReceiptIcon } from '@phosphor-icons/react/dist/ssr'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Type } from 'typebox'
 import type { Static } from 'typebox'
+import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
 import { Button, buttonVariants } from '#/components/ui/button'

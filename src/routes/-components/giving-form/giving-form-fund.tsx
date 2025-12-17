@@ -1,13 +1,13 @@
 import { createElement, useCallback } from 'react'
 
-import { InputCurrency } from '#/components/ui/input-currency'
 import type { InputCurrencyProps } from '#/components/ui/input-currency'
+import { InputCurrency } from '#/components/ui/input-currency'
 import type { funds } from '#/core/brand'
 import { FUND_COLOR_MAP, FUND_ICON_MAP } from '#/core/brand/funds'
 import { cx } from '#/styles/cx'
 
-import { GivingFormFundQuickFill } from './giving-form-fund-quick-fill'
 import type { GivingFormFundQuickFillProps } from './giving-form-fund-quick-fill'
+import { GivingFormFundQuickFill } from './giving-form-fund-quick-fill'
 import type { GivingFormStore } from './use-giving-form'
 
 interface GivingFormFundProps {

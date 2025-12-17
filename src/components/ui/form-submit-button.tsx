@@ -1,5 +1,5 @@
-import { FormSubmit } from '@ariakit/react'
 import type { FormSubmitProps } from '@ariakit/react'
+import { FormSubmit } from '@ariakit/react'
 import { useLayoutEffect, useRef } from 'react'
 
 import { cx } from '#/styles/cx'

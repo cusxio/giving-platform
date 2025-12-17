@@ -3,8 +3,8 @@ import { eq } from 'drizzle-orm'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { DB, DBTransaction } from '#/db/client'
-import { sessions } from '#/db/schema'
 import type { Session } from '#/db/schema'
+import { sessions } from '#/db/schema'
 
 export class SessionRepository {
   #db: DB

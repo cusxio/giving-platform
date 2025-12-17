@@ -7,10 +7,10 @@ import { assertExhaustive } from '#/core/assert-exhaustive'
 
 import { GetUserResponse } from '../auth/auth.get-user.procedure'
 
-import { updatePrivacyMode } from './user.update-privacy-mode.procedure'
 import type { UpdatePrivacyModeInput } from './user.update-privacy-mode.procedure'
-import { updateUser } from './user.update-user.procedure'
+import { updatePrivacyMode } from './user.update-privacy-mode.procedure'
 import type { UpdateUserInput } from './user.update-user.procedure'
+import { updateUser } from './user.update-user.procedure'
 
 export function useUpdatePrivacyModeMutation() {
   const queryClient = useQueryClient()

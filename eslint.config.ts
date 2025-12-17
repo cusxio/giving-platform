@@ -7,7 +7,7 @@ import gitignore from 'eslint-config-flat-gitignore'
 import prettier from 'eslint-config-prettier'
 import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript'
 import { importX } from 'eslint-plugin-import-x'
-import perfectionist from 'eslint-plugin-perfectionist'
+import { configs as perfectionistConfigs } from 'eslint-plugin-perfectionist'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactYouMightNotNeedAnEffect from 'eslint-plugin-react-you-might-not-need-an-effect'
 import unicorn from 'eslint-plugin-unicorn'
@@ -17,25 +17,22 @@ import { configs as tsEslintConfigs } from 'typescript-eslint'
 export default defineConfig([
   gitignore(),
   { ignores: ['src/route-tree.gen.ts'] },
-  { files: ['eslint.config.mts'] },
+  { files: ['eslint.config.ts'] },
   {
     extends: [
       eslintJs.configs.recommended,
       prettier,
-      perfectionist.configs['recommended-natural'],
+      perfectionistConfigs['recommended-natural'],
       unicorn.configs.recommended,
     ],
     rules: {
       'perfectionist/sort-objects': 'off',
       'perfectionist/sort-switch-case': 'off',
       'perfectionist/sort-modules': ['error', { partitionByComment: true }],
-      // 'perfectionist/sort-named-imports': [
-      //   'error',
-      //   { groups: ['type-import', 'value-import'] },
-      // ],
       'perfectionist/sort-imports': [
         'error',
         {
+          fallbackSort: { type: 'type-import-first' },
           groups: [
             'type-import',
             ['type-builtin', 'value-builtin'],
@@ -74,7 +71,6 @@ export default defineConfig([
     extends: ['import-x/flat/recommended', 'import-x/flat/typescript'],
     rules: {
       'import-x/consistent-type-specifier-style': ['error', 'prefer-top-level'],
-      // 'import-x/no-duplicates': ['error', { 'prefer-inline': true }],
     },
   },
   {
@@ -92,14 +88,6 @@ export default defineConfig([
       pluginQuery.configs['flat/recommended'],
     ],
     rules: {
-      // '@typescript-eslint/consistent-type-imports': [
-      //   'error',
-      //   {
-      //     fixStyle: 'separate-type-imports',
-      //     prefer: 'type-imports',
-      //     disallowTypeAnnotations: true,
-      //   },
-      // ],
       '@typescript-eslint/no-empty-object-type': [
         'error',
         { allowInterfaces: 'with-single-extends' },

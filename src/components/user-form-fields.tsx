@@ -1,5 +1,5 @@
-import { FormError } from '@ariakit/react'
 import type { FormStore } from '@ariakit/react'
+import { FormError } from '@ariakit/react'
 
 import { Alert } from './ui/alert'
 import { Input } from './ui/input'

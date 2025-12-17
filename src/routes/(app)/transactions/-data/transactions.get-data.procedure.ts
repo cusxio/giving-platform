@@ -1,8 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
-import { transactions } from '#/db/schema'
 import type { User } from '#/db/schema'
+import { transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware'
 
 interface Input {

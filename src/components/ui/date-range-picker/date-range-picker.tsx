@@ -2,8 +2,8 @@ import { usePopoverStore } from '@ariakit/react'
 import { CalendarDotsIcon } from '@phosphor-icons/react/dist/ssr'
 
 import { DateRangePickerButton } from './date-range-picker-button'
-import { DateRangePickerPopover } from './date-range-picker-popover'
 import type { DateRangePickerPopoverProps } from './date-range-picker-popover'
+import { DateRangePickerPopover } from './date-range-picker-popover'
 
 export interface DateRangePickerProps extends Pick<
   DateRangePickerPopoverProps,

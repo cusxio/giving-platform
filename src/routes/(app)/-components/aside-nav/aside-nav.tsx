@@ -14,8 +14,8 @@ import type { User } from '#/db/schema'
 import { cx } from '#/styles/cx'
 
 import { AsideNavButton } from './aside-nav-button'
-import { AsideNavItem } from './aside-nav-item'
 import type { AsideNavItemProps } from './aside-nav-item'
+import { AsideNavItem } from './aside-nav-item'
 import { useAsideNavStore } from './use-aside-nav-store'
 
 interface AsideNavProps {

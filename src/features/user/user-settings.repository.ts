@@ -3,8 +3,8 @@ import { eq } from 'drizzle-orm'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { DB, DBTransaction } from '#/db/client'
-import { userSettings } from '#/db/schema'
 import type { UserSettings } from '#/db/schema'
+import { userSettings } from '#/db/schema'
 
 export class UserSettingsRepository {
   #db: DB

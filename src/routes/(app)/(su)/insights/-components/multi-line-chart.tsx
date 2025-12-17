@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
-import { Line, LineChart, Tooltip } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
+import { Line, LineChart, Tooltip } from 'recharts'
 import type {
   NameType,
   ValueType,

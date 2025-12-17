@@ -1,10 +1,10 @@
-// https://www.teemutaskula.com/blog/exploring-query-suspense
-import { useSuspenseQuery } from '@tanstack/react-query'
 import type {
   DefaultError,
   QueryKey,
   UseSuspenseQueryOptions,
 } from '@tanstack/react-query'
+// https://www.teemutaskula.com/blog/exploring-query-suspense
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { useDeferredValue } from 'react'
 import { useDeepCompareMemo } from 'use-deep-compare'
 

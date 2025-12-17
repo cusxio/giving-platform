@@ -4,8 +4,8 @@ import { now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { DB, DBTransaction } from '#/db/client'
-import { users } from '#/db/schema'
 import type { User, UserInsert } from '#/db/schema'
+import { users } from '#/db/schema'
 
 export class UserRepository {
   #db: DB

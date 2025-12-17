@@ -8,8 +8,8 @@ import type { DB } from '#/db/client'
 import { TransactionRollbackError } from '#/db/errors'
 import { payments, savedPaymentMethods, transactions } from '#/db/schema'
 
-import { EghlTxnStatus } from '../payment-gateway/eghl.schema'
 import type { EghlPaymentResponse } from '../payment-gateway/eghl.schema'
+import { EghlTxnStatus } from '../payment-gateway/eghl.schema'
 
 export class PaymentService {
   #db: DB

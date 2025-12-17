@@ -2,8 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, asc, eq, sql } from 'drizzle-orm'
 
 import { getTzOffsetModifier } from '#/core/date'
-import { transactions } from '#/db/schema'
 import type { User } from '#/db/schema'
+import { transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware'
 
 interface Input {

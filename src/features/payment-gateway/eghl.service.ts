@@ -8,8 +8,8 @@ import { err, ok, tryAsync, trySync } from '#/core/result'
 import { Transaction } from '#/db/schema'
 import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/envvars'
 
-import { EghlQueryResponseSchema } from './eghl.schema'
 import type { EghlPaymentResponse } from './eghl.schema'
+import { EghlQueryResponseSchema } from './eghl.schema'
 
 interface CreatePaymentRequestParams {
   amountInCents: number

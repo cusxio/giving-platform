@@ -1,5 +1,5 @@
-import { FormInput, FormLabel, VisuallyHidden } from '@ariakit/react'
 import type { FormInputProps } from '@ariakit/react'
+import { FormInput, FormLabel, VisuallyHidden } from '@ariakit/react'
 
 import { cx } from '#/styles/cx'
 

@@ -1,8 +1,8 @@
 import { Separator } from '@ariakit/react'
 import { CheckIcon } from '@phosphor-icons/react/dist/ssr'
 import { useCallback, useMemo } from 'react'
-import { useDayPicker } from 'react-day-picker'
 import type { DateRange } from 'react-day-picker'
+import { useDayPicker } from 'react-day-picker'
 
 import {
   addDays,

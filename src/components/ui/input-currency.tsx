@@ -1,8 +1,8 @@
-import { FormInput } from '@ariakit/react'
 import type { FormInputProps } from '@ariakit/react'
+import { FormInput } from '@ariakit/react'
 import { useMemo } from 'react'
-import CurrencyInput from 'react-currency-input-field'
 import type { CurrencyInputProps } from 'react-currency-input-field'
+import CurrencyInput from 'react-currency-input-field'
 
 import { createCurrencyFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'

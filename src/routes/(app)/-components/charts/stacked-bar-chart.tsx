@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { Bar, BarChart, Tooltip } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
+import { Bar, BarChart, Tooltip } from 'recharts'
 import type { CartesianChartProps } from 'recharts/types/util/types'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'

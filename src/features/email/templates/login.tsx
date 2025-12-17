@@ -1,5 +1,5 @@
-import { Layout } from './layout'
 import type { LayoutProps } from './layout'
+import { Layout } from './layout'
 
 interface LoginProps extends Pick<LayoutProps, 'otp'> {}
 

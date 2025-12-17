@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { DB, DBTransaction } from '#/db/client'
+import type { Transaction, User } from '#/db/schema'
 import {
   funds,
   payments,
@@ -8,7 +9,6 @@ import {
   transactions,
   users,
 } from '#/db/schema'
-import type { Transaction, User } from '#/db/schema'
 
 export class TransactionRepository {
   #db: DB

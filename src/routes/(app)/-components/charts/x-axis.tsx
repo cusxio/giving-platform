@@ -1,5 +1,5 @@
-import { XAxis as RechartXAxis } from 'recharts'
 import type { XAxisProps as RechartXAxisProps } from 'recharts'
+import { XAxis as RechartXAxis } from 'recharts'
 
 type XAxisProps = Pick<
   RechartXAxisProps,

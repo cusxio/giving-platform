@@ -1,7 +1,7 @@
 import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Type } from 'typebox'
 import type { Static } from 'typebox'
+import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'

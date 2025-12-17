@@ -1,6 +1,6 @@
 import { envSchema } from 'env-schema'
-import { Type } from 'typebox'
 import type { Static } from 'typebox'
+import { Type } from 'typebox'
 
 const exporter = Type.String({
   pattern: '^(otlp|console|none)(,(otlp|console|none))*$',

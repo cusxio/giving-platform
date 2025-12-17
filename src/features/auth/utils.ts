@@ -1,5 +1,5 @@
-import { generateRandomString } from '@oslojs/crypto/random'
 import type { RandomReader } from '@oslojs/crypto/random'
+import { generateRandomString } from '@oslojs/crypto/random'
 
 const random: RandomReader = {
   read(bytes) {

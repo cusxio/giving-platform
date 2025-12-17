@@ -1,5 +1,5 @@
-import { MenuItem as AriakitMenuItem } from '@ariakit/react'
 import type { MenuItemProps as AriakitMenuItemProps } from '@ariakit/react'
+import { MenuItem as AriakitMenuItem } from '@ariakit/react'
 
 import { cx } from '#/styles/cx'
 

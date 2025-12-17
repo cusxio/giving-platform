@@ -5,8 +5,8 @@ import {
   CaretLeftIcon,
   CaretRightIcon,
 } from '@phosphor-icons/react/dist/ssr'
-import { Link } from '@tanstack/react-router'
 import type { LinkProps } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 
 import { cx } from '#/styles/cx'
 

@@ -1,8 +1,8 @@
 import { useStoreState } from '@ariakit/react'
 import { useMemo } from 'react'
 
-import { TransactionItemsTable } from '#/components/transaction-items-table'
 import type { TransactionItemsTableProps } from '#/components/transaction-items-table'
+import { TransactionItemsTable } from '#/components/transaction-items-table'
 import { Button } from '#/components/ui/button'
 import { PaymentMethods } from '#/components/ui/payment-methods'
 import { UserFormFields } from '#/components/user-form-fields'

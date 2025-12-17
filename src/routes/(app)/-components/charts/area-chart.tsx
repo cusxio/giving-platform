@@ -1,7 +1,7 @@
 import { ChartLineUpIcon } from '@phosphor-icons/react/dist/ssr'
 import { useCallback } from 'react'
-import { Area, AreaChart as RechartAreaChart, Tooltip } from 'recharts'
 import type { TooltipContentProps } from 'recharts'
+import { Area, AreaChart as RechartAreaChart, Tooltip } from 'recharts'
 import type { CartesianChartProps } from 'recharts/types/util/types'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'

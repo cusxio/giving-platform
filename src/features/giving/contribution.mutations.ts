@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 
-import { startContribution } from './giving.start-contribution.procedure'
 import type { StartContributionInput } from './giving.start-contribution.procedure'
+import { startContribution } from './giving.start-contribution.procedure'
 
 export function useStartContributionMutation() {
   return useMutation({

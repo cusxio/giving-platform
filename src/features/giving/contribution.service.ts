@@ -5,8 +5,8 @@ import { createTransactionError } from '#/core/errors'
 import { tryAsync } from '#/core/result'
 import type { DB } from '#/db/client'
 import { TransactionRollbackError } from '#/db/errors'
-import { funds, transactionItems, transactions } from '#/db/schema'
 import type { Session } from '#/db/schema'
+import { funds, transactionItems, transactions } from '#/db/schema'
 
 import type { UserRepository } from '../user/user.repository'
 
