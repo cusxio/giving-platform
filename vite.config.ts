@@ -21,16 +21,16 @@ export default defineConfig(({ mode, command }) => {
           semicolons: false,
         },
       }),
-      nitro({
-        plugins: ['./src/server/opentelemetry/nitro'],
-        ...(mode === 'production' && {
-          preset: 'vercel',
-          vercel: { functions: { runtime: 'bun1.x', regions: ['sin1'] } },
+      mode !== 'test' &&
+        nitro({
+          plugins: ['./src/server/opentelemetry/nitro'],
+          ...(mode === 'production' && {
+            preset: 'vercel',
+            vercel: { functions: { runtime: 'bun1.x', regions: ['sin1'] } },
+          }),
         }),
-      }),
       viteReact(),
       tailwindcss(),
-
       command === 'build' &&
         mode === 'production' &&
         process.env.CI !== 'true' &&
