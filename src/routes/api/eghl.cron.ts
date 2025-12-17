@@ -68,6 +68,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
         let processedCount = 0
         let finalizedCount = 0
         let failCount = 0
+        let errorCount = 0
 
         for (const pendingTransaction of pendingTransactions) {
           processedCount++
@@ -87,6 +88,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
               },
               'Failed to query eGHL status',
             )
+            errorCount++
             continue
           }
 
@@ -157,6 +159,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
               },
               'Failed to record payment outcome in database',
             )
+            errorCount++
             continue
           }
 
@@ -171,6 +174,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
               processed: processedCount,
               updated: finalizedCount,
               marked_failed: failCount,
+              errors: errorCount,
             },
           },
           'eGHL cron job complete',

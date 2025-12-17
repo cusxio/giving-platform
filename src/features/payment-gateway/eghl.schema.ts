@@ -113,9 +113,10 @@ export const EghlPaymentResponseSchema = Compile(
     IssuingBank: Type.Optional(Type.String()),
     BankRefNo: Type.Optional(Type.String()),
     RespTime: Type.Optional(
-      Type.String({
-        description: "Response timestamp, e.g., 'YYYYMMDDHHMMSS'",
-      }),
+      Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' }),
+    ),
+    RespTime2: Type.Optional(
+      Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' }),
     ),
 
     // OCP Fields

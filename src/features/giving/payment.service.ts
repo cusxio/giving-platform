@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 
-import { now } from '#/core/date'
+import { now, TZDate } from '#/core/date'
 import { createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
 import { tryAsync } from '#/core/result'
@@ -24,6 +24,7 @@ export class PaymentService {
       TxnStatus,
       PymtMethod,
       RespTime,
+      RespTime2,
       TxnMessage,
       TxnID,
       TokenType,
@@ -114,6 +115,18 @@ export class PaymentService {
               .where(eq(savedPaymentMethods.token, Token))
           }
 
+          let paidAt = now()
+
+          const rawTime = RespTime ?? RespTime2
+          if (rawTime !== undefined) {
+            const isoTime = rawTime.replace(' ', 'T')
+            const parsedDate = new TZDate(isoTime)
+
+            if (!Number.isNaN(parsedDate.getTime())) {
+              paidAt = parsedDate
+            }
+          }
+
           await tx
             .insert(payments)
             .values({
@@ -121,7 +134,7 @@ export class PaymentService {
               providerTransactionId: TxnID,
               provider: 'eghl',
               paymentMethod: PymtMethod,
-              paidAt: RespTime === undefined ? now() : new Date(RespTime),
+              paidAt,
               message: TxnMessage,
             })
         }),
