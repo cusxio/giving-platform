@@ -3,16 +3,10 @@
 
 :root {
   --chart-1: var(--fg-1);
-  --chart-2: oklch(0.5279 0.0124 291.7);
-  --chart-3: oklch(0.8489 0.144 90.64);
-  --chart-4: oklch(0.722 0.1773 41.28);
-  --chart-5: oklch(0.8333 0.176 143.44);
-
-  --chart-6: #70b8ff;
-  --chart-7: #ffa057;
-  --chart-8: #3dd68c;
-  --chart-9: #ff92ad;
-  --chart-10: #b1a9ff;
+  --chart-2: #22d3ee;
+  --chart-3: #a3e635;
+  --chart-4: #facc15;
+  --chart-5: #fb923c;
 }
 
 .dark {
@@ -27,8 +21,6 @@
   --fg-subtle: oklch(0.5048 0 0);
 
   --border: oklch(0.2705 0 0);
-
-  --chart-1: oklch(0.9128 0 0);
 
   --fg-info: hsl(210, 100%, 62%);
   --base-info: color-mix(in srgb, var(--fg-info) 15%, var(--base-0));
@@ -75,11 +67,6 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-chart-6: var(--chart-6);
-  --color-chart-7: var(--chart-7);
-  --color-chart-8: var(--chart-8);
-  --color-chart-9: var(--chart-9);
-  --color-chart-10: var(--chart-10);
 
   --color-fg-success: var(--fg-success);
   --color-base-success: var(--base-success);
