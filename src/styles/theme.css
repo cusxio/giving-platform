@@ -1,6 +1,3 @@
-@import '@fontsource-variable/geist';
-@import '@fontsource-variable/lora';
-
 :root {
   --chart-1: var(--fg-1);
   --chart-2: #22d3ee;
