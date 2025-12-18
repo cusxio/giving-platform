@@ -60,6 +60,7 @@ export function GivingFormFund(props: GivingFormFundProps) {
       />
 
       <InputCurrency
+        autoComplete="off"
         name={store.names[fund]}
         onValueChange={handleCurrencyValueChange}
       />

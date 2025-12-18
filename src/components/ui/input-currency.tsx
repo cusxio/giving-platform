@@ -7,12 +7,15 @@ import CurrencyInput from 'react-currency-input-field'
 import { createCurrencyFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
-export interface InputCurrencyProps extends Pick<FormInputProps, 'name'> {
+export interface InputCurrencyProps extends Pick<
+  FormInputProps,
+  'autoComplete' | 'name'
+> {
   onValueChange: NonNullable<CurrencyInputProps['onValueChange']>
 }
 
 export function InputCurrency(props: InputCurrencyProps) {
-  const { name, onValueChange } = props
+  const { name, onValueChange, autoComplete } = props
   const currency = useMemo(() => {
     return (
       createCurrencyFormatter({ showSymbol: true })
@@ -34,6 +37,7 @@ export function InputCurrency(props: InputCurrencyProps) {
       </div>
 
       <FormInput
+        autoComplete={autoComplete}
         className={cx(
           'text-right',
           'h-9 w-full border border-border bg-surface focus:outline-none',
