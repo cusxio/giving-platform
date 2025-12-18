@@ -34,11 +34,11 @@ function RouteComponent() {
         </div>
       </header>
 
-      <div className="flex shrink-0 grow flex-col items-center justify-center px-4">
+      <main className="flex shrink-0 grow flex-col items-center justify-center px-4">
         <div className="w-full max-w-118 pt-12 pb-24">
           <GivingForm user={user} />
         </div>
-      </div>
+      </main>
 
       <FooterCopyright />
     </>

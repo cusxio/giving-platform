@@ -11,7 +11,7 @@ export function HeaderLogo() {
         <Button
           className="p-4"
           render={
-            <Link to="/">
+            <Link aria-label="Collective" to="/">
               <Logo className="w-24 fill-current" />
             </Link>
           }
