@@ -1,12 +1,8 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import type { Static } from 'typebox'
-import { Type } from 'typebox'
-import { Value } from 'typebox/value'
+import * as v from 'valibot'
 
 import { config } from '#/core/brand'
 import { clientTz, now } from '#/core/date'
-import { createParseError } from '#/core/errors'
-import { trySync } from '#/core/result'
 import { useAuthUser } from '#/features/session/session.queries'
 import { useSuspenseQueryDeferred } from '#/hooks'
 import { cx } from '#/styles/cx'
@@ -26,22 +22,19 @@ import {
   createOverviewQueryOptions,
 } from './-overview.queries'
 
-const schema = Type.Object({
-  year: Type.Optional(Type.Union([Type.Number(), Type.Literal('all')])),
+const searchSchema = v.object({
+  year: v.optional(v.union([v.number(), v.literal('all')])),
 })
 
 export const Route = createFileRoute('/(app)/overview')({
-  validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(
-      () => Value.Decode(schema, search),
-      createParseError,
-    )
+  validateSearch(search) {
+    const parseResult = v.safeParse(searchSchema, search)
 
-    if (!parseResult.ok) {
+    if (!parseResult.success) {
       return { year: undefined }
     }
 
-    return { year: parseResult.value.year }
+    return { year: parseResult.output.year }
   },
 
   async beforeLoad({ search, context }) {

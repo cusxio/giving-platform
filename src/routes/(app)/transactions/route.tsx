@@ -1,14 +1,10 @@
 import { HandHeartIcon, ReceiptIcon } from '@phosphor-icons/react/dist/ssr'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import type { Static } from 'typebox'
-import { Type } from 'typebox'
-import { Value } from 'typebox/value'
+import * as v from 'valibot'
 
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Pagination } from '#/components/ui/pagination'
 import { config } from '#/core/brand'
-import { createParseError } from '#/core/errors'
-import { trySync } from '#/core/result'
 import { useAuthUser } from '#/features/session/session.queries'
 import { useSuspenseQueryDeferred } from '#/hooks'
 import { cx } from '#/styles/cx'
@@ -17,20 +13,17 @@ import { TransactionsTable } from '../-components/transactions-table'
 
 import { createTransactionsQueryOptions } from './-transactions.queries'
 
-const schema = Type.Object({ page: Type.Optional(Type.Number()) })
+const searchSchema = v.object({ page: v.optional(v.number()) })
 
 export const Route = createFileRoute('/(app)/transactions')({
-  validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(
-      () => Value.Decode(schema, search),
-      createParseError,
-    )
+  validateSearch(search) {
+    const parseResult = v.safeParse(searchSchema, search)
 
-    if (!parseResult.ok) {
+    if (!parseResult.success) {
       return { page: undefined }
     }
 
-    return { page: parseResult.value.page }
+    return { page: parseResult.output.page }
   },
 
   beforeLoad({ search }) {

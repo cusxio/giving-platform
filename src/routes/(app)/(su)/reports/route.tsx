@@ -1,15 +1,11 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useCallback, useState } from 'react'
 import { TZDate } from 'react-day-picker'
-import type { Static } from 'typebox'
-import { Type } from 'typebox'
-import { Value } from 'typebox/value'
+import * as v from 'valibot'
 
 import type { DateRangePickerProps } from '#/components/ui/date-range-picker'
 import { DateRangePicker } from '#/components/ui/date-range-picker'
 import { config } from '#/core/brand'
-import { createParseError } from '#/core/errors'
-import { trySync } from '#/core/result'
 import { useSuspenseQueryDeferred } from '#/hooks'
 
 import { ReportBreakdown } from './-components/report-breakdown'
@@ -17,23 +13,20 @@ import { ReportEmpty } from './-components/report-empty'
 import { normalizeDateRangeToServerTimezone } from './-data/reports.helpers'
 import { createReportsQueryOptions } from './-reports.queries'
 
-const schema = Type.Object({
-  start_date: Type.Optional(Type.String({ format: 'date' })),
-  end_date: Type.Optional(Type.String({ format: 'date' })),
+const searchSchema = v.object({
+  start_date: v.optional(v.pipe(v.string(), v.isoDate())),
+  end_date: v.optional(v.pipe(v.string(), v.isoDate())),
 })
 
 export const Route = createFileRoute('/(app)/(su)/reports')({
-  validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(
-      () => Value.Decode(schema, search),
-      createParseError,
-    )
+  validateSearch(search) {
+    const parseResult = v.safeParse(searchSchema, search)
 
-    if (!parseResult.ok) {
+    if (!parseResult.success) {
       return {}
     }
 
-    const { start_date, end_date } = parseResult.value
+    const { start_date, end_date } = parseResult.output
     return { start_date, end_date }
   },
 

@@ -1,29 +1,22 @@
 import { createFileRoute } from '@tanstack/react-router'
-import type { Static } from 'typebox'
-import { Type } from 'typebox'
-import { Value } from 'typebox/value'
+import * as v from 'valibot'
 
 import { config } from '#/core/brand/config'
-import { createParseError } from '#/core/errors'
-import { trySync } from '#/core/result'
 import { AuthForm } from '#/features/auth/components/auth-form'
 
-const schema = Type.Object({
-  email: Type.Optional(Type.String({ format: 'email' })),
+const searchSchema = v.object({
+  email: v.optional(v.pipe(v.string(), v.email())),
 })
 
 export const Route = createFileRoute('/(auth)/auth/login')({
-  validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(
-      () => Value.Decode(schema, search),
-      createParseError,
-    )
-    if (!parseResult.ok) {
+  validateSearch(search) {
+    const parseResult = v.safeParse(searchSchema, search)
+
+    if (!parseResult.success) {
       return { email: undefined }
     }
 
-    const { email } = parseResult.value
-    return { email }
+    return parseResult.output
   },
 
   head: () => ({ meta: [{ title: `Login · ${config.entity}` }] }),
