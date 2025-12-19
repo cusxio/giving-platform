@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react'
 import { TZDate } from 'react-day-picker'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
-import { Compile } from 'typebox/compile'
+import { Value } from 'typebox/value'
 
 import type { DateRangePickerProps } from '#/components/ui/date-range-picker'
 import { DateRangePicker } from '#/components/ui/date-range-picker'
@@ -17,16 +17,17 @@ import { ReportEmpty } from './-components/report-empty'
 import { normalizeDateRangeToServerTimezone } from './-data/reports.helpers'
 import { createReportsQueryOptions } from './-reports.queries'
 
-const schema = Compile(
-  Type.Object({
-    start_date: Type.Optional(Type.String({ format: 'date' })),
-    end_date: Type.Optional(Type.String({ format: 'date' })),
-  }),
-)
+const schema = Type.Object({
+  start_date: Type.Optional(Type.String({ format: 'date' })),
+  end_date: Type.Optional(Type.String({ format: 'date' })),
+})
 
 export const Route = createFileRoute('/(app)/(su)/reports')({
   validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(() => schema.Parse(search), createParseError)
+    const parseResult = trySync(
+      () => Value.Decode(schema, search),
+      createParseError,
+    )
 
     if (!parseResult.ok) {
       return {}

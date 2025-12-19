@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
-import { Compile } from 'typebox/compile'
+import { Value } from 'typebox/value'
 
 import { config } from '#/core/brand'
 import { clientTz, now } from '#/core/date'
@@ -26,15 +26,16 @@ import {
   createOverviewQueryOptions,
 } from './-overview.queries'
 
-const schema = Compile(
-  Type.Object({
-    year: Type.Optional(Type.Union([Type.Number(), Type.Literal('all')])),
-  }),
-)
+const schema = Type.Object({
+  year: Type.Optional(Type.Union([Type.Number(), Type.Literal('all')])),
+})
 
 export const Route = createFileRoute('/(app)/overview')({
   validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(() => schema.Parse(search), createParseError)
+    const parseResult = trySync(
+      () => Value.Decode(schema, search),
+      createParseError,
+    )
 
     if (!parseResult.ok) {
       return { year: undefined }

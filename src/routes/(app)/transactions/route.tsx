@@ -2,7 +2,7 @@ import { HandHeartIcon, ReceiptIcon } from '@phosphor-icons/react/dist/ssr'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
-import { Compile } from 'typebox/compile'
+import { Value } from 'typebox/value'
 
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Pagination } from '#/components/ui/pagination'
@@ -17,11 +17,14 @@ import { TransactionsTable } from '../-components/transactions-table'
 
 import { createTransactionsQueryOptions } from './-transactions.queries'
 
-const schema = Compile(Type.Object({ page: Type.Optional(Type.Number()) }))
+const schema = Type.Object({ page: Type.Optional(Type.Number()) })
 
 export const Route = createFileRoute('/(app)/transactions')({
   validateSearch(search): Static<typeof schema> {
-    const parseResult = trySync(() => schema.Parse(search), createParseError)
+    const parseResult = trySync(
+      () => Value.Decode(schema, search),
+      createParseError,
+    )
 
     if (!parseResult.ok) {
       return { page: undefined }
