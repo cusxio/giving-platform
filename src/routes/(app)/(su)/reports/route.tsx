@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react'
 import { TZDate } from 'react-day-picker'
 import * as v from 'valibot'
 
+import { Error } from '#/components/error'
 import type { DateRangePickerProps } from '#/components/ui/date-range-picker'
 import { DateRangePicker } from '#/components/ui/date-range-picker'
 import { config } from '#/core/brand'
@@ -48,6 +49,8 @@ export const Route = createFileRoute('/(app)/(su)/reports')({
   head: () => ({ meta: [{ title: `Reports · ${config.entity}` }] }),
 
   component: RouteComponent,
+
+  errorComponent: Error,
 })
 
 function RouteComponent() {

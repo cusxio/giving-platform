@@ -11,6 +11,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { lazy } from 'react'
 
+import { Error } from '#/components/error'
 import { config } from '#/core/brand/config'
 
 import css from '#/styles/globals.css?url'
@@ -45,6 +46,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       ],
     }),
     shellComponent: RootDocument,
+    errorComponent: Error,
   },
 )
 
