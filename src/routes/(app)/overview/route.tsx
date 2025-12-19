@@ -27,7 +27,7 @@ const searchSchema = v.object({
 })
 
 export const Route = createFileRoute('/(app)/overview')({
-  validateSearch(search) {
+  validateSearch(search): v.InferOutput<typeof searchSchema> {
     const parseResult = v.safeParse(searchSchema, search)
 
     if (!parseResult.success) {

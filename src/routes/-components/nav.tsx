@@ -14,7 +14,7 @@ export function Nav(props: NavProps) {
   const { isAuthenticated } = props
   return (
     <nav className="flex justify-between">
-      <Link className="-ml-4 p-4" to="/">
+      <Link aria-label="Collective" className="-ml-4 p-4" to="/">
         <Logo className="w-20 fill-current sm:w-24" />
       </Link>
 

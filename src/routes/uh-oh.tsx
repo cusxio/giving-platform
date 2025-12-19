@@ -13,7 +13,7 @@ function RouteComponent() {
     <>
       <HeaderLogo />
 
-      <div className="flex shrink-0 grow flex-col items-center justify-center gap-y-4 p-4">
+      <main className="flex shrink-0 grow flex-col items-center justify-center gap-y-4 p-4">
         <div className="flex flex-col items-center gap-y-4">
           <SmileyXEyesIcon className="text-fg-error" size={32} />
 
@@ -38,7 +38,7 @@ function RouteComponent() {
           <ArrowLeftIcon />
           Return to Home
         </Button>
-      </div>
+      </main>
 
       <FooterCopyright />
     </>

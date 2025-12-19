@@ -15,7 +15,7 @@ export function NotFound() {
     <>
       <HeaderLogo />
 
-      <div className="flex shrink-0 grow flex-col items-center justify-center gap-y-4 p-4">
+      <main className="flex shrink-0 grow flex-col items-center justify-center gap-y-4 p-4">
         <div className="flex flex-col items-center gap-y-4">
           <WarningCircleIcon className="text-fg-warning" size={32} />
 
@@ -39,7 +39,7 @@ export function NotFound() {
           <ArrowLeftIcon />
           Return to Home
         </Button>
-      </div>
+      </main>
 
       <FooterCopyright />
     </>

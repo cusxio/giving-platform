@@ -16,7 +16,7 @@ import { createTransactionsQueryOptions } from './-transactions.queries'
 const searchSchema = v.object({ page: v.optional(v.number()) })
 
 export const Route = createFileRoute('/(app)/transactions')({
-  validateSearch(search) {
+  validateSearch(search): v.InferOutput<typeof searchSchema> {
     const parseResult = v.safeParse(searchSchema, search)
 
     if (!parseResult.success) {

@@ -10,6 +10,7 @@ export function Logo(props: LogoProps) {
 
   return (
     <svg
+      aria-hidden={true}
       className={className}
       preserveAspectRatio="xMidYMid meet"
       style={style}
