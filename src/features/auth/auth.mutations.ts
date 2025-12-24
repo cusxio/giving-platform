@@ -21,14 +21,24 @@ export function useLogoutMutation() {
 export function useRequestOtpMutation() {
   const $requestOtp = useServerFn(requestOtp)
   return useMutation({
-    mutationFn: (input: RequestOtpInput) => $requestOtp({ data: input }),
+    mutationFn: (input: RequestOtpInput) =>
+      $requestOtp({
+        data: { email: input.email.toLowerCase(), mode: input.mode },
+      }),
   })
 }
 
 export function useVerifyOtpMutation() {
   const $verifyOtp = useServerFn(verifyOtp)
   return useMutation({
-    mutationFn: (input: VerifyOtpInput) => $verifyOtp({ data: input }),
+    mutationFn: (input: VerifyOtpInput) =>
+      $verifyOtp({
+        data: {
+          email: input.email.toLowerCase(),
+          mode: input.mode,
+          otp: input.otp,
+        },
+      }),
   })
 }
 
