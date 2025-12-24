@@ -13,7 +13,6 @@ interface FreezeUIProps {
  * Ideal for menu items, popovers, or modals. Do not use on persistent UI.
  */
 export function FreezeUI(props: FreezeUIProps) {
-  // eslint-disable-next-line @eslint-react/naming-convention/use-state
   const [children] = useState(props.children)
   return <>{children}</>
 }

@@ -1,5 +1,4 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import {
@@ -15,11 +14,14 @@ export const Route = createFileRoute('/api/eghl/callback')({
     handlers: {
       POST: async ({ request, context }) => {
         const { eghlService, paymentService, logger } = context
-        const internalError = json(
+        const internalError = Response.json(
           { message: 'Internal Server Error' },
           { status: 500 },
         )
-        const badRequest = json({ message: 'Bad Request' }, { status: 400 })
+        const badRequest = Response.json(
+          { message: 'Bad Request' },
+          { status: 400 },
+        )
 
         logger.info(
           { event: 'eghl.callback.received' },

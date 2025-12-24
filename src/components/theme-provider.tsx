@@ -64,6 +64,7 @@ export function ThemeProvider({
     const media = globalThis.matchMedia(MEDIA)
 
     media.addEventListener('change', handleMediaQuery)
+    // eslint-disable-next-line react-you-might-not-need-an-effect/no-pass-live-state-to-parent
     handleMediaQuery(media)
 
     return () => {
