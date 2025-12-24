@@ -128,7 +128,7 @@ function getSeason(): SeasonalTheme {
   const day = currentDate.getDate()
 
   if (month === 11) {
-    if (day === 25) {
+    if (day === 24 || day === 25) {
       return 'christmas'
     }
     return 'snow'
