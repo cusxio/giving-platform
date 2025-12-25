@@ -47,7 +47,10 @@ export const requestOtp = createServerFn({ method: 'POST' })
         throw redirect({ to: '/' })
       }
 
-      const parseResult = trySync(() => schema.Parse(data), createParseError)
+      const parseResult = trySync(
+        () => schema.Parse({ ...data, email: data.email.toLowerCase().trim() }),
+        createParseError,
+      )
 
       if (!parseResult.ok) {
         logger.warn(

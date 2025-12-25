@@ -49,7 +49,10 @@ export const verifyOtp = createServerFn()
         throw redirect({ to: '/' })
       }
 
-      const parseResult = trySync(() => schema.Parse(data), createParseError)
+      const parseResult = trySync(
+        () => schema.Parse({ ...data, email: data.email.toLowerCase().trim() }),
+        createParseError,
+      )
 
       if (!parseResult.ok) {
         logger.warn(
@@ -68,7 +71,7 @@ export const verifyOtp = createServerFn()
         }
       }
 
-      const { mode, otp, email } = data
+      const { mode, otp, email } = parseResult.value
 
       logger.info(
         { event: 'auth.verify_otp.attempt', email, mode },

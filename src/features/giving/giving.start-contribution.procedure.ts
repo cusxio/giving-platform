@@ -56,6 +56,7 @@ export const startContribution = createServerFn({ method: 'POST' })
       () =>
         schema.Parse({
           ...data,
+          email: data.email.toLowerCase().trim(),
           firstName: data.firstName.trim(),
           lastName: data.lastName.trim(),
         }),
