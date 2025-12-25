@@ -25,6 +25,7 @@ export default function AuthFormEmail(props: AuthFormEmailProps) {
       <div className="my-8 grid gap-y-4">
         <div className="grid gap-y-2">
           <Input
+            autoCapitalize="none"
             hideLabel
             inputMode="email"
             label="Email"

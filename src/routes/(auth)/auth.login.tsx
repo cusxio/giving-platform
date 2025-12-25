@@ -5,7 +5,7 @@ import { config } from '#/core/brand/config'
 import { AuthForm } from '#/features/auth/components/auth-form'
 
 const searchSchema = v.object({
-  email: v.optional(v.pipe(v.string(), v.email())),
+  email: v.optional(v.pipe(v.string(), v.toLowerCase(), v.email())),
 })
 
 export const Route = createFileRoute('/(auth)/auth/login')({

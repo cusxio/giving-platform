@@ -28,7 +28,9 @@ export function AuthFormOtp(props: AuthFormOtpProps) {
         <h1 className="text-center text-xl font-bold">Check your email</h1>
         <p className="text-center text-fg-muted">
           We've just sent a 6-digit verification code to <br />
-          <span className="text-fg-1">{store.getValue(store.names.email)}</span>
+          <span className="text-fg-1">
+            {store.getValue<string>(store.names.email).toLowerCase()}
+          </span>
         </p>
       </div>
 

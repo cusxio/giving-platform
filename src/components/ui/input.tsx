@@ -5,6 +5,7 @@ import { cx } from '#/styles/cx'
 
 interface InputProps extends Pick<
   FormInputProps,
+  | 'autoCapitalize'
   | 'className'
   | 'disabled'
   | 'inputMode'
