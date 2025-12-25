@@ -1,10 +1,11 @@
 import { inArray } from 'drizzle-orm'
 
 import type { Fund } from '#/core/brand/funds'
-import { createTransactionError } from '#/core/errors'
-import { tryAsync } from '#/core/result'
+import { createDBError } from '#/core/errors'
+import { err, tryAsync } from '#/core/result'
 import type { DB } from '#/db/client'
-import { TransactionRollbackError } from '#/db/errors'
+import { createId } from '#/db/create-id'
+import { DBEmptyReturnError } from '#/db/errors'
 import type { Session } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
 
@@ -21,19 +22,6 @@ interface UserDetails {
   lastName: string
 }
 
-class EmailBelongsToAnotherUserError extends Error {
-  constructor() {
-    super()
-    this.name = 'EmailBelongsToAnotherUserError'
-  }
-}
-
-class GuestEmailExistsError extends Error {
-  constructor() {
-    super()
-    this.name = 'GuestEmailExistsError'
-  }
-}
 export class ContributionService {
   #db: DB
   #userRepository: UserRepository
@@ -48,113 +36,104 @@ export class ContributionService {
     userDetails: UserDetails,
     session: null | Session,
   ) {
-    const items = _items.map((i) => ({
-      ...i,
-      fund: i.fund.charAt(0).toUpperCase() + i.fund.slice(1),
-    }))
-    const totalAmountInCents = items.reduce(
-      (sum, item) => sum + item.amountInCents,
-      0,
-    )
+    // Preparation
+    const prepResult = await tryAsync(async () => {
+      const items = _items.map((i) => ({
+        ...i,
+        fund: i.fund.charAt(0).toUpperCase() + i.fund.slice(1),
+      }))
+
+      const foundFunds = await this.#db
+        .select()
+        .from(funds)
+        .where(
+          inArray(
+            funds.name,
+            items.map((i) => i.fund),
+          ),
+        )
+
+      const fundIdMap = new Map(foundFunds.map((f) => [f.name, f.id]))
+      const totalAmountInCents = items.reduce(
+        (sum, item) => sum + item.amountInCents,
+        0,
+      )
+
+      return { items, fundIdMap, totalAmountInCents }
+    }, createDBError)
+
+    if (!prepResult.ok) return prepResult
+
+    const { items, fundIdMap, totalAmountInCents } = prepResult.value
+
+    // User resolution
     const { email, firstName, lastName } = userDetails
-    return tryAsync(
-      () =>
-        this.#db.transaction(async (tx) => {
-          const userRes = await this.#userRepository.findUserByEmail(email, tx)
+    let userId: number
 
-          if (!userRes.ok) {
-            throw new TransactionRollbackError('Error finding user by email', {
-              cause: userRes.error,
-            })
-          }
+    const userRes = await this.#userRepository.findUserByEmail(email)
+    if (!userRes.ok) return userRes
 
-          let user = userRes.value
+    const existingUser = userRes.value
 
-          if (user) {
-            if (!session) {
-              throw new GuestEmailExistsError()
-            } else if (session.userId !== user.id) {
-              throw new EmailBelongsToAnotherUserError()
-            }
-          }
+    if (session) {
+      userId = session.userId
 
-          if (!user) {
-            const createRes = await this.#userRepository.createUser(
-              { email, firstName, lastName },
-              tx,
-            )
+      if (existingUser && existingUser.id !== session.userId) {
+        return err({ type: 'EmailBelongsToAnotherUserError' as const })
+      }
+    } else {
+      if (existingUser) {
+        return err({ type: 'GuestEmailExistsError' as const })
+      }
 
-            if (!createRes.ok) {
-              throw new TransactionRollbackError('Error creating user', {
-                cause: createRes.error,
-              })
-            }
+      const createRes = await this.#userRepository.createUser({
+        email,
+        firstName,
+        lastName,
+      })
 
-            if (!createRes.value) {
-              throw new TransactionRollbackError(
-                'User creation returned no result',
-              )
-            }
+      if (!createRes.ok) return createRes // Pass through error
+      if (!createRes.value) {
+        return err({
+          type: 'DBEmptyReturnError' as const,
+          error: new DBEmptyReturnError(),
+        })
+      }
 
-            user = createRes.value
-          }
+      userId = createRes.value.id
+    }
 
-          const [transaction] = await tx
-            .insert(transactions)
-            .values({
-              amount: totalAmountInCents,
-              status: 'pending',
-              userId: user.id,
-              createdAs: session ? 'user' : 'guest',
-            })
-            .returning()
+    // Batch write
+    return tryAsync(async () => {
+      const transactionId = createId(20)
 
-          if (!transaction) {
-            throw new TransactionRollbackError(
-              'Transaction creation returned no result',
-            )
-          }
+      const insertTransaction = this.#db
+        .insert(transactions)
+        .values({
+          id: transactionId,
+          amount: totalAmountInCents,
+          status: 'pending',
+          userId: userId,
+          createdAs: session ? 'user' : 'guest',
+        })
 
-          const foundFunds = await tx
-            .select()
-            .from(funds)
-            .where(
-              inArray(
-                funds.name,
-                items.map((i) => i.fund),
-              ),
-            )
-
-          const fundIdMap = new Map(foundFunds.map((f) => [f.name, f.id]))
-
-          await tx.insert(transactionItems).values(
-            items.map((item) => {
-              const fundId = fundIdMap.get(item.fund)
-              if (fundId === undefined) {
-                throw new Error(`Invalid fund name: ${item.fund}`)
-              }
-              return {
-                transactionId: transaction.id,
-                fundId: fundId,
-                amount: item.amountInCents,
-              }
-            }),
-          )
+      const insertTransactionItems = this.#db.insert(transactionItems).values(
+        items.map((item) => {
+          const fundId = fundIdMap.get(item.fund)
+          if (fundId === undefined)
+            throw new Error(`Invalid fund name: ${item.fund}`)
 
           return {
-            transactionId: transaction.id,
-            customerName: `${firstName} ${lastName}`,
+            transactionId: transactionId,
+            fundId: fundId,
+            amount: item.amountInCents,
           }
         }),
-      (error) => {
-        if (error instanceof GuestEmailExistsError)
-          return { type: 'GuestEmailExistsError' as const, error }
+      )
 
-        if (error instanceof EmailBelongsToAnotherUserError)
-          return { type: 'EmailBelongsToAnotherUserError' as const, error }
+      await this.#db.batch([insertTransaction, insertTransactionItems])
 
-        return createTransactionError(error)
-      },
-    )
+      return { transactionId, customerName: `${firstName} ${lastName}` }
+    }, createDBError)
   }
 }

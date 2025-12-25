@@ -141,14 +141,15 @@ export const startContribution = createServerFn({ method: 'POST' })
           )
           return { type: 'BUSINESS_ERROR', error: { code: 'EMAIL_EXISTS' } }
         }
-        case 'TransactionRollbackError': {
+        case 'DBQueryError':
+        case 'DBEmptyReturnError': {
           logger.error(
             {
               event: 'giving.start_contribution.failed',
               err: txResult.error.error,
               error_type: txResult.error.type,
             },
-            'DB Transaction failed',
+            'Database error during contribution',
           )
           return { type: 'SERVER_ERROR' }
         }
