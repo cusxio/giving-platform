@@ -3,9 +3,9 @@ import { constantTimeEqual } from '@oslojs/crypto/subtle'
 import { addSeconds, differenceInDays, now } from '#/core/date'
 import { createParseError } from '#/core/errors'
 import { hashToken } from '#/core/hash-token'
+import { logger } from '#/core/logger'
 import type { Result } from '#/core/result'
 import { err, ok, trySync } from '#/core/result'
-import { DBEmptyReturnError } from '#/db/errors'
 import type { Session } from '#/db/schema'
 
 import { SESSION_MAX_AGE_SECONDS } from './constants'
@@ -87,30 +87,50 @@ export class SessionService {
     if (daysLeft <= 7) {
       const extendedExpiresAt = addSeconds(now(), SESSION_MAX_AGE_SECONDS)
 
-      const extendResult = await this.#sessionRepository.extendSession(
-        session.id,
-        extendedExpiresAt,
-      )
-
-      if (!extendResult.ok) {
-        return extendResult
-      }
-
-      const extendedSession = extendResult.value
-
-      if (extendedSession === null) {
-        return err({
-          type: 'DBEmptyReturnError',
-          error: new DBEmptyReturnError(),
+      this.#sessionRepository
+        .extendSession(session.id, extendedExpiresAt)
+        .then((res) => {
+          if (res.ok) {
+            logger.info(
+              {
+                event: 'session.extend.background_success',
+                session_id: session.id,
+                user_id: session.userId,
+              },
+              'Session extended successfully in background',
+            )
+          } else {
+            logger.warn(
+              {
+                event: 'session.extend.background_failed',
+                session_id: session.id,
+                error_type: res.error.type,
+                err: res.error.error,
+              },
+              'Database rejected session extension',
+            )
+          }
         })
-      }
+        .catch((error: unknown) => {
+          logger.error(
+            {
+              event: 'session.extend.background_crash',
+              session_id: session.id,
+              err: error,
+            },
+            'Critical error during background session extension',
+          )
+        })
 
       const newCookieValue = serializeSessionCookie({
         cookieValue,
         expiresAt: extendedExpiresAt,
       })
 
-      return ok({ serializedCookie: newCookieValue, session: extendedSession })
+      return ok({
+        serializedCookie: newCookieValue,
+        session: { ...session, expiresAt: extendedExpiresAt },
+      })
     }
 
     // Session is valid and doesn't need to be extended
