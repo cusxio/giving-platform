@@ -6,6 +6,7 @@ import { logger } from '#/core/logger'
 import { tryAsync } from '#/core/result'
 import type { DB } from '#/db/client'
 import {
+  PaymentInsert,
   payments,
   savedPaymentMethods,
   Transaction,
@@ -38,15 +39,32 @@ export class PaymentService {
       CardType,
       CardHolder,
     } = response
+    const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
+    const newStatus: Transaction['status'] = isTransactionSuccess
+      ? 'success'
+      : 'failed'
+
+    let paidAt = now()
+    const rawTime = RespTime ?? RespTime2
+    if (rawTime !== undefined) {
+      const isoTime = rawTime.replace(' ', 'T') + '+08:00'
+      const parsedDate = new TZDate(isoTime)
+      if (!Number.isNaN(parsedDate.getTime())) {
+        paidAt = parsedDate
+      }
+    }
+    const paymentData: PaymentInsert = {
+      transactionId: PaymentID,
+      providerTransactionId: TxnID,
+      provider: 'eghl',
+      paymentMethod: PymtMethod,
+      paidAt,
+      message: TxnMessage,
+    }
 
     return tryAsync(
       () =>
         this.#db.transaction(async (tx) => {
-          const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
-          const newStatus: Transaction['status'] = isTransactionSuccess
-            ? 'success'
-            : 'failed'
-
           const [transaction] = await tx
             .update(transactions)
             .set({ status: newStatus })
@@ -72,26 +90,7 @@ export class PaymentService {
             return
           }
 
-          let paidAt = now()
-          const rawTime = RespTime ?? RespTime2
-          if (rawTime !== undefined) {
-            const isoTime = rawTime.replace(' ', 'T')
-            const parsedDate = new TZDate(isoTime)
-            if (!Number.isNaN(parsedDate.getTime())) {
-              paidAt = parsedDate
-            }
-          }
-
-          await tx
-            .insert(payments)
-            .values({
-              transactionId: PaymentID,
-              providerTransactionId: TxnID,
-              provider: 'eghl',
-              paymentMethod: PymtMethod,
-              paidAt,
-              message: TxnMessage,
-            })
+          await tx.insert(payments).values(paymentData)
 
           const shouldSaveCard =
             isTransactionSuccess && transaction.createdAs === 'user'

@@ -208,6 +208,7 @@ export const payments = sqliteTable(
   (table) => [index('payments_transaction_id_idx').on(table.transactionId)],
 )
 export type Payment = InferSelectModel<typeof payments>
+export type PaymentInsert = InferInsertModel<typeof payments>
 
 export const savedPaymentMethods = sqliteTable(
   'saved_payment_methods',

@@ -153,6 +153,10 @@ export class AuthService {
       return err({ type: 'InvalidOtpError' })
     }
 
+    const rawToken = nanoid()
+    const tokenHash = hashToken(rawToken)
+    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
+
     const txResult = await tryAsync(async () => {
       return await this.#db.transaction(async (tx) => {
         if (mode === 'signup') {
@@ -177,9 +181,6 @@ export class AuthService {
           })
         }
 
-        const rawToken = nanoid()
-        const tokenHash = hashToken(rawToken)
-        const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
         const sessionResult = await this.#sessionRepository.createSession(
           { tokenHash, userId: user.id, expiresAt },
           tx,
@@ -198,16 +199,16 @@ export class AuthService {
           )
         }
 
-        return serializeSessionCookie({
-          expiresAt,
-          cookieValue: `${session.id}.${rawToken}`,
-        })
+        return session
       })
     }, createTransactionError)
 
     if (!txResult.ok) return txResult
 
-    const cookieValue = txResult.value
+    const cookieValue = serializeSessionCookie({
+      expiresAt,
+      cookieValue: `${txResult.value.id}.${rawToken}`,
+    })
 
     return ok(cookieValue)
   }
