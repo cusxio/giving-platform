@@ -1,9 +1,9 @@
 import { and, eq, sql } from 'drizzle-orm'
 
 import { now, TZDate } from '#/core/date'
-import { createDBError } from '#/core/errors'
+import { createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
-import { ok, tryAsync } from '#/core/result'
+import { tryAsync } from '#/core/result'
 import type { DB } from '#/db/client'
 import {
   payments,
@@ -39,110 +39,107 @@ export class PaymentService {
       CardHolder,
     } = response
 
-    const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
-    const newStatus: Transaction['status'] = isTransactionSuccess
-      ? 'success'
-      : 'failed'
-
-    const updateResult = await tryAsync(
+    return tryAsync(
       () =>
-        this.#db
-          .update(transactions)
-          .set({ status: newStatus })
-          .where(
-            and(
-              eq(transactions.id, PaymentID),
-              eq(transactions.status, 'pending'),
-            ),
-          )
-          .returning({
-            userId: transactions.userId,
-            createdAs: transactions.createdAs,
-          }),
-      createDBError,
-    )
+        this.#db.transaction(async (tx) => {
+          const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
+          const newStatus: Transaction['status'] = isTransactionSuccess
+            ? 'success'
+            : 'failed'
 
-    if (!updateResult.ok) return updateResult
+          const [transaction] = await tx
+            .update(transactions)
+            .set({ status: newStatus })
+            .where(
+              and(
+                eq(transactions.id, PaymentID),
+                eq(transactions.status, 'pending'),
+              ),
+            )
+            .returning({
+              userId: transactions.userId,
+              createdAs: transactions.createdAs,
+            })
 
-    const transaction = updateResult.value[0]
+          if (transaction === undefined) {
+            logger.info(
+              {
+                event: 'payment.finalize.idempotent',
+                transaction_id: PaymentID,
+              },
+              'Transaction already processed or not found',
+            )
+            return
+          }
 
-    if (transaction === undefined) {
-      logger.info(
-        { event: 'payment.finalize.idempotent', transaction_id: PaymentID },
-        'Transaction already processed or not found, skipping update',
-      )
-      return ok()
-    }
+          let paidAt = now()
+          const rawTime = RespTime ?? RespTime2
+          if (rawTime !== undefined) {
+            const isoTime = rawTime.replace(' ', 'T')
+            const parsedDate = new TZDate(isoTime)
+            if (!Number.isNaN(parsedDate.getTime())) {
+              paidAt = parsedDate
+            }
+          }
 
-    let paidAt = now()
-    const rawTime = RespTime ?? RespTime2
-    if (rawTime !== undefined) {
-      const isoTime = rawTime.replace(' ', 'T')
-      const parsedDate = new TZDate(isoTime)
-      if (!Number.isNaN(parsedDate.getTime())) {
-        paidAt = parsedDate
-      }
-    }
+          await tx
+            .insert(payments)
+            .values({
+              transactionId: PaymentID,
+              providerTransactionId: TxnID,
+              provider: 'eghl',
+              paymentMethod: PymtMethod,
+              paidAt,
+              message: TxnMessage,
+            })
 
-    const batchQueries: [...Parameters<DB['batch']>[0]] = [
-      this.#db
-        .insert(payments)
-        .values({
-          transactionId: PaymentID,
-          providerTransactionId: TxnID,
-          provider: 'eghl',
-          paymentMethod: PymtMethod,
-          paidAt,
-          message: TxnMessage,
+          const shouldSaveCard =
+            isTransactionSuccess && transaction.createdAs === 'user'
+
+          if (
+            shouldSaveCard &&
+            TokenType === 'OCP' &&
+            Token !== undefined &&
+            CardNoMask !== undefined &&
+            CardExp !== undefined &&
+            CardType !== undefined
+          ) {
+            await tx
+              .insert(savedPaymentMethods)
+              .values({
+                userId: transaction.userId,
+                token: Token,
+                tokenType: 'OCP',
+                cardNoMask: CardNoMask,
+                cardExp: CardExp,
+                cardType: CardType,
+                cardHolder: CardHolder,
+                lastUsedAt: now(),
+              })
+              .onConflictDoUpdate({
+                target: [
+                  savedPaymentMethods.userId,
+                  savedPaymentMethods.cardNoMask,
+                  savedPaymentMethods.cardExp,
+                ],
+                set: {
+                  token: sql`excluded.token`, // Token might rotate
+                  lastUsedAt: now(),
+                },
+              })
+          } else if (
+            shouldSaveCard &&
+            TokenType === 'OCP' &&
+            Token !== undefined
+          ) {
+            // Update last used time if existing token was used
+            await tx
+              .update(savedPaymentMethods)
+              .set({ lastUsedAt: now() })
+              .where(eq(savedPaymentMethods.token, Token))
+          }
         }),
-    ]
-
-    const shouldSaveCard =
-      isTransactionSuccess && transaction.createdAs === 'user'
-
-    if (
-      shouldSaveCard &&
-      TokenType === 'OCP' &&
-      Token !== undefined &&
-      CardNoMask !== undefined &&
-      CardExp !== undefined &&
-      CardType !== undefined
-    ) {
-      batchQueries.push(
-        this.#db
-          .insert(savedPaymentMethods)
-          .values({
-            userId: transaction.userId,
-            token: Token,
-            tokenType: 'OCP',
-            cardNoMask: CardNoMask,
-            cardExp: CardExp,
-            cardType: CardType,
-            cardHolder: CardHolder,
-            lastUsedAt: now(),
-          })
-          .onConflictDoUpdate({
-            target: [
-              savedPaymentMethods.userId,
-              savedPaymentMethods.cardNoMask,
-              savedPaymentMethods.cardExp,
-            ],
-            set: {
-              token: sql`excluded.token`, // Token might rotate
-              lastUsedAt: now(),
-            },
-          }),
-      )
-    } else if (shouldSaveCard && TokenType === 'OCP' && Token !== undefined) {
-      // Update last used time if existing token was used
-      batchQueries.push(
-        this.#db
-          .update(savedPaymentMethods)
-          .set({ lastUsedAt: now() })
-          .where(eq(savedPaymentMethods.token, Token)),
-      )
-    }
-
-    return tryAsync(() => this.#db.batch(batchQueries), createDBError)
+      createTransactionError,
+    )
   }
 }
