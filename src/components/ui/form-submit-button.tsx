@@ -30,11 +30,11 @@ export function FormSubmitButton(props: FormSubmitButtonProps) {
 }
 
 function useStableButtonSize<T extends HTMLElement>(submitting: boolean) {
-  const ref = useRef<T>(null)
+  const buttonRef = useRef<T>(null)
   const widthRef = useRef<null | number>(null)
 
   useLayoutEffect(() => {
-    const el = ref.current
+    const el = buttonRef.current
     if (!el) return
 
     if (submitting) {
@@ -63,5 +63,5 @@ function useStableButtonSize<T extends HTMLElement>(submitting: boolean) {
     }
   }, [submitting])
 
-  return { ref }
+  return { ref: buttonRef }
 }

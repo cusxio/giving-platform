@@ -22,7 +22,6 @@ export default defineConfig([
     extends: [
       eslintJs.configs.recommended,
       prettier,
-      // @ts-expect-error https://github.com/azat-io/eslint-plugin-perfectionist/issues/655
       perfectionistConfigs['recommended-natural'],
       unicorn.configs.recommended,
     ],

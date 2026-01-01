@@ -31,10 +31,10 @@ export function useGivingForm(
   })
   const [view, setView] = useState<GivingFormView>('amounts')
 
-  const isInitialMount = useRef(true)
+  const isInitialMountRef = useRef(true)
   useDeepCompareEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false
       return
     }
 
