@@ -106,8 +106,9 @@ function handleBusinessError(
 ) {
   switch (error.code) {
     case 'EMAIL_EXISTS': {
+      store.setFieldTouched('email_info', true)
       store.setError(
-        store.names.email,
+        'email_info',
         // @ts-expect-error https://github.com/ariakit/ariakit/issues/2815
         <>
           <span className="pr-2">👋🏻</span> We recognize this email! For security
