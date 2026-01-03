@@ -110,8 +110,8 @@ function handleBusinessError(
         store.names.email,
         // @ts-expect-error https://github.com/ariakit/ariakit/issues/2815
         <>
-          The email address provided is already associated with an existing
-          account. Please{' '}
+          <span className="pr-2">👋🏻</span> We recognize this email! For security
+          reasons, please{' '}
           <Link
             className="font-bold underline"
             search={{ email }}
@@ -119,7 +119,7 @@ function handleBusinessError(
           >
             log in
           </Link>{' '}
-          to continue.
+          to give. We'll send you a one-time code to verify.
         </>,
       )
       break

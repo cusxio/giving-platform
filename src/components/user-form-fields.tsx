@@ -10,7 +10,7 @@ interface UserFormFieldsProps {
   store: FormStore<{ email: string; firstName: string; lastName: string }>
 }
 
-const alert = <Alert className="mt-3 empty:hidden" />
+const alert = <Alert className="mt-3 text-balance empty:hidden" />
 
 export function UserFormFields(props: UserFormFieldsProps) {
   const { store, emailReadOnly = false, nameReadOnly = false } = props
