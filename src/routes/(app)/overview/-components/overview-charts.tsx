@@ -33,12 +33,19 @@ export function OverviewCharts(props: OverviewChartsProps) {
       )}
     >
       <ChartSummary {...summary} privacyMode={privacyMode} />
-      <BarChart data={monthlyContributions} privacyMode={privacyMode} />
-      <StackedBarChart
-        data={monthlyContributionsFrequency}
-        privacyMode={privacyMode}
-      />
-      <AreaChart data={cumulativeContributions} privacyMode={privacyMode} />
+      {monthlyContributions.length > 0 && (
+        <BarChart data={monthlyContributions} privacyMode={privacyMode} />
+      )}
+      {monthlyContributionsFrequency.length > 0 && (
+        <StackedBarChart
+          data={monthlyContributionsFrequency}
+          privacyMode={privacyMode}
+        />
+      )}
+      {(monthlyContributions.length > 0 ||
+        monthlyContributionsFrequency.length > 0) && (
+        <AreaChart data={cumulativeContributions} privacyMode={privacyMode} />
+      )}
     </div>
   )
 }
