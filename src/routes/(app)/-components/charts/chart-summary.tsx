@@ -52,7 +52,7 @@ export function ChartSummary(props: ChartSummaryProps) {
     <ChartContainer>
       <ChartTitle>Overview</ChartTitle>
 
-      <div className="flex flex-col gap-y-8 p-4">
+      <div className="flex min-h-0 min-w-0 flex-col gap-y-8 p-4">
         <ChartSummaryItem>
           <ChartSummaryLabel>Total Given</ChartSummaryLabel>
           <ChartSummaryValue className="text-xl sm:text-2xl md:text-3xl">
