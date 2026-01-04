@@ -43,14 +43,21 @@ export class EmailService {
     }
 
     const mailerSend = new MailerSend({ apiKey: MAILERSEND_API_KEY })
-    const rootDomain = MAILERSEND_ROOT_DOMAIN ?? config.rootDomain
+    const systemEmail =
+      MAILERSEND_ROOT_DOMAIN === undefined
+        ? config.email.system
+        : `system@${MAILERSEND_ROOT_DOMAIN}`
+    const replyEmail =
+      MAILERSEND_ROOT_DOMAIN === undefined
+        ? config.email.finance
+        : `finance@${MAILERSEND_ROOT_DOMAIN}`
 
     return {
       sendEmail: async ({ to, subject, html, text }: SendEmailInput) => {
         const emailParameters = new EmailParams()
-          .setFrom(new Sender(`system@${rootDomain}`, 'Collective'))
+          .setFrom(new Sender(systemEmail, config.name))
           .setTo([new Recipient(to)])
-          .setReplyTo(new Sender(`finance@${rootDomain}`, 'Collective'))
+          .setReplyTo(new Sender(replyEmail, config.name))
           .setSubject(subject)
           .setHtml(html)
           .setText(text)
@@ -73,7 +80,7 @@ export class EmailService {
     return {
       sendEmail: async ({ to, subject, html, text }: SendEmailInput) => {
         const info = await transporter.sendMail({
-          from: `noreply@${config.rootDomain}`,
+          from: `${config.name} <${config.email.system}>`,
           to,
           subject,
           html,

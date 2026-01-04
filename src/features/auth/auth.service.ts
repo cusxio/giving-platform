@@ -3,6 +3,7 @@ import { render, toPlainText } from '@react-email/components'
 import { nanoid } from 'nanoid'
 import { createElement } from 'react'
 
+import { config } from '#/core/brand'
 import { createTransactionError } from '#/core/errors'
 import { hashToken } from '#/core/hash-token'
 import type { Result } from '#/core/result'
@@ -67,7 +68,7 @@ export class AuthService {
       return err({ type: 'NotExistsError' })
     }
 
-    const sendRes = await this.#generateOtpForuser(user.id, user.email, 'login')
+    const sendRes = await this.#generateOtpForUser(user.id, user.email, 'login')
 
     if (!sendRes.ok) return sendRes
 
@@ -105,7 +106,7 @@ export class AuthService {
       return err({ type: 'AlreadyExistsError' })
     }
 
-    const sendRes = await this.#generateOtpForuser(
+    const sendRes = await this.#generateOtpForUser(
       user.id,
       user.email,
       'signup',
@@ -213,7 +214,7 @@ export class AuthService {
     return ok(cookieValue)
   }
 
-  async #generateOtpForuser(
+  async #generateOtpForUser(
     userId: User['id'],
     email: User['email'],
     mode: 'login' | 'signup',
@@ -231,8 +232,8 @@ export class AuthService {
     const text = toPlainText(html)
     const subject =
       mode === 'signup'
-        ? 'Collective Sign Up Verification'
-        : 'Login for Collective'
+        ? `${config.name} Sign Up Verification`
+        : `Login for ${config.name}`
     const emailRes = await this.#emailService.sendEmail({
       to: email,
       html,
