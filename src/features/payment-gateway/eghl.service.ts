@@ -1,4 +1,5 @@
 import { sha256 } from '@oslojs/crypto/sha2'
+import { constantTimeEqual } from '@oslojs/crypto/subtle'
 import { encodeHexLowerCase } from '@oslojs/encoding'
 import queryString from 'query-string'
 
@@ -177,7 +178,12 @@ export class EghlService {
 
     const calculatedHash = this.#generateHashValue(hashKeyFields)
 
-    return calculatedHash === HashValue2
+    const encoder = new TextEncoder()
+
+    return constantTimeEqual(
+      encoder.encode(calculatedHash),
+      encoder.encode(HashValue2),
+    )
   }
 
   #generateHashValue(value: string): string {
