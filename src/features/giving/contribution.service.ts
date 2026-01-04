@@ -82,7 +82,7 @@ export class ContributionService {
         return err({ type: 'EmailBelongsToAnotherUserError' as const })
       }
     } else {
-      if (existingUser) {
+      if (existingUser && existingUser.status !== 'guest') {
         return err({ type: 'GuestEmailExistsError' as const })
       }
 
