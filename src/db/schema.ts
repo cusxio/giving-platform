@@ -1,53 +1,56 @@
 import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import {
-  index,
+  boolean,
   integer,
-  sqliteTable,
+  pgTable,
+  serial,
   text,
-  uniqueIndex,
-} from 'drizzle-orm/sqlite-core'
+  timestamp,
+  varchar,
+} from 'drizzle-orm/pg-core'
 
 import { now } from '#/core/date'
 
 import { createId } from './create-id'
-import { datetime } from './custom-types'
+
+const timestamptz = () => timestamp({ withTimezone: true })
 
 const updatedAt = () =>
-  datetime()
-    .default(sql`CURRENT_TIMESTAMP`)
+  timestamptz()
+    .default(sql`now()`)
     .$onUpdate(() => now())
     .notNull()
 
 // Funds
-const fundId = () => text({ length: 12 })
-export const funds = sqliteTable(
+const fundId = () => varchar({ length: 12 })
+export const funds = pgTable(
   'funds',
   {
     id: fundId()
       .primaryKey()
       .$defaultFn(() => createId(12)),
-    name: text({ length: 254 }).notNull(),
+    name: varchar({ length: 254 }).notNull(),
     description: text(),
-    primary: integer({ mode: 'boolean' }).default(false).notNull(),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    primary: boolean().default(false).notNull(),
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
     updatedAt: updatedAt(),
   },
-  (table) => [uniqueIndex('funds_name_idx').on(table.name)],
+  // (table) => [uniqueIndex('funds_name_idx').on(table.name)],
 )
 
 // Users
 const userId = () => integer()
-export const users = sqliteTable(
+export const users = pgTable(
   'users',
   {
-    id: userId().primaryKey({ autoIncrement: true }),
-    email: text({ length: 254 }).notNull(),
-    emailVerifiedAt: datetime(),
-    firstName: text({ length: 32 }),
-    lastName: text({ length: 32 }),
+    id: serial().primaryKey(),
+    email: varchar({ length: 254 }).notNull(),
+    emailVerifiedAt: timestamptz(),
+    firstName: varchar({ length: 32 }),
+    lastName: varchar({ length: 32 }),
     role: text({ enum: ['admin', 'user', 'su'] })
       .default('user')
       .notNull(),
@@ -73,23 +76,23 @@ export const users = sqliteTable(
      *       The system automatically assigns "start_fresh".
      */
     journey: text({ enum: ['start_fresh', 'migrate'] }),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
     updatedAt: updatedAt(),
   },
-  (table) => [uniqueIndex('users_email_idx').on(table.email)],
+  // (table) => [uniqueIndex('users_email_idx').on(table.email)],
 )
 
 export type User = InferSelectModel<typeof users>
 export type UserInsert = InferInsertModel<typeof users>
 
 // User settings
-export const userSettings = sqliteTable('user_settings', {
+export const userSettings = pgTable('user_settings', {
   userId: userId()
     .primaryKey()
-    .references(() => users.id),
-  privacyMode: integer({ mode: 'boolean' }).default(false).notNull(),
+    .references(() => users.id, { onDelete: 'cascade' }),
+  privacyMode: boolean().default(false).notNull(),
 })
 export type UserSettings = InferSelectModel<typeof userSettings>
 
@@ -98,8 +101,8 @@ export type UserSettings = InferSelectModel<typeof userSettings>
  * The length is set to 21 to support legacy transaction IDs.
  * Note: All new transaction IDs generated for eGHL payments must be 20 characters.
  */
-const transactionId = () => text({ length: 21 })
-export const transactions = sqliteTable(
+const transactionId = () => varchar({ length: 21 })
+export const transactions = pgTable(
   'transactions',
   {
     id: transactionId()
@@ -110,189 +113,188 @@ export const transactions = sqliteTable(
        * @see eGHL Merchant Integration Guide v2.9w, Section 2.1, Field `PaymentID`.
        */
       .$defaultFn(() => createId(20)),
-    amount: integer({ mode: 'number' }).notNull(),
+    amount: integer().notNull(),
     status: text({ enum: ['pending', 'success', 'failed'] })
       .default('pending')
       .notNull(),
     userId: userId()
-      .references(() => users.id)
+      .references(() => users.id, { onDelete: 'restrict' })
       .notNull(),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
     updatedAt: updatedAt(),
     createdAs: text('created_as', { enum: ['user', 'guest'] }).notNull(),
   },
-  (table) => [
-    // overview
-    index('transactions_user_id_status_created_as_created_at_idx').on(
-      table.userId,
-      table.status,
-      table.createdAs,
-      table.createdAt,
-    ),
-    // overview (transactions table)
-    index('transactions_user_id_status_created_at_idx').on(
-      table.userId,
-      table.status,
-      table.createdAt,
-    ),
-    // insights
-    index('transactions_status_amount_idx').on(table.status, table.amount),
-    // insights
-    index('transactions_status_created_at_amount_idx').on(
-      table.status,
-      table.createdAt,
-      table.amount,
-    ),
-    // insights
-    index('transactions_status_created_as_created_at_idx').on(
-      table.status,
-      table.createdAs,
-      table.createdAt,
-    ),
-    // reports
-    index('transactions_status_created_at_id_created_as_idx').on(
-      table.status,
-      table.createdAt,
-      table.id,
-      table.createdAs,
-    ),
-  ],
+  // (table) => [
+  // overview
+  // index('transactions_user_id_status_created_as_created_at_idx').on(
+  //   table.userId,
+  //   table.status,
+  //   table.createdAs,
+  //   table.createdAt,
+  // ),
+  // overview (transactions table)
+  // index('transactions_user_id_status_created_at_idx').on(
+  //   table.userId,
+  //   table.status,
+  //   table.createdAt,
+  // ),
+  // insights
+  // index('transactions_status_amount_idx').on(table.status, table.amount),
+  // insights
+  // index('transactions_status_created_at_amount_idx').on(
+  //   table.status,
+  //   table.createdAt,
+  //   table.amount,
+  // ),
+  // insights
+  // index('transactions_status_created_as_created_at_idx').on(
+  //   table.status,
+  //   table.createdAs,
+  //   table.createdAt,
+  // ),
+  // reports
+  // index('transactions_status_created_at_id_created_as_idx').on(
+  //   table.status,
+  //   table.createdAt,
+  //   table.id,
+  //   table.createdAs,
+  // ),
+  // ],
 )
 
 export type Transaction = InferSelectModel<typeof transactions>
 
-export const transactionItems = sqliteTable(
+export const transactionItems = pgTable(
   'transaction_items',
   {
-    id: integer().primaryKey({ autoIncrement: true }),
-    amount: integer({ mode: 'number' }).notNull(),
+    id: serial().primaryKey(),
+    amount: integer().notNull(),
     transactionId: transactionId()
-      .references(() => transactions.id)
+      .references(() => transactions.id, { onDelete: 'cascade' })
       .notNull(),
     fundId: fundId()
-      .references(() => funds.id)
+      .references(() => funds.id, { onDelete: 'restrict' })
       .notNull(),
   },
-  (table) => [
-    index('transaction_items_fund_id_idx').on(table.fundId),
-    // reports
-    index('transaction_items_transaction_id_fund_id_amount_idx').on(
-      table.transactionId,
-      table.fundId,
-      table.amount,
-    ),
-  ],
+  // (table) => [
+  //   index('transaction_items_fund_id_idx').on(table.fundId),
+  //   // reports
+  //   index('transaction_items_transaction_id_fund_id_amount_idx').on(
+  //     table.transactionId,
+  //     table.fundId,
+  //     table.amount,
+  //   ),
+  // ],
 )
 
-export const payments = sqliteTable(
+export const payments = pgTable(
   'payments',
   {
-    id: integer().primaryKey({ autoIncrement: true }),
+    id: serial().primaryKey(),
     transactionId: transactionId()
-      .references(() => transactions.id)
+      .references(() => transactions.id, { onDelete: 'cascade' })
       .notNull(),
-    message: text({ length: 255 }),
-    paymentMethod: text({ length: 10 }),
+    message: varchar({ length: 255 }),
+    paymentMethod: varchar({ length: 10 }),
     provider: text({ enum: ['eghl', 'rm'] })
       .default('eghl')
       .notNull(),
     providerTransactionId: text(),
-    paidAt: datetime(),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    paidAt: timestamptz(),
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
     updatedAt: updatedAt(),
   },
-  (table) => [index('payments_transaction_id_idx').on(table.transactionId)],
+  // (table) => [index('payments_transaction_id_idx').on(table.transactionId)],
 )
 export type Payment = InferSelectModel<typeof payments>
 export type PaymentInsert = InferInsertModel<typeof payments>
 
-export const savedPaymentMethods = sqliteTable(
+export const savedPaymentMethods = pgTable(
   'saved_payment_methods',
   {
-    id: integer().primaryKey({ autoIncrement: true }),
-    token: text({ length: 50 }).notNull(),
-    tokenType: text({ length: 3, enum: ['OCP'] }).notNull(),
+    id: serial().primaryKey(),
+    token: varchar({ length: 50 }).notNull(),
+    tokenType: varchar({ length: 3, enum: ['OCP'] }).notNull(),
     userId: userId()
-      .references(() => users.id)
+      .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
     //
-    cardHolder: text({ length: 30 }),
-    cardNoMask: text({ length: 19 }).notNull(),
-    cardExp: text({ length: 6 }).notNull(),
-    cardType: text({ length: 10 }).notNull(),
+    cardHolder: varchar({ length: 30 }),
+    cardNoMask: varchar({ length: 19 }).notNull(),
+    cardExp: varchar({ length: 6 }).notNull(),
+    cardType: varchar({ length: 10 }).notNull(),
     //
-    lastUsedAt: datetime(),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    lastUsedAt: timestamptz(),
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
     updatedAt: updatedAt(),
   },
-
-  (table) => [
-    index('saved_payment_methods_user_id_idx').on(table.userId),
-    uniqueIndex('saved_payment_methods_user_id_card_no_mask_card_exp_idx').on(
-      table.userId,
-      table.cardNoMask,
-      table.cardExp,
-    ),
-  ],
+  // (table) => [
+  //   index('saved_payment_methods_user_id_idx').on(table.userId),
+  //   uniqueIndex('saved_payment_methods_user_id_card_no_mask_card_exp_idx').on(
+  //     table.userId,
+  //     table.cardNoMask,
+  //     table.cardExp,
+  //   ),
+  // ],
 )
 export type SavedPaymentMethod = InferSelectModel<typeof savedPaymentMethods>
 
 // Session management
-const sessionId = () => text({ length: 21 })
-export const sessions = sqliteTable(
+const sessionId = () => varchar({ length: 21 })
+export const sessions = pgTable(
   'sessions',
   {
     id: sessionId()
       .primaryKey()
       .$defaultFn(() => createId(21)),
-    tokenHash: text({ length: 255 }).notNull(),
+    tokenHash: varchar({ length: 255 }).notNull(),
     userId: userId()
-      .references(() => users.id)
+      .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
-    expiresAt: datetime().notNull(),
+    expiresAt: timestamptz().notNull(),
     updatedAt: updatedAt(),
   },
-  (table) => [
-    index('sessions_user_id_idx').on(table.userId),
-    uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
-  ],
+  // (table) => [
+  //   index('sessions_user_id_idx').on(table.userId),
+  //   uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
+  // ],
 )
 
 export type Session = InferSelectModel<typeof sessions>
 export type SessionInsert = InferInsertModel<typeof sessions>
 
-export const tokens = sqliteTable(
+export const tokens = pgTable(
   'tokens',
   {
-    id: integer().primaryKey({ autoIncrement: true }),
-    tokenHash: text({ length: 255 }).notNull(),
+    id: serial().primaryKey(),
+    tokenHash: varchar({ length: 255 }).notNull(),
     userId: userId()
-      .references(() => users.id)
+      .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
-    createdAt: datetime()
-      .default(sql`CURRENT_TIMESTAMP`)
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
-    expiresAt: datetime().notNull(),
-    usedAt: datetime(),
+    expiresAt: timestamptz().notNull(),
+    usedAt: timestamptz(),
   },
-  (table) => [
-    uniqueIndex('tokens_token_hash_idx').on(table.tokenHash),
-    index('tokens_user_latest_valid_idx').on(
-      table.userId,
-      table.usedAt,
-      table.createdAt,
-      table.expiresAt,
-    ),
-  ],
+  // (table) => [
+  //   uniqueIndex('tokens_token_hash_idx').on(table.tokenHash),
+  //   index('tokens_user_latest_valid_idx').on(
+  //     table.userId,
+  //     table.usedAt,
+  //     table.createdAt,
+  //     table.expiresAt,
+  //   ),
+  // ],
 )
 
 export type Token = InferSelectModel<typeof tokens>
