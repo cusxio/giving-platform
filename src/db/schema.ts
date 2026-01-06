@@ -2,11 +2,13 @@ import type { InferInsertModel, InferSelectModel } from 'drizzle-orm'
 import { sql } from 'drizzle-orm'
 import {
   boolean,
+  index,
   integer,
   pgTable,
   serial,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
 
@@ -38,7 +40,10 @@ export const funds = pgTable(
       .notNull(),
     updatedAt: updatedAt(),
   },
-  // (table) => [uniqueIndex('funds_name_idx').on(table.name)],
+  (table) => [
+    // Fund lookup by name (contribution service)
+    index('funds_name_idx').on(table.name),
+  ],
 )
 
 // Users
@@ -81,7 +86,10 @@ export const users = pgTable(
       .notNull(),
     updatedAt: updatedAt(),
   },
-  // (table) => [uniqueIndex('users_email_idx').on(table.email)],
+  (table) => [
+    // Email lookup (auth, contribution service)
+    uniqueIndex('users_email_idx').on(table.email),
+  ],
 )
 
 export type User = InferSelectModel<typeof users>
@@ -126,42 +134,33 @@ export const transactions = pgTable(
     updatedAt: updatedAt(),
     createdAs: text('created_as', { enum: ['user', 'guest'] }).notNull(),
   },
-  // (table) => [
-  // overview
-  // index('transactions_user_id_status_created_as_created_at_idx').on(
-  //   table.userId,
-  //   table.status,
-  //   table.createdAs,
-  //   table.createdAt,
-  // ),
-  // overview (transactions table)
-  // index('transactions_user_id_status_created_at_idx').on(
-  //   table.userId,
-  //   table.status,
-  //   table.createdAt,
-  // ),
-  // insights
-  // index('transactions_status_amount_idx').on(table.status, table.amount),
-  // insights
-  // index('transactions_status_created_at_amount_idx').on(
-  //   table.status,
-  //   table.createdAt,
-  //   table.amount,
-  // ),
-  // insights
-  // index('transactions_status_created_as_created_at_idx').on(
-  //   table.status,
-  //   table.createdAs,
-  //   table.createdAt,
-  // ),
-  // reports
-  // index('transactions_status_created_at_id_created_as_idx').on(
-  //   table.status,
-  //   table.createdAt,
-  //   table.id,
-  //   table.createdAs,
-  // ),
-  // ],
+  (table) => [
+    // User transactions with status and date filtering (overview, transactions list)
+    index('transactions_user_id_status_created_at_idx').on(
+      table.userId,
+      table.status,
+      table.createdAt,
+    ),
+    // User transactions with journey filtering (overview with start_fresh)
+    index('transactions_user_id_status_created_as_created_at_idx').on(
+      table.userId,
+      table.status,
+      table.createdAs,
+      table.createdAt,
+    ),
+    // Global status queries with date range (insights, reports)
+    index('transactions_status_created_at_idx').on(
+      table.status,
+      table.createdAt,
+    ),
+    // Aggregations with amount (insights - median, percentile)
+    index('transactions_status_amount_idx').on(table.status, table.amount),
+    // Guest transaction existence check (welcome page)
+    index('transactions_user_id_created_as_idx').on(
+      table.userId,
+      table.createdAs,
+    ),
+  ],
 )
 
 export type Transaction = InferSelectModel<typeof transactions>
@@ -178,15 +177,18 @@ export const transactionItems = pgTable(
       .references(() => funds.id, { onDelete: 'restrict' })
       .notNull(),
   },
-  // (table) => [
-  //   index('transaction_items_fund_id_idx').on(table.fundId),
-  //   // reports
-  //   index('transaction_items_transaction_id_fund_id_amount_idx').on(
-  //     table.transactionId,
-  //     table.fundId,
-  //     table.amount,
-  //   ),
-  // ],
+  (table) => [
+    // Transaction items lookup by transaction (joins)
+    index('transaction_items_transaction_id_idx').on(table.transactionId),
+    // Fund-based queries (overview - total funds supported)
+    index('transaction_items_fund_id_idx').on(table.fundId),
+    // Reports aggregation - covering index
+    index('transaction_items_transaction_id_fund_id_amount_idx').on(
+      table.transactionId,
+      table.fundId,
+      table.amount,
+    ),
+  ],
 )
 
 export const payments = pgTable(
@@ -208,7 +210,10 @@ export const payments = pgTable(
       .notNull(),
     updatedAt: updatedAt(),
   },
-  // (table) => [index('payments_transaction_id_idx').on(table.transactionId)],
+  (table) => [
+    // Payment lookup by transaction (receipt, transaction details)
+    index('payments_transaction_id_idx').on(table.transactionId),
+  ],
 )
 export type Payment = InferSelectModel<typeof payments>
 export type PaymentInsert = InferInsertModel<typeof payments>
@@ -234,14 +239,20 @@ export const savedPaymentMethods = pgTable(
       .notNull(),
     updatedAt: updatedAt(),
   },
-  // (table) => [
-  //   index('saved_payment_methods_user_id_idx').on(table.userId),
-  //   uniqueIndex('saved_payment_methods_user_id_card_no_mask_card_exp_idx').on(
-  //     table.userId,
-  //     table.cardNoMask,
-  //     table.cardExp,
-  //   ),
-  // ],
+  (table) => [
+    // User's saved cards with expiry filtering and lastUsedAt ordering
+    index('saved_payment_methods_user_id_card_exp_last_used_idx').on(
+      table.userId,
+      table.cardExp,
+      table.lastUsedAt,
+    ),
+    // Prevent duplicate cards per user
+    uniqueIndex('saved_payment_methods_user_id_card_no_mask_card_exp_idx').on(
+      table.userId,
+      table.cardNoMask,
+      table.cardExp,
+    ),
+  ],
 )
 export type SavedPaymentMethod = InferSelectModel<typeof savedPaymentMethods>
 
@@ -263,10 +274,12 @@ export const sessions = pgTable(
     expiresAt: timestamptz().notNull(),
     updatedAt: updatedAt(),
   },
-  // (table) => [
-  //   index('sessions_user_id_idx').on(table.userId),
-  //   uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
-  // ],
+  (table) => [
+    // Session lookup by user (logout all sessions)
+    index('sessions_user_id_idx').on(table.userId),
+    // Session validation by token hash
+    uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
+  ],
 )
 
 export type Session = InferSelectModel<typeof sessions>
@@ -286,15 +299,17 @@ export const tokens = pgTable(
     expiresAt: timestamptz().notNull(),
     usedAt: timestamptz(),
   },
-  // (table) => [
-  //   uniqueIndex('tokens_token_hash_idx').on(table.tokenHash),
-  //   index('tokens_user_latest_valid_idx').on(
-  //     table.userId,
-  //     table.usedAt,
-  //     table.createdAt,
-  //     table.expiresAt,
-  //   ),
-  // ],
+  (table) => [
+    // Token validation by hash (mark as used)
+    uniqueIndex('tokens_token_hash_idx').on(table.tokenHash),
+    // Find latest valid token for user (OTP verification)
+    index('tokens_user_id_expires_at_used_at_created_at_idx').on(
+      table.userId,
+      table.expiresAt,
+      table.usedAt,
+      table.createdAt,
+    ),
+  ],
 )
 
 export type Token = InferSelectModel<typeof tokens>
