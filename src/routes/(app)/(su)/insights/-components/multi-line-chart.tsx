@@ -16,9 +16,9 @@ import { YAXis } from '../../../-components/charts/y-axis'
 
 interface Data {
   cumulativeAmount: number
-  week: string
+  week: number
   weeklyAmount: number
-  year: string
+  year: number
 }
 
 interface MultiLineChartProps {
@@ -29,8 +29,8 @@ interface MultiLineChartProps {
 type TooltipPayload = { payload: WeeklyData }[]
 
 interface WeeklyData {
-  [year: string]: number | string
-  week: string
+  [year: string]: number
+  week: number
 }
 
 export function MultiLineChart(props: MultiLineChartProps) {
@@ -125,7 +125,7 @@ function convertToWeeklyFormat(
   metricKey: 'cumulativeAmount' | 'weeklyAmount',
 ): WeeklyData[] {
   // Group data by week
-  const weekMap = new Map<string, Map<string, number>>()
+  const weekMap = new Map<number, Map<number, number>>()
 
   for (const item of data) {
     if (!weekMap.has(item.week)) {
@@ -146,12 +146,12 @@ function convertToWeeklyFormat(
   }
 
   // Sort by week number
-  result.sort((a, b) => Number.parseInt(a.week) - Number.parseInt(b.week))
+  result.sort((a, b) => a.week - b.week)
 
   return result
 }
 
-function getColorForYear(year: string, years: string[]) {
+function getColorForYear(year: number | string, years: (number | string)[]) {
   const chartColors = [
     'text-chart-1',
     'text-chart-2',
@@ -164,7 +164,7 @@ function getColorForYear(year: string, years: string[]) {
 }
 
 function TooltipContent(
-  props: TooltipContentProps<ValueType, NameType> & { years: string[] },
+  props: TooltipContentProps<ValueType, NameType> & { years: number[] },
 ) {
   const payload = props.payload as TooltipPayload
 
@@ -182,7 +182,7 @@ function TooltipContent(
       {current && (
         <>
           <div className="border-b border-border px-4 py-2">
-            <span className="text-sm">Week {Number(current.week)}</span>
+            <span className="text-sm">Week {current.week}</span>
           </div>
           <div className="grid-y-1 grid px-4 py-2">
             {years.map((year) => {

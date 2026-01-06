@@ -1,6 +1,7 @@
 import type { SQL } from 'drizzle-orm'
-import { asc, count, desc, eq, max, sql } from 'drizzle-orm'
+import { count, desc, eq, max, sql } from 'drizzle-orm'
 
+import { clientTz } from '#/core/date'
 import { roundedAvg, safeSum } from '#/db/aggregates'
 import type { DB } from '#/db/client'
 import { funds, transactionItems, transactions } from '#/db/schema'
@@ -14,14 +15,9 @@ export class OverviewRepository {
     this.#db = db
   }
 
-  contributionsFrequencyPerMonthQuery(
-    whereClause: WhereClause,
-    modifier: string,
-  ) {
-    const month =
-      sql<string>`strftime('%m', ${transactions.createdAt}, ${modifier})`.mapWith(
-        Number.parseInt,
-      )
+  contributionsFrequencyPerMonthQuery(whereClause: WhereClause) {
+    const month = sql<number>`EXTRACT(MONTH FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
+
     return this.#db
       .select({
         month,
@@ -39,11 +35,8 @@ export class OverviewRepository {
       .orderBy(month, funds.name)
   }
 
-  contributionsPerMonthQuery(whereClause: WhereClause, modifier: string) {
-    const month =
-      sql<string>`strftime('%m', ${transactions.createdAt}, ${modifier})`.mapWith(
-        Number.parseInt,
-      )
+  contributionsPerMonthQuery(whereClause: WhereClause) {
+    const month = sql<number>`EXTRACT(MONTH FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
 
     return this.#db
       .select({ month, totalAmount: safeSum(transactions.amount) })
@@ -65,29 +58,17 @@ export class OverviewRepository {
       .where(whereClause)
   }
 
-  cumulativeContributionsQuery(whereClause: WhereClause, modifier: string) {
-    const format = '%Y-%m-%d'
-    const day = sql<string>`strftime(${format}, ${transactions.createdAt}, ${modifier})`
-
-    const dailyTotals = this.#db.$with('daily_totals').as(
-      this.#db
-        .select({
-          day: day.as('day'),
-          dailyAmount: safeSum(transactions.amount).as('daily_amount'),
-        })
-        .from(transactions)
-        .where(whereClause)
-        .groupBy(day),
-    )
-
+  cumulativeContributionsQuery(whereClause: WhereClause) {
+    const day = sql<string>`TO_CHAR(${transactions.createdAt} AT TIME ZONE ${clientTz}, 'YYYY-MM-DD')`
     return this.#db
-      .with(dailyTotals)
       .select({
-        day: dailyTotals.day,
-        cumulativeAmount: sql<number>`sum(${dailyTotals.dailyAmount}) OVER (ORDER BY ${dailyTotals.day})`,
+        day,
+        cumulativeAmount: sql<number>`SUM(SUM(${transactions.amount})) OVER (ORDER BY ${day})`,
       })
-      .from(dailyTotals)
-      .orderBy(asc(dailyTotals.day))
+      .from(transactions)
+      .where(whereClause)
+      .groupBy(day)
+      .orderBy(day)
   }
 
   getTotalFundsSupported(whereClause: WhereClause) {
@@ -95,9 +76,9 @@ export class OverviewRepository {
       .select({
         totalFundsSupported: sql<number>`COUNT(DISTINCT ${transactionItems.fundId})`,
       })
-      .from(transactionItems)
+      .from(transactions)
       .innerJoin(
-        transactions,
+        transactionItems,
         eq(transactionItems.transactionId, transactions.id),
       )
       .where(whereClause)

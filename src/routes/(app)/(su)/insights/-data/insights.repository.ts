@@ -1,52 +1,13 @@
 import { and, asc, count, eq, gte, sql } from 'drizzle-orm'
 
-import { getTzOffsetModifier } from '#/core/date'
-import { createDBError } from '#/core/errors'
-import { ok, tryAsync } from '#/core/result'
+import { clientTz } from '#/core/date'
 import { roundedAvg, safeSum } from '#/db/aggregates'
 import { DB } from '#/db/client'
 import { transactions } from '#/db/schema'
-
 export class InsightsRepository {
   #db: DB
-
   constructor(db: DB) {
     this.#db = db
-  }
-
-  async getMedianAmount() {
-    const countRes = await tryAsync(
-      () =>
-        this.#db
-          .select({ count: count() })
-          .from(transactions)
-          .where(eq(transactions.status, 'success')),
-      createDBError,
-    )
-
-    if (!countRes.ok) return countRes
-
-    const total = countRes.value[0]?.count ?? 0
-
-    if (total === 0) return ok(total)
-
-    const middleIndex = Math.floor(total / 2)
-
-    const medianRes = await tryAsync(
-      () =>
-        this.#db
-          .select({ amountInCents: transactions.amount })
-          .from(transactions)
-          .where(eq(transactions.status, 'success'))
-          .orderBy(transactions.amount)
-          .limit(1)
-          .offset(middleIndex),
-      createDBError,
-    )
-
-    if (!medianRes.ok) return medianRes
-
-    return ok(medianRes.value[0]?.amountInCents ?? 0)
   }
 
   transactionSummaryQuery() {
@@ -55,6 +16,7 @@ export class InsightsRepository {
         totalAmount: safeSum(transactions.amount),
         noOfContributions: count(),
         averageAmount: roundedAvg(transactions.amount),
+        medianAmount: sql<number>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${transactions.amount})`,
       })
       .from(transactions)
       .where(eq(transactions.status, 'success'))
@@ -69,10 +31,9 @@ export class InsightsRepository {
   }
 
   weekendWeekdayTransactionCountQuery() {
-    const modifier = getTzOffsetModifier()
     const period = sql<string>`
       CASE
-        WHEN strftime('%w', ${transactions.createdAt}, ${modifier}) IN ('0','6')
+        WHEN EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) IN (0, 6)
         THEN 'weekend'
         ELSE 'weekday'
       END
@@ -85,17 +46,9 @@ export class InsightsRepository {
   }
 
   weeklyCumulativeTotalsByYearQuery() {
-    const modifier = getTzOffsetModifier()
-
-    const week = sql<string>`
-      CASE 
-        WHEN strftime('%W', ${transactions.createdAt}, ${modifier}) = '00' 
-        THEN '01' 
-        ELSE strftime('%W', ${transactions.createdAt}, ${modifier}) 
-      END
-    `
-    const year = sql<string>`strftime('%Y', ${transactions.createdAt}, ${modifier})`
-    const cutoffYear = sql`strftime('%Y', 'now', ${modifier}, '-4 years')`
+    const week = sql<number>`EXTRACT(WEEK FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
+    const year = sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
+    const cutoffYear = sql<number>`EXTRACT(YEAR FROM NOW() AT TIME ZONE ${clientTz})::int - 4`
 
     const weeklyTotals = this.#db.$with('weekly_totals').as(
       this.#db
@@ -108,14 +61,13 @@ export class InsightsRepository {
         .where(and(eq(transactions.status, 'success'), gte(year, cutoffYear)))
         .groupBy(year, week),
     )
-
     return this.#db
       .with(weeklyTotals)
       .select({
         year: weeklyTotals.year,
         week: weeklyTotals.week,
         weeklyAmount: weeklyTotals.weeklyAmount,
-        cumulativeAmount: sql<number>`sum(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY CAST(${weeklyTotals.week} AS integer))`,
+        cumulativeAmount: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})`,
       })
       .from(weeklyTotals)
       .orderBy(asc(weeklyTotals.year), asc(weeklyTotals.week))

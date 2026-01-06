@@ -11,5 +11,6 @@ export function formatTransactionSummary(
     totalAmount: centsToRinggit(contributionStats?.totalAmount ?? 0),
     noOfContributions: contributionStats?.noOfContributions ?? 0,
     averageAmount: centsToRinggit(contributionStats?.averageAmount ?? 0),
+    medianAmount: centsToRinggit(contributionStats?.medianAmount ?? 0),
   }
 }

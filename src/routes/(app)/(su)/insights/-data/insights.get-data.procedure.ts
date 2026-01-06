@@ -14,27 +14,18 @@ export const getInsightsData = createServerFn()
     const insightsRepository = new InsightsRepository(db)
 
     const [
-      [
-        transactionSummaryResult,
-        weekendWeekdayTransactionCountResult,
-        userGuestTransactionCountResult,
-        weeklyCumulativeTotalsByYearResult,
-      ],
-      medianResult,
-    ] = await Promise.all([
-      db.batch([
-        insightsRepository.transactionSummaryQuery(),
-        insightsRepository.weekendWeekdayTransactionCountQuery(),
-        insightsRepository.userGuestTransanctionCountQuery(),
-        insightsRepository.weeklyCumulativeTotalsByYearQuery(),
-      ]),
-      insightsRepository.getMedianAmount(),
+      transactionSummaryResult,
+      weekendWeekdayTransactionCountResult,
+      userGuestTransactionCountResult,
+      weeklyCumulativeTotalsByYearResult,
+    ] = await db.batch([
+      insightsRepository.transactionSummaryQuery(),
+      insightsRepository.weekendWeekdayTransactionCountQuery(),
+      insightsRepository.userGuestTransanctionCountQuery(),
+      insightsRepository.weeklyCumulativeTotalsByYearQuery(),
     ])
 
-    const summary = {
-      ...formatTransactionSummary(transactionSummaryResult[0]),
-      medianAmount: medianResult.ok ? centsToRinggit(medianResult.value) : 0,
-    }
+    const summary = formatTransactionSummary(transactionSummaryResult[0])
 
     const weekendWeekday = weekendWeekdayTransactionCountResult.map((x) => ({
       period: x.period,

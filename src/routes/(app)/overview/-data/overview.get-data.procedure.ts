@@ -1,7 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { and, eq, gte, inArray, lt } from 'drizzle-orm'
 
-import { getTzOffsetModifier } from '#/core/date'
 import { centsToRinggit } from '#/core/money'
 import type { User } from '#/db/schema'
 import { transactions } from '#/db/schema'
@@ -53,7 +52,6 @@ export const getOverviewData = createServerFn()
       inArray(transactions.status, ['success', 'failed']),
     )
 
-    const modifier = getTzOffsetModifier()
     const overviewRepository = new OverviewRepository(db)
 
     const [
@@ -68,12 +66,9 @@ export const getOverviewData = createServerFn()
       overviewRepository.contributionStatsQuery(whereClause),
       overviewRepository.getTotalFundsSupported(whereClause),
       overviewRepository.largestTransactionDateQuery(whereClause),
-      overviewRepository.contributionsPerMonthQuery(whereClause, modifier),
-      overviewRepository.contributionsFrequencyPerMonthQuery(
-        whereClause,
-        modifier,
-      ),
-      overviewRepository.cumulativeContributionsQuery(whereClause, modifier),
+      overviewRepository.contributionsPerMonthQuery(whereClause),
+      overviewRepository.contributionsFrequencyPerMonthQuery(whereClause),
+      overviewRepository.cumulativeContributionsQuery(whereClause),
       overviewRepository.getTransactionsQuery(transactionsWhereClause),
     ])
 

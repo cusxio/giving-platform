@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 
-import { getTzOffsetModifier } from '#/core/date'
+import { clientTz } from '#/core/date'
 import { savedPaymentMethods } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware'
 
@@ -15,7 +15,7 @@ export const getSavedPaymentMethods = createServerFn()
       return []
     }
 
-    const modifier = getTzOffsetModifier()
+    const currentYearMonth = sql<string>`TO_CHAR(NOW() AT TIME ZONE ${clientTz}, 'YYYYMM')`
 
     return db
       .select()
@@ -23,10 +23,7 @@ export const getSavedPaymentMethods = createServerFn()
       .where(
         and(
           eq(savedPaymentMethods.userId, userId),
-          gte(
-            savedPaymentMethods.cardExp,
-            sql`strftime('%Y%m', 'now', ${modifier})`,
-          ),
+          gte(savedPaymentMethods.cardExp, currentYearMonth),
         ),
       )
       .orderBy(desc(savedPaymentMethods.lastUsedAt))

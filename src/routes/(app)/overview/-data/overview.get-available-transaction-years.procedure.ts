@@ -1,7 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { and, asc, eq, sql } from 'drizzle-orm'
 
-import { getTzOffsetModifier } from '#/core/date'
+import { clientTz } from '#/core/date'
 import type { User } from '#/db/schema'
 import { transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware'
@@ -18,10 +18,9 @@ export const getAvailableTransactionYears = createServerFn()
     const { db } = context
     const { userId, journey } = data
 
-    const modifier = getTzOffsetModifier()
-    const year = sql<string>`strftime('%Y', ${transactions.createdAt}, ${modifier})`
+    const year = sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
     const results = await db
-      .selectDistinct({ year: year.mapWith(Number.parseInt) })
+      .selectDistinct({ year })
       .from(transactions)
       .where(
         and(

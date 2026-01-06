@@ -18,31 +18,37 @@ export const getReportsData = createServerFn()
     const { startDateUTC, endDateUTCExclusive } = data
     const { db } = context
 
-    const createdAt = transactions.createdAt
-
-    const rows = await db
+    // Aggregate first, then join to funds for name lookup
+    const aggregated = db
       .select({
-        fundName: funds.name,
+        fundId: transactionItems.fundId,
         createdAs: transactions.createdAs,
         totalAmount: safeSum(transactionItems.amount),
       })
       .from(transactions)
-      // Uses index: transactions_status_created_at_id_created_as_idx
       .where(
         and(
           eq(transactions.status, 'success'),
-          gte(createdAt, startDateUTC),
-          lt(createdAt, endDateUTCExclusive),
+          gte(transactions.createdAt, startDateUTC),
+          lt(transactions.createdAt, endDateUTCExclusive),
         ),
       )
-      // Uses index: transaction_items_transaction_id_fund_id_amount_idx
       .innerJoin(
         transactionItems,
         eq(transactionItems.transactionId, transactions.id),
       )
-      .innerJoin(funds, eq(funds.id, transactionItems.fundId))
-      .groupBy(funds.name, transactions.createdAs)
-      .orderBy(desc(transactions.createdAs), asc(funds.name))
+      .groupBy(transactionItems.fundId, transactions.createdAs)
+      .as('aggregated')
+
+    const rows = await db
+      .select({
+        fundName: funds.name,
+        createdAs: aggregated.createdAs,
+        totalAmount: aggregated.totalAmount,
+      })
+      .from(aggregated)
+      .innerJoin(funds, eq(funds.id, aggregated.fundId))
+      .orderBy(desc(aggregated.createdAs), asc(funds.name))
 
     return rows.map((row) => ({
       ...row,
