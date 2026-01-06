@@ -15,7 +15,6 @@ const schema = Type.Object({
   SESSION_SECRET: Type.String(),
   CRON_SECRET: Type.Optional(Type.String()),
   //
-  DATABASE_AUTH_TOKEN: Type.Optional(Type.String()),
   DATABASE_URL: Type.String(),
   //
   EGHL_PASSWORD: Type.String(),
@@ -39,7 +38,6 @@ export const {
   SESSION_SECRET,
   CRON_SECRET,
   //
-  DATABASE_AUTH_TOKEN,
   DATABASE_URL,
   //
   EGHL_PASSWORD,

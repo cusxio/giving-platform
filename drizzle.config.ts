@@ -1,10 +1,10 @@
 import { defineConfig } from 'drizzle-kit'
 
-import { DATABASE_AUTH_TOKEN, DATABASE_URL } from './src/envvars'
+import { DATABASE_URL } from './src/envvars'
 
 export default defineConfig({
-  dialect: 'turso',
+  dialect: 'postgresql',
   schema: './src/db/schema.ts',
-  dbCredentials: { url: DATABASE_URL, authToken: DATABASE_AUTH_TOKEN },
+  dbCredentials: { url: DATABASE_URL },
   casing: 'snake_case',
 })

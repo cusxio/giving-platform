@@ -1,13 +1,14 @@
-import { createClient } from '@libsql/client'
-import { drizzle } from 'drizzle-orm/libsql'
+import { neon, neonConfig } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/neon-http'
 
-import { DATABASE_AUTH_TOKEN, DATABASE_URL } from '#/envvars'
+import { DATABASE_URL } from '#/envvars'
 
-const client = createClient({
-  authToken: DATABASE_AUTH_TOKEN,
-  url: DATABASE_URL,
-})
-export const db = drizzle(client, { casing: 'snake_case' })
+// Required for PlanetScale Postgres connections
+// https://planetscale.com/docs/postgres/connecting/neon-serverless-driver#using-http-mode
+neonConfig.fetchEndpoint = (host) => `https://${host}/sql`
+
+const client = neon(DATABASE_URL)
+export const db = drizzle({ client, casing: 'snake_case' })
 
 export type DB = typeof db
 export type DBTransaction = Parameters<Parameters<DB['transaction']>[0]>[0]
