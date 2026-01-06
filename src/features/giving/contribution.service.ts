@@ -113,7 +113,7 @@ export class ContributionService {
           id: transactionId,
           amount: totalAmountInCents,
           status: 'pending',
-          userId: userId,
+          userId,
           createdAs: session ? 'user' : 'guest',
         })
 
@@ -123,11 +123,7 @@ export class ContributionService {
           if (fundId === undefined)
             throw new Error(`Invalid fund name: ${item.fund}`)
 
-          return {
-            transactionId: transactionId,
-            fundId: fundId,
-            amount: item.amountInCents,
-          }
+          return { transactionId, fundId, amount: item.amountInCents }
         }),
       )
 

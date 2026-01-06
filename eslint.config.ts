@@ -26,6 +26,7 @@ export default defineConfig([
       unicorn.configs.recommended,
     ],
     rules: {
+      'object-shorthand': ['error'],
       'perfectionist/sort-objects': 'off',
       'perfectionist/sort-switch-case': 'off',
       'perfectionist/sort-modules': ['error', { partitionByComment: true }],
