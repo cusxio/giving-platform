@@ -15,7 +15,7 @@ export class UserRepository {
 
   async createUser(
     input: Pick<UserInsert, 'email' | 'firstName' | 'lastName'>,
-    db: DB | DBTransaction = this.#db,
+    db: AnyDBOrTransaction = this.#db,
   ) {
     const result = await tryAsync(
       () =>
@@ -43,7 +43,7 @@ export class UserRepository {
 
   async findUserByEmail(
     email: User['email'],
-    db: DB | DBTransaction = this.#db,
+    db: AnyDBOrTransaction = this.#db,
   ) {
     const result = await tryAsync(
       () => db.select().from(users).where(eq(users.email, email)),

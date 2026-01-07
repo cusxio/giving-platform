@@ -8,9 +8,9 @@ import { dbMiddleware } from './db-middleware'
 export const contributionServiceMiddleware = createMiddleware()
   .middleware([dbMiddleware])
   .server(({ next, context }) => {
-    const { db } = context
+    const { db, dbPool } = context
     const userRepository = new UserRepository(db)
-    const contributionService = new ContributionService(db, userRepository)
+    const contributionService = new ContributionService(dbPool, userRepository)
 
     return next({ context: { contributionService } })
   })

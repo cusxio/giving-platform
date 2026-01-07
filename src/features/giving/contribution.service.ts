@@ -1,11 +1,10 @@
 import { inArray } from 'drizzle-orm'
 
 import type { Fund } from '#/core/brand/funds'
-import { createDBError } from '#/core/errors'
-import { err, tryAsync } from '#/core/result'
-import type { DB } from '#/db/client'
-import { createId } from '#/db/create-id'
-import { DBEmptyReturnError } from '#/db/errors'
+import { createTransactionError } from '#/core/errors'
+import { tryAsync } from '#/core/result'
+import type { DBPool } from '#/db/client'
+import { TransactionRollbackError } from '#/db/errors'
 import type { Session } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
 
@@ -22,12 +21,26 @@ interface UserDetails {
   lastName: string
 }
 
+class EmailBelongsToAnotherUserError extends Error {
+  constructor() {
+    super('Email belongs to another user')
+    this.name = 'EmailBelongsToAnotherUserError'
+  }
+}
+
+class GuestEmailExistsError extends Error {
+  constructor() {
+    super('Email already exists for a registered user')
+    this.name = 'GuestEmailExistsError'
+  }
+}
+
 export class ContributionService {
-  #db: DB
+  #dbPool: DBPool
   #userRepository: UserRepository
 
-  constructor(db: DB, userRepository: UserRepository) {
-    this.#db = db
+  constructor(dbPool: DBPool, userRepository: UserRepository) {
+    this.#dbPool = dbPool
     this.#userRepository = userRepository
   }
 
@@ -36,100 +49,125 @@ export class ContributionService {
     userDetails: UserDetails,
     session: null | Session,
   ) {
-    // Preparation
-    const prepResult = await tryAsync(async () => {
-      const items = _items.map((i) => ({
-        ...i,
-        fund: i.fund.charAt(0).toUpperCase() + i.fund.slice(1),
-      }))
-
-      const foundFunds = await this.#db
-        .select()
-        .from(funds)
-        .where(
-          inArray(
-            funds.name,
-            items.map((i) => i.fund),
-          ),
-        )
-
-      const fundIdMap = new Map(foundFunds.map((f) => [f.name, f.id]))
-      const totalAmountInCents = items.reduce(
-        (sum, item) => sum + item.amountInCents,
-        0,
-      )
-
-      return { items, fundIdMap, totalAmountInCents }
-    }, createDBError)
-
-    if (!prepResult.ok) return prepResult
-
-    const { items, fundIdMap, totalAmountInCents } = prepResult.value
-
-    // User resolution
+    const items = _items.map((i) => ({
+      ...i,
+      fund: i.fund.charAt(0).toUpperCase() + i.fund.slice(1),
+    }))
+    const totalAmountInCents = items.reduce(
+      (sum, item) => sum + item.amountInCents,
+      0,
+    )
     const { email, firstName, lastName } = userDetails
-    let userId: number
 
-    const userRes = await this.#userRepository.findUserByEmail(email)
-    if (!userRes.ok) return userRes
+    return tryAsync(
+      () =>
+        this.#dbPool.transaction(async (tx) => {
+          // Check if email already belongs to someone
+          const userRes = await this.#userRepository.findUserByEmail(email, tx)
 
-    const existingUser = userRes.value
+          if (!userRes.ok) {
+            throw new TransactionRollbackError('Error finding user by email', {
+              cause: userRes.error,
+            })
+          }
 
-    if (session) {
-      userId = session.userId
+          const existingUser = userRes.value
+          let userId: number
 
-      if (existingUser && existingUser.id !== session.userId) {
-        return err({ type: 'EmailBelongsToAnotherUserError' as const })
-      }
-    } else {
-      if (existingUser && existingUser.status !== 'guest') {
-        return err({ type: 'GuestEmailExistsError' as const })
-      }
+          if (session) {
+            // Logged-in user: always use their session userId
+            userId = session.userId
 
-      const createRes = await this.#userRepository.createUser({
-        email,
-        firstName,
-        lastName,
-      })
+            // Error if email belongs to a different user
+            if (existingUser && existingUser.id !== session.userId) {
+              throw new EmailBelongsToAnotherUserError()
+            }
+          } else {
+            // Guest: only error if email belongs to a registered (non-guest) user
+            if (existingUser && existingUser.status !== 'guest') {
+              throw new GuestEmailExistsError()
+            }
 
-      if (!createRes.ok) return createRes // Pass through error
-      if (!createRes.value) {
-        return err({
-          type: 'DBEmptyReturnError' as const,
-          error: new DBEmptyReturnError(),
-        })
-      }
+            // Create guest user (or update existing guest)
+            const createRes = await this.#userRepository.createUser(
+              { email, firstName, lastName },
+              tx,
+            )
 
-      userId = createRes.value.id
-    }
+            if (!createRes.ok) {
+              throw new TransactionRollbackError('Error creating user', {
+                cause: createRes.error,
+              })
+            }
 
-    // Batch write
-    return tryAsync(async () => {
-      const transactionId = createId(20)
+            if (!createRes.value) {
+              throw new TransactionRollbackError(
+                'User creation returned no result',
+              )
+            }
 
-      const insertTransaction = this.#db
-        .insert(transactions)
-        .values({
-          id: transactionId,
-          amount: totalAmountInCents,
-          status: 'pending',
-          userId,
-          createdAs: session ? 'user' : 'guest',
-        })
+            userId = createRes.value.id
+          }
 
-      const insertTransactionItems = this.#db.insert(transactionItems).values(
-        items.map((item) => {
-          const fundId = fundIdMap.get(item.fund)
-          if (fundId === undefined)
-            throw new Error(`Invalid fund name: ${item.fund}`)
+          // Get fund IDs
+          const foundFunds = await tx
+            .select()
+            .from(funds)
+            .where(
+              inArray(
+                funds.name,
+                items.map((i) => i.fund),
+              ),
+            )
 
-          return { transactionId, fundId, amount: item.amountInCents }
+          const fundIdMap = new Map(foundFunds.map((f) => [f.name, f.id]))
+
+          // Insert transaction
+          const [transaction] = await tx
+            .insert(transactions)
+            .values({
+              amount: totalAmountInCents,
+              status: 'pending',
+              userId,
+              createdAs: session ? 'user' : 'guest',
+            })
+            .returning()
+
+          if (!transaction) {
+            throw new TransactionRollbackError(
+              'Transaction creation returned no result',
+            )
+          }
+
+          // Insert transaction items
+          await tx.insert(transactionItems).values(
+            items.map((item) => {
+              const fundId = fundIdMap.get(item.fund)
+              if (fundId === undefined) {
+                throw new Error(`Invalid fund name: ${item.fund}`)
+              }
+              return {
+                transactionId: transaction.id,
+                fundId,
+                amount: item.amountInCents,
+              }
+            }),
+          )
+
+          return {
+            transactionId: transaction.id,
+            customerName: `${firstName} ${lastName}`,
+          }
         }),
-      )
+      (error) => {
+        if (error instanceof GuestEmailExistsError)
+          return { type: 'GuestEmailExistsError' as const, error }
 
-      await this.#db.batch([insertTransaction, insertTransactionItems])
+        if (error instanceof EmailBelongsToAnotherUserError)
+          return { type: 'EmailBelongsToAnotherUserError' as const, error }
 
-      return { transactionId, customerName: `${firstName} ${lastName}` }
-    }, createDBError)
+        return createTransactionError(error)
+      },
+    )
   }
 }
