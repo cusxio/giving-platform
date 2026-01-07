@@ -3,7 +3,7 @@ import { eq, sql } from 'drizzle-orm'
 import { now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { DB, DBTransaction } from '#/db/client'
+import type { AnyDBOrTransaction, DB, DBTransaction } from '#/db/client'
 import type { User, UserInsert } from '#/db/schema'
 import { users } from '#/db/schema'
 
@@ -72,10 +72,10 @@ export class UserRepository {
 
   async markUserAsActiveById(
     userId: User['id'],
-    db: DB | DBTransaction = this.#db,
+    db: AnyDBOrTransaction = this.#db,
   ) {
     const result = await tryAsync(
-      () =>
+      async () =>
         db
           .update(users)
           .set({ status: 'active', emailVerifiedAt: now() })

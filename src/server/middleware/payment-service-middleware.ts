@@ -7,8 +7,8 @@ import { dbMiddleware } from './db-middleware'
 export const paymentServiceMiddleware = createMiddleware()
   .middleware([dbMiddleware])
   .server(({ next, context }) => {
-    const { db } = context
-    const paymentService = new PaymentService(db)
+    const { dbPool } = context
+    const paymentService = new PaymentService(dbPool)
 
     return next({ context: { paymentService } })
   })

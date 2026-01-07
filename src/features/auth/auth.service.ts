@@ -8,7 +8,7 @@ import { createTransactionError } from '#/core/errors'
 import { hashToken } from '#/core/hash-token'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync } from '#/core/result'
-import type { DB } from '#/db/client'
+import type { DBPool } from '#/db/client'
 import { DBEmptyReturnError, TransactionRollbackError } from '#/db/errors'
 import type { Session, User } from '#/db/schema'
 
@@ -29,14 +29,14 @@ import type { TokenRepository } from './token.repository'
 import { generateOtp } from './utils'
 
 export class AuthService {
-  #db: DB
+  #dbPool: DBPool
   #emailService: EmailService
   #sessionRepository: SessionRepository
   #tokenRepository: TokenRepository
   #userRepository: UserRepository
 
   constructor(
-    db: DB,
+    dbPool: DBPool,
     repositories: {
       sessionRepository: SessionRepository
       tokenRepository: TokenRepository
@@ -50,7 +50,7 @@ export class AuthService {
     this.#tokenRepository = tokenRepository
     this.#userRepository = userRepository
     this.#emailService = emailService
-    this.#db = db
+    this.#dbPool = dbPool
   }
 
   async login(
@@ -159,7 +159,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
 
     const txResult = await tryAsync(async () => {
-      return await this.#db.transaction(async (tx) => {
+      return await this.#dbPool.transaction(async (tx) => {
         if (mode === 'signup') {
           const markUserResult =
             await this.#userRepository.markUserAsActiveById(user.id, tx)

@@ -18,7 +18,10 @@ export const getAvailableTransactionYears = createServerFn()
     const { db } = context
     const { userId, journey } = data
 
-    const year = sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
+    const year =
+      sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`.as(
+        'year',
+      )
     const results = await db
       .selectDistinct({ year })
       .from(transactions)

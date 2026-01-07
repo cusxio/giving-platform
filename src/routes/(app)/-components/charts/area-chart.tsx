@@ -114,9 +114,11 @@ function TooltipContent(props: TooltipContentProps<number, string>) {
       {current && (
         <div className="flex items-center justify-between gap-x-4">
           <span className="text-sm text-fg-muted">
-            {createDateFormatter({ month: 'long', year: 'numeric' }).format(
-              new Date(current.day),
-            )}
+            {createDateFormatter({
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            }).format(new TZDate(current.day, clientTz))}
           </span>
 
           <span className="font-mono text-sm">

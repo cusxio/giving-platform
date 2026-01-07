@@ -4,7 +4,7 @@ import { now, TZDate } from '#/core/date'
 import { createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
 import { tryAsync } from '#/core/result'
-import type { DB } from '#/db/client'
+import type { DBPool } from '#/db/client'
 import {
   PaymentInsert,
   payments,
@@ -17,10 +17,10 @@ import type { EghlPaymentResponse } from '../payment-gateway/eghl.schema'
 import { EghlTxnStatus } from '../payment-gateway/eghl.schema'
 
 export class PaymentService {
-  #db: DB
+  #dbPool: DBPool
 
-  constructor(db: DB) {
-    this.#db = db
+  constructor(db: DBPool) {
+    this.#dbPool = db
   }
 
   async finalizePaymentFromCallback(response: EghlPaymentResponse) {
@@ -64,7 +64,7 @@ export class PaymentService {
 
     return tryAsync(
       () =>
-        this.#db.transaction(async (tx) => {
+        this.#dbPool.transaction(async (tx) => {
           const [transaction] = await tx
             .update(transactions)
             .set({ status: newStatus })

@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { DB, DBTransaction } from '#/db/client'
+import type { AnyDBOrTransaction, DB } from '#/db/client'
 import type { Session } from '#/db/schema'
 import { sessions } from '#/db/schema'
 
@@ -14,7 +14,7 @@ export class SessionRepository {
 
   async createSession(
     input: Pick<Session, 'expiresAt' | 'tokenHash' | 'userId'>,
-    db: DB | DBTransaction = this.#db,
+    db: AnyDBOrTransaction = this.#db,
   ) {
     const result = await tryAsync(
       () => db.insert(sessions).values(input).returning(),

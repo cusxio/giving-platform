@@ -1,5 +1,5 @@
 import type { SQL } from 'drizzle-orm'
-import { count, desc, eq, max, sql } from 'drizzle-orm'
+import { asc, count, desc, eq, max, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
 import { roundedAvg, safeSum } from '#/db/aggregates'
@@ -16,7 +16,10 @@ export class OverviewRepository {
   }
 
   contributionsFrequencyPerMonthQuery(whereClause: WhereClause) {
-    const month = sql<number>`EXTRACT(MONTH FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
+    const month =
+      sql<number>`EXTRACT(MONTH FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`.as(
+        'month',
+      )
 
     return this.#db
       .select({
@@ -36,7 +39,10 @@ export class OverviewRepository {
   }
 
   contributionsPerMonthQuery(whereClause: WhereClause) {
-    const month = sql<number>`EXTRACT(MONTH FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
+    const month =
+      sql<number>`EXTRACT(MONTH FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`.as(
+        'month',
+      )
 
     return this.#db
       .select({ month, totalAmount: safeSum(transactions.amount) })
@@ -59,16 +65,30 @@ export class OverviewRepository {
   }
 
   cumulativeContributionsQuery(whereClause: WhereClause) {
-    const day = sql<string>`TO_CHAR(${transactions.createdAt} AT TIME ZONE ${clientTz}, 'YYYY-MM-DD')`
+    const day =
+      sql<string>`TO_CHAR(${transactions.createdAt} AT TIME ZONE ${clientTz}, 'YYYY-MM-DD')`.as(
+        'day',
+      )
+
+    const dailyTotals = this.#db.$with('daily_totals').as(
+      this.#db
+        .select({
+          day,
+          dailyAmount: safeSum(transactions.amount).as('daily_amount'),
+        })
+        .from(transactions)
+        .where(whereClause)
+        .groupBy(day),
+    )
+
     return this.#db
+      .with(dailyTotals)
       .select({
-        day,
-        cumulativeAmount: sql<number>`SUM(SUM(${transactions.amount})) OVER (ORDER BY ${day})`,
+        day: dailyTotals.day,
+        cumulativeAmount: sql<number>`SUM(${dailyTotals.dailyAmount}) OVER (ORDER BY ${dailyTotals.day})`,
       })
-      .from(transactions)
-      .where(whereClause)
-      .groupBy(day)
-      .orderBy(day)
+      .from(dailyTotals)
+      .orderBy(asc(dailyTotals.day))
   }
 
   getTotalFundsSupported(whereClause: WhereClause) {
