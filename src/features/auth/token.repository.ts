@@ -56,20 +56,13 @@ export class TokenRepository {
     return ok(token ?? null)
   }
 
-  async markTokenAsUsed(
+  markTokenAsUsedQuery(
     tokenHash: Token['tokenHash'],
     db: AnyDBOrTransaction = this.#db,
   ) {
-    const result = await tryAsync(
-      async () =>
-        db
-          .update(tokens)
-          .set({ usedAt: now() })
-          .where(eq(tokens.tokenHash, tokenHash)),
-      createDBError,
-    )
-    if (!result.ok) return result
-
-    return ok()
+    return db
+      .update(tokens)
+      .set({ usedAt: now() })
+      .where(eq(tokens.tokenHash, tokenHash))
   }
 }

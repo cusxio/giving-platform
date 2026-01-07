@@ -1,15 +1,16 @@
 import { constantTimeEqual } from '@oslojs/crypto/subtle'
 import { render, toPlainText } from '@react-email/components'
+import { BatchItem } from 'drizzle-orm/batch'
 import { nanoid } from 'nanoid'
 import { createElement } from 'react'
 
 import { config } from '#/core/brand'
-import { createTransactionError } from '#/core/errors'
+import { createDBError } from '#/core/errors'
 import { hashToken } from '#/core/hash-token'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync } from '#/core/result'
-import type { DBPool } from '#/db/client'
-import { DBEmptyReturnError, TransactionRollbackError } from '#/db/errors'
+import type { DB } from '#/db/client'
+import { DBEmptyReturnError } from '#/db/errors'
 import type { Session, User } from '#/db/schema'
 
 import type { EmailService, SendEmailError } from '../email/email.service'
@@ -29,14 +30,14 @@ import type { TokenRepository } from './token.repository'
 import { generateOtp } from './utils'
 
 export class AuthService {
-  #dbPool: DBPool
+  #db: DB
   #emailService: EmailService
   #sessionRepository: SessionRepository
   #tokenRepository: TokenRepository
   #userRepository: UserRepository
 
   constructor(
-    dbPool: DBPool,
+    db: DB,
     repositories: {
       sessionRepository: SessionRepository
       tokenRepository: TokenRepository
@@ -50,7 +51,7 @@ export class AuthService {
     this.#tokenRepository = tokenRepository
     this.#userRepository = userRepository
     this.#emailService = emailService
-    this.#dbPool = dbPool
+    this.#db = db
   }
 
   async login(
@@ -158,51 +159,32 @@ export class AuthService {
     const tokenHash = hashToken(rawToken)
     const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
 
+    const queries: [BatchItem<'pg'>, ...BatchItem<'pg'>[]] = [
+      this.#sessionRepository.createSessionQuery(
+        { tokenHash, userId: user.id, expiresAt },
+        this.#db,
+      ),
+      this.#tokenRepository.markTokenAsUsedQuery(token.tokenHash, this.#db),
+    ]
+
+    if (mode === 'signup') {
+      queries.push(
+        this.#userRepository.markUserAsActiveByIdQuery(user.id, this.#db),
+      )
+    }
+
     const txResult = await tryAsync(async () => {
-      return await this.#dbPool.transaction(async (tx) => {
-        if (mode === 'signup') {
-          const markUserResult =
-            await this.#userRepository.markUserAsActiveById(user.id, tx)
+      const [sessionResult] = (await this.#db.batch(queries)) as [
+        Session[],
+        ...unknown[],
+      ]
+      const session = sessionResult[0]
 
-          if (!markUserResult.ok) {
-            throw new TransactionRollbackError('Error marking user as active', {
-              cause: markUserResult.error,
-            })
-          }
-        }
-
-        const markTokenResult = await this.#tokenRepository.markTokenAsUsed(
-          token.tokenHash,
-          tx,
-        )
-
-        if (!markTokenResult.ok) {
-          throw new TransactionRollbackError('Error marking token as used', {
-            cause: markTokenResult.error,
-          })
-        }
-
-        const sessionResult = await this.#sessionRepository.createSession(
-          { tokenHash, userId: user.id, expiresAt },
-          tx,
-        )
-
-        if (!sessionResult.ok) {
-          throw new TransactionRollbackError('Error creating session', {
-            cause: sessionResult.error,
-          })
-        }
-
-        const session = sessionResult.value
-        if (session === null) {
-          throw new TransactionRollbackError(
-            'Session creation returned no result',
-          )
-        }
-
-        return session
-      })
-    }, createTransactionError)
+      if (!session) {
+        throw new Error('Session creation returned no result')
+      }
+      return session
+    }, createDBError)
 
     if (!txResult.ok) return txResult
 

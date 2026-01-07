@@ -11,13 +11,13 @@ import { dbMiddleware } from './db-middleware'
 export const authServiceMiddleware = createMiddleware()
   .middleware([dbMiddleware])
   .server(({ next, context }) => {
-    const { db, dbPool } = context
+    const { db } = context
     const userRepository = new UserRepository(db)
     const tokenRepository = new TokenRepository(db)
     const sessionRepository = new SessionRepository(db)
     const emailService = new EmailService()
     const authService = new AuthService(
-      dbPool,
+      db,
       { sessionRepository, tokenRepository, userRepository },
       { emailService },
     )

@@ -12,18 +12,11 @@ export class SessionRepository {
     this.#db = db
   }
 
-  async createSession(
+  createSessionQuery(
     input: Pick<Session, 'expiresAt' | 'tokenHash' | 'userId'>,
     db: AnyDBOrTransaction = this.#db,
   ) {
-    const result = await tryAsync(
-      () => db.insert(sessions).values(input).returning(),
-      createDBError,
-    )
-    if (!result.ok) return result
-
-    const session = result.value[0]
-    return ok(session ?? null)
+    return db.insert(sessions).values(input).returning()
   }
 
   async deleteSessionById(sessionId: Session['id']) {
