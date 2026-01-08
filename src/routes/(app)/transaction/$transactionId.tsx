@@ -14,14 +14,14 @@ export const Route = createFileRoute('/(app)/transaction/$transactionId')({
   component: RouteComponent,
 
   async loader({ params, context }) {
-    const { queryClient } = context
+    const { queryClient, user } = context
     const { transactionId } = params
 
     const [[transaction], transactionItems] = await queryClient.ensureQueryData(
       createTransactionQueryOptions(transactionId),
     )
 
-    if (transaction === undefined || transactionItems.length === 0) {
+    if (transaction?.userId !== user.id || transactionItems.length === 0) {
       throw notFound()
     }
   },
