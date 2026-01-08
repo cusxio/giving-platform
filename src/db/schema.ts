@@ -180,8 +180,6 @@ export const transactionItems = pgTable(
   (table) => [
     // Transaction items lookup by transaction (joins)
     index('transaction_items_transaction_id_idx').on(table.transactionId),
-    // Fund-based queries (overview - total funds supported)
-    index('transaction_items_fund_id_idx').on(table.fundId),
     // Reports aggregation - covering index
     index('transaction_items_transaction_id_fund_id_amount_idx').on(
       table.transactionId,
@@ -275,9 +273,7 @@ export const sessions = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // Session lookup by user (logout all sessions)
-    index('sessions_user_id_idx').on(table.userId),
-    // Session validation by token hash
+    // Session validation - ensures unique token hashes
     uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
   ],
 )
