@@ -87,7 +87,7 @@ export class PaymentService {
               },
               'Transaction already processed or not found',
             )
-            return
+            return { finalized: false }
           }
 
           await tx.insert(payments).values(paymentData)
@@ -137,6 +137,8 @@ export class PaymentService {
               .set({ lastUsedAt: now() })
               .where(eq(savedPaymentMethods.token, Token))
           }
+
+          return { finalized: true }
         }),
       createTransactionError,
     )

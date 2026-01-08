@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { and, eq, gt, lt } from 'drizzle-orm'
+import { and, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import {
   addDays,
@@ -65,14 +65,14 @@ export const Route = createFileRoute('/api/eghl/cron')({
 
         logger.info({ event: LOG_EVENTS.JOB_START }, 'Starting eGHL cron job')
 
-        let processedCount = 0
         let finalizedCount = 0
         let failCount = 0
         let errorCount = 0
 
-        for (const pendingTransaction of pendingTransactions) {
-          processedCount++
+        // Collect transaction IDs to mark as failed for batch update
+        const transactionsToMarkFailed: string[] = []
 
+        for (const pendingTransaction of pendingTransactions) {
           const result = await eghlService.queryTransactionStatus({
             transactionId: pendingTransaction.transactionId,
             amountInCents: pendingTransaction.amountInCents,
@@ -114,11 +114,8 @@ export const Route = createFileRoute('/api/eghl/cron')({
                 },
                 'Transaction not found in eGHL. Marking as failed locally',
               )
-              await db
-                .update(transactions)
-                .set({ status: 'failed' })
-                .where(eq(transactions.id, pendingTransaction.transactionId))
 
+              transactionsToMarkFailed.push(pendingTransaction.transactionId)
               failCount++
             }
             continue
@@ -163,7 +160,17 @@ export const Route = createFileRoute('/api/eghl/cron')({
             continue
           }
 
-          finalizedCount++
+          if (finalizationResult.value.finalized) {
+            finalizedCount++
+          }
+        }
+
+        // Batch update all transactions that need to be marked as failed
+        if (transactionsToMarkFailed.length > 0) {
+          await db
+            .update(transactions)
+            .set({ status: 'failed' })
+            .where(inArray(transactions.id, transactionsToMarkFailed))
         }
 
         logger.info(
@@ -171,8 +178,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
             event: LOG_EVENTS.COMPLETE,
             stats: {
               found: pendingTransactions.length,
-              processed: processedCount,
-              updated: finalizedCount,
+              finalized: finalizedCount,
               marked_failed: failCount,
               errors: errorCount,
             },
