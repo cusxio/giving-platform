@@ -61,12 +61,8 @@ export class TransactionRepository {
   ) {
     return db
       .select({ fundName: funds.name, amountInCents: transactionItems.amount })
-      .from(transactions)
-      .innerJoin(
-        transactionItems,
-        eq(transactions.id, transactionItems.transactionId),
-      )
+      .from(transactionItems)
       .innerJoin(funds, eq(funds.id, transactionItems.fundId))
-      .where(eq(transactions.id, transactionId))
+      .where(eq(transactionItems.transactionId, transactionId))
   }
 }
