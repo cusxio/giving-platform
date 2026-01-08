@@ -1,3 +1,4 @@
+import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import type { Transaction } from '#/db/schema'
@@ -15,7 +16,7 @@ export const getTransactionData = createServerFn()
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { transactionId } = data
-    const { db, transactionRepository } = context
+    const { db, transactionRepository, session } = context
     const result = await db.batch([
       transactionRepository.findTransactionByIdQuery(transactionId, db),
       transactionRepository.findTransactionItemsByTransactionIdQuery(
@@ -24,5 +25,15 @@ export const getTransactionData = createServerFn()
       ),
     ])
 
-    return result
+    const [[transaction], transactionItems] = result
+
+    if (
+      transaction === undefined ||
+      transaction.userId !== session?.userId ||
+      transactionItems.length === 0
+    ) {
+      throw notFound()
+    }
+
+    return [transaction, transactionItems]
   })

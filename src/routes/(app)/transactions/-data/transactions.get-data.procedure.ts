@@ -1,3 +1,4 @@
+import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
@@ -18,7 +19,11 @@ export const getTransactionsData = createServerFn()
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { userId, page = 1, journey } = data
-    const { db } = context
+    const { db, session } = context
+
+    if (userId !== session?.userId) {
+      throw notFound()
+    }
 
     const whereClause = and(
       eq(transactions.userId, userId),

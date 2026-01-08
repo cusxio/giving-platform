@@ -1,5 +1,6 @@
-import { createFileRoute, notFound } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
+import { useMemo } from 'react'
 
 import { TransactionItemsTable } from '#/components/transaction-items-table'
 import { TransactionStatus } from '#/components/transaction-status'
@@ -14,16 +15,12 @@ export const Route = createFileRoute('/(app)/transaction/$transactionId')({
   component: RouteComponent,
 
   async loader({ params, context }) {
-    const { queryClient, user } = context
+    const { queryClient } = context
     const { transactionId } = params
 
-    const [[transaction], transactionItems] = await queryClient.ensureQueryData(
+    await queryClient.ensureQueryData(
       createTransactionQueryOptions(transactionId),
     )
-
-    if (transaction?.userId !== user.id || transactionItems.length === 0) {
-      throw notFound()
-    }
   },
 })
 
@@ -32,15 +29,35 @@ function RouteComponent() {
   const { data } = useSuspenseQueryDeferred(
     createTransactionQueryOptions(transactionId),
   )
-  const [[transaction], transactionItems] = data
+  const [transaction, transactionItems] = data
   const {
     id,
     createdAt: createdAtProp,
     amount: amountInCents,
     status,
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  } = transaction!
-  const createdAt = new TZDate(createdAtProp, clientTz)
+  } = transaction
+  const createdAt = useMemo(
+    () => new TZDate(createdAtProp, clientTz),
+    [createdAtProp],
+  )
+
+  const displayDate = useMemo(
+    () =>
+      createDateFormatter({
+        dateStyle: 'full',
+        hourCycle: 'h12',
+        timeStyle: 'short',
+      })
+        .formatToParts(createdAt)
+        .map((part) =>
+          (part.type === 'dayPeriod'
+            ? part.value.toUpperCase()
+            : part.value
+          ).replaceAll(/\s+/g, ' '),
+        )
+        .join(''),
+    [createdAt],
+  )
 
   return (
     <div className="mx-auto w-full max-w-lg p-4">
@@ -66,21 +83,7 @@ function RouteComponent() {
         <div>
           <SubHeading>Date</SubHeading>
           <div>
-            <span>
-              {`${createDateFormatter({
-                dateStyle: 'full',
-                hourCycle: 'h12',
-                timeStyle: 'short',
-              })
-                .formatToParts(createdAt)
-                .map((part) =>
-                  (part.type === 'dayPeriod'
-                    ? part.value.toUpperCase()
-                    : part.value
-                  ).replaceAll(/\s+/g, ' '),
-                )
-                .join('')} `}
-            </span>
+            <span>{displayDate} </span>
             <span className="text-sm text-fg-subtle">
               ({formatDistanceToNow(createdAt)} ago)
             </span>

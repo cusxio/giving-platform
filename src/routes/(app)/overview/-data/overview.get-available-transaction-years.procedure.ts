@@ -1,3 +1,4 @@
+import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, asc, eq, sql } from 'drizzle-orm'
 
@@ -15,8 +16,12 @@ export const getAvailableTransactionYears = createServerFn()
   .inputValidator((v: Input) => v)
   .middleware([dbMiddleware])
   .handler(async ({ context, data }) => {
-    const { db } = context
+    const { db, session } = context
     const { userId, journey } = data
+
+    if (userId !== session?.userId) {
+      throw notFound()
+    }
 
     const year =
       sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`.as(

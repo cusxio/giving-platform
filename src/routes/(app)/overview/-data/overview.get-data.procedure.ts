@@ -1,3 +1,4 @@
+import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, gte, inArray, lt } from 'drizzle-orm'
 
@@ -23,8 +24,12 @@ export const getOverviewData = createServerFn()
   .middleware([dbMiddleware])
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
-    const { db } = context
+    const { db, session } = context
     const { userId, year, journey } = data
+
+    if (userId !== session?.userId) {
+      throw notFound()
+    }
 
     const { startDateUTC, endDateUTCExclusive } = getYearDateRange(year)
 
