@@ -33,8 +33,14 @@ function RouteComponent() {
     createTransactionQueryOptions(transactionId),
   )
   const [[transaction], transactionItems] = data
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  const { id, createdAt, amount: amountInCents, status } = transaction!
+  const {
+    id,
+    createdAt: createdAtProp,
+    amount: amountInCents,
+    status,
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  } = transaction!
+  const createdAt = new TZDate(createdAtProp, clientTz)
 
   return (
     <div className="mx-auto w-full max-w-lg p-4">
@@ -65,10 +71,18 @@ function RouteComponent() {
                 dateStyle: 'full',
                 hourCycle: 'h12',
                 timeStyle: 'short',
-              }).format(createdAt)} `}
+              })
+                .formatToParts(createdAt)
+                .map((part) =>
+                  (part.type === 'dayPeriod'
+                    ? part.value.toUpperCase()
+                    : part.value
+                  ).replaceAll(/\s+/g, ' '),
+                )
+                .join('')} `}
             </span>
             <span className="text-sm text-fg-subtle">
-              ({formatDistanceToNow(new TZDate(createdAt, clientTz))} ago)
+              ({formatDistanceToNow(createdAt)} ago)
             </span>
           </div>
         </div>
