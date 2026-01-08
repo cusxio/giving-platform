@@ -37,9 +37,9 @@ export class InsightsRepository {
         THEN 'weekend'
         ELSE 'weekday'
       END
-    `
+    `.as('period')
     return this.#db
-      .select({ period: period.as('period'), count: count() })
+      .select({ period, count: count() })
       .from(transactions)
       .where(eq(transactions.status, 'success'))
       .groupBy(period)
@@ -59,7 +59,7 @@ export class InsightsRepository {
         })
         .from(transactions)
         .where(and(eq(transactions.status, 'success'), gte(year, cutoffYear)))
-        .groupBy(year, week),
+        .groupBy(year.as('year'), week.as('week')),
     )
     return this.#db
       .with(weeklyTotals)
