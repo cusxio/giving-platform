@@ -4,45 +4,34 @@ import { clientTz } from '#/core/date'
 import { roundedAvg, safeSum } from '#/db/aggregates'
 import { DB } from '#/db/client'
 import { transactions } from '#/db/schema'
+
 export class InsightsRepository {
   #db: DB
   constructor(db: DB) {
     this.#db = db
   }
 
-  transactionSummaryQuery() {
+  /**
+   * Combined query for all summary statistics in a single table scan.
+   * Uses conditional aggregates (FILTER clause) to compute multiple metrics at once.
+   */
+  summaryQuery() {
     return this.#db
       .select({
+        // Core stats
         totalAmount: safeSum(transactions.amount),
         noOfContributions: count(),
         averageAmount: roundedAvg(transactions.amount),
         medianAmount: sql<number>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${transactions.amount})`,
+        // User vs Guest breakdown
+        userCount: sql<number>`COUNT(*) FILTER (WHERE ${transactions.createdAs} = 'user')`,
+        guestCount: sql<number>`COUNT(*) FILTER (WHERE ${transactions.createdAs} = 'guest')`,
+        // Weekend vs Weekday breakdown
+        weekendCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) IN (0, 6))`,
+        weekdayCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) NOT IN (0, 6))`,
       })
       .from(transactions)
       .where(eq(transactions.status, 'success'))
-  }
-
-  userGuestTransanctionCountQuery() {
-    return this.#db
-      .select({ createdAs: transactions.createdAs, count: count() })
-      .from(transactions)
-      .where(eq(transactions.status, 'success'))
-      .groupBy(transactions.createdAs)
-  }
-
-  weekendWeekdayTransactionCountQuery() {
-    const period = sql<string>`
-      CASE
-        WHEN EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) IN (0, 6)
-        THEN 'weekend'
-        ELSE 'weekday'
-      END
-    `.as('period')
-    return this.#db
-      .select({ period, count: count() })
-      .from(transactions)
-      .where(eq(transactions.status, 'success'))
-      .groupBy(period)
   }
 
   weeklyCumulativeTotalsByYearQuery() {
@@ -61,6 +50,7 @@ export class InsightsRepository {
         .where(and(eq(transactions.status, 'success'), gte(year, cutoffYear)))
         .groupBy(year.as('year'), week.as('week')),
     )
+
     return this.#db
       .with(weeklyTotals)
       .select({

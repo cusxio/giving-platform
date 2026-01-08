@@ -3,7 +3,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { centsToRinggit } from '#/core/money'
 import { dbMiddleware } from '#/server/middleware'
 
-import { formatTransactionSummary } from './insights.helpers'
 import { InsightsRepository } from './insights.repository'
 
 export const getInsightsData = createServerFn()
@@ -13,29 +12,38 @@ export const getInsightsData = createServerFn()
 
     const insightsRepository = new InsightsRepository(db)
 
-    const [
-      transactionSummaryResult,
-      weekendWeekdayTransactionCountResult,
-      userGuestTransactionCountResult,
-      weeklyCumulativeTotalsByYearResult,
-    ] = await db.batch([
-      insightsRepository.transactionSummaryQuery(),
-      insightsRepository.weekendWeekdayTransactionCountQuery(),
-      insightsRepository.userGuestTransanctionCountQuery(),
+    const [summaryResult, weeklyCumulativeTotalsByYearResult] = await db.batch([
+      insightsRepository.summaryQuery(),
       insightsRepository.weeklyCumulativeTotalsByYearQuery(),
     ])
 
-    const summary = formatTransactionSummary(transactionSummaryResult[0])
+    const stats = summaryResult[0]
+    const noOfContributions = stats?.noOfContributions ?? 0
 
-    const weekendWeekday = weekendWeekdayTransactionCountResult.map((x) => ({
-      period: x.period,
-      percent: ((x.count / summary.noOfContributions) * 100).toFixed(2),
-    }))
+    const toPercent = (count: number) =>
+      noOfContributions > 0
+        ? ((count / noOfContributions) * 100).toFixed(2)
+        : '0.00'
 
-    const userGuest = userGuestTransactionCountResult.map((x) => ({
-      createdAs: x.createdAs,
-      percent: ((x.count / summary.noOfContributions) * 100).toFixed(2),
-    }))
+    const summary = {
+      totalAmount: centsToRinggit(stats?.totalAmount ?? 0),
+      noOfContributions,
+      averageAmount: centsToRinggit(stats?.averageAmount ?? 0),
+      medianAmount: centsToRinggit(stats?.medianAmount ?? 0),
+    }
+
+    const weekendWeekday = [
+      { period: 'weekend', percent: toPercent(stats?.weekendCount ?? 0) },
+      { period: 'weekday', percent: toPercent(stats?.weekdayCount ?? 0) },
+    ]
+
+    const userGuest = [
+      { createdAs: 'user' as const, percent: toPercent(stats?.userCount ?? 0) },
+      {
+        createdAs: 'guest' as const,
+        percent: toPercent(stats?.guestCount ?? 0),
+      },
+    ]
 
     const weeklyCumulativeTotalsByYear = weeklyCumulativeTotalsByYearResult.map(
       (row) => ({

@@ -192,7 +192,7 @@ function TooltipContent(
                     className={cx(
                       'h-3 w-3',
                       'bg-current',
-                      getColorForYear(year, props.years),
+                      getColorForYear(Number(year), props.years),
                     )}
                   />
                   <div className="flex min-w-0 flex-1 gap-x-2">
