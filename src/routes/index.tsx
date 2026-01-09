@@ -6,6 +6,7 @@ import { HeaderLogo } from '#/components/header-logo'
 import { createUserQueryOptions } from '#/features/session/session.queries'
 import { useSuspenseQueryDeferred } from '#/hooks'
 import { Nav } from '#/routes/-components/nav'
+import { getSession } from '#/server/functions'
 import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
@@ -16,6 +17,12 @@ export const Route = createFileRoute('/')({
       return { isMaintenanceMode: true }
     }
 
+    const session = await getSession()
+
+    // Guests skip blocking entirely for faster page load
+    if (session === null) return
+
+    // Only fetch full user data for authenticated users
     const result = await context.queryClient.ensureQueryData(
       createUserQueryOptions(),
     )
