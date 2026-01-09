@@ -36,9 +36,10 @@ export const updateUser = createServerFn({ method: 'POST' })
   .inputValidator((v: UpdateUserInput) => v)
   .handler(
     async ({ data, context }): Promise<undefined | UpdateUserResponse> => {
-      const { session, logger, userRepository } = context
+      const { logger, user, userRepository } = context
 
-      if (session === null) {
+      const userId = user?.id
+      if (userId === undefined) {
         logger.warn(
           { event: 'user.update_user.unauthorized' },
           'Unauthorized update attempt',
@@ -78,14 +79,14 @@ export const updateUser = createServerFn({ method: 'POST' })
       logger.info(
         {
           event: 'user.update_user.attempt',
-          user_id: session.userId,
+          user_id: userId,
           fields: Object.keys(data),
         },
         'Updating user profile',
       )
 
       const userResult = await userRepository.updateUserById(
-        session.userId,
+        userId,
         parseResult.value,
       )
 
@@ -110,7 +111,7 @@ export const updateUser = createServerFn({ method: 'POST' })
       }
 
       logger.info(
-        { event: 'user.update_user.success', user_id: session.userId },
+        { event: 'user.update_user.success', user_id: userId },
         'User updated successfully',
       )
 

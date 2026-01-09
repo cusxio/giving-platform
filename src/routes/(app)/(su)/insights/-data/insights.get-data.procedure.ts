@@ -1,3 +1,4 @@
+import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import { centsToRinggit } from '#/core/money'
@@ -8,7 +9,11 @@ import { InsightsRepository } from './insights.repository'
 export const getInsightsData = createServerFn()
   .middleware([dbMiddleware])
   .handler(async ({ context }) => {
-    const { db } = context
+    const { db, user } = context
+
+    if (user?.role !== 'su') {
+      throw notFound()
+    }
 
     const insightsRepository = new InsightsRepository(db)
 

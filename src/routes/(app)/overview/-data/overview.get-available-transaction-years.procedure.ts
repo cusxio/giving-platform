@@ -9,19 +9,20 @@ import { dbMiddleware } from '#/server/middleware'
 
 interface Input {
   journey: User['journey']
-  userId: User['id']
 }
 
 export const getAvailableTransactionYears = createServerFn()
   .inputValidator((v: Input) => v)
   .middleware([dbMiddleware])
   .handler(async ({ context, data }) => {
-    const { db, session } = context
-    const { userId, journey } = data
+    const { db, user } = context
+    const { journey } = data
 
-    if (userId !== session?.userId) {
+    if (!user) {
       throw notFound()
     }
+
+    const userId = user.id
 
     const year =
       sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`.as(

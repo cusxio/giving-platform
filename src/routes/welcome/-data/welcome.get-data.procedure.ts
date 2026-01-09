@@ -23,20 +23,21 @@ export const getWelcomeData = createServerFn()
     transactionRepositoryMiddleware,
   ])
   .handler(async ({ context }) => {
-    const { session, db, userRepository, transactionRepository } = context
-    if (session?.userId === undefined) {
+    const { db, userRepository, transactionRepository, user } = context
+    const userId = user?.id
+
+    if (userId === undefined) {
       throw notFound()
     }
 
-    const userId = session.userId
-    const [[user], [exists]] = await db.batch([
+    const [[foundUser], [exists]] = await db.batch([
       userRepository.findUserByIdQuery(userId),
       transactionRepository.findGuestTransactionExistsByUserIdQuery(userId),
     ])
 
-    if (user === undefined) {
+    if (foundUser === undefined) {
       throw notFound()
     }
 
-    return { user, guestTransactionExists: exists ? true : false }
+    return { user: foundUser, guestTransactionExists: exists ? true : false }
   })

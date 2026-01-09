@@ -7,6 +7,6 @@ import { sessionMiddleware } from './session-middleware'
 export const loggingMiddleware = createMiddleware()
   .middleware([sessionMiddleware])
   .server(({ next, context }) => {
-    const childLogger = logger.child({ user_id: context.session?.userId })
+    const childLogger = logger.child({ user_id: context.user?.id })
     return next({ context: { logger: childLogger } })
   })

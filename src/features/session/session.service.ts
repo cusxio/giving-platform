@@ -6,7 +6,7 @@ import { hashToken } from '#/core/hash-token'
 import { logger } from '#/core/logger'
 import type { Result } from '#/core/result'
 import { err, ok, trySync } from '#/core/result'
-import type { Session } from '#/db/schema'
+import type { Session, User } from '#/db/schema'
 
 import { SESSION_MAX_AGE_SECONDS } from './constants'
 import type { VerificationError } from './session.errors'
@@ -28,7 +28,11 @@ export class SessionService {
     cookieValue: string,
   ): Promise<
     Result<
-      { serializedCookie: null | string; session: Session },
+      {
+        serializedCookie: null | string
+        session: Pick<Session, 'expiresAt' | 'id' | 'tokenHash'>
+        user: Pick<User, 'id' | 'journey' | 'role'>
+      },
       VerificationError
     >
   > {
@@ -45,21 +49,23 @@ export class SessionService {
     }
 
     const { rawToken, sessionId } = parseResult.value
-    const sessionResult =
-      await this.#sessionRepository.findSessionById(sessionId)
+    const sessionWithUserResult =
+      await this.#sessionRepository.findSessionByIdWithUser(sessionId)
 
-    if (!sessionResult.ok) {
-      return sessionResult
+    if (!sessionWithUserResult.ok) {
+      return sessionWithUserResult
     }
 
-    const session = sessionResult.value
+    const sessionWithUser = sessionWithUserResult.value
 
-    if (session === null) {
+    if (sessionWithUser === null) {
       return err({
         type: 'SessionNotFoundError',
         serializedCookie: clearSessionCookie(),
       })
     }
+
+    const { session, user } = sessionWithUser
 
     const encoder = new TextEncoder()
     const expectedTokenHash = hashToken(rawToken)
@@ -95,7 +101,7 @@ export class SessionService {
               {
                 event: 'session.extend.background_success',
                 session_id: session.id,
-                user_id: session.userId,
+                user_id: user.id,
               },
               'Session extended successfully in background',
             )
@@ -130,10 +136,11 @@ export class SessionService {
       return ok({
         serializedCookie: newCookieValue,
         session: { ...session, expiresAt: extendedExpiresAt },
+        user,
       })
     }
 
     // Session is valid and doesn't need to be extended
-    return ok({ serializedCookie: null, session })
+    return ok({ serializedCookie: null, session, user })
   }
 }

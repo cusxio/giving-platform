@@ -16,7 +16,7 @@ export const getTransactionData = createServerFn()
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { transactionId } = data
-    const { db, transactionRepository, session } = context
+    const { db, transactionRepository, user } = context
     const result = await db.batch([
       transactionRepository.findTransactionByIdQuery(transactionId, db),
       transactionRepository.findTransactionItemsByTransactionIdQuery(
@@ -29,7 +29,7 @@ export const getTransactionData = createServerFn()
 
     if (
       transaction === undefined ||
-      transaction.userId !== session?.userId ||
+      transaction.userId !== user?.id ||
       transactionItems.length === 0
     ) {
       throw notFound()

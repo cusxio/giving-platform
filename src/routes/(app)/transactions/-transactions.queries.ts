@@ -11,6 +11,6 @@ export function createTransactionsQueryOptions(
 ) {
   return queryOptions({
     queryKey: ['transactions', { userId, page, journey }],
-    queryFn: () => getTransactionsData({ data: { userId, page, journey } }),
+    queryFn: () => getTransactionsData({ data: { page, journey } }),
   })
 }

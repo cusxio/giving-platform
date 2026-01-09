@@ -22,10 +22,10 @@ export const getUser = createServerFn()
     userSettingsRepositoryMiddleware,
   ])
   .handler(async ({ context }): Promise<GetUserResponse> => {
-    const { session, db, userRepository, userSettingsRepository, logger } =
-      context
+    const { user, db, userRepository, userSettingsRepository, logger } = context
 
-    if (session?.userId === undefined) {
+    const userId = user?.id
+    if (userId === undefined) {
       logger.debug(
         { event: 'auth.get_user.guest' },
         'No session found, returning AUTH_ERROR',
@@ -33,13 +33,12 @@ export const getUser = createServerFn()
       return { type: 'AUTH_ERROR' }
     }
 
-    const userId = session.userId
-    const [[user], userSettingsResult] = await db.batch([
+    const [[foundUser], userSettingsResult] = await db.batch([
       userRepository.findUserByIdQuery(userId),
       userSettingsRepository.findByUserIdQuery(userId),
     ])
 
-    if (user === undefined) {
+    if (foundUser === undefined) {
       logger.warn(
         { event: 'auth.get_user.integrity_failed', user_id: userId },
         'Session valid but user not found in DB',
@@ -50,9 +49,9 @@ export const getUser = createServerFn()
     return {
       type: 'SUCCESS',
       value: {
-        user,
+        user: foundUser,
         userSettings: userSettingsResult[0] ?? {
-          userId: user.id,
+          userId: foundUser.id,
           privacyMode: false,
         },
       },

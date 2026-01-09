@@ -5,7 +5,7 @@ import { createTransactionError } from '#/core/errors'
 import { tryAsync } from '#/core/result'
 import type { DBPool } from '#/db/client'
 import { TransactionRollbackError } from '#/db/errors'
-import type { Session } from '#/db/schema'
+import type { User } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
 
 import type { UserRepository } from '../user/user.repository'
@@ -47,7 +47,7 @@ export class ContributionService {
   async createPendingContribution(
     _items: ContributionItem[],
     userDetails: UserDetails,
-    session: null | Session,
+    user: null | Pick<User, 'id'>,
   ) {
     const items = _items.map((i) => ({
       ...i,
@@ -74,12 +74,12 @@ export class ContributionService {
           const existingUser = userRes.value
           let userId: number
 
-          if (session) {
+          if (user) {
             // Logged-in user: always use their session userId
-            userId = session.userId
+            userId = user.id
 
             // Error if email belongs to a different user
-            if (existingUser && existingUser.id !== session.userId) {
+            if (existingUser && existingUser.id !== userId) {
               throw new EmailBelongsToAnotherUserError()
             }
           } else {
@@ -129,7 +129,7 @@ export class ContributionService {
               amount: totalAmountInCents,
               status: 'pending',
               userId,
-              createdAs: session ? 'user' : 'guest',
+              createdAs: user ? 'user' : 'guest',
             })
             .returning()
 

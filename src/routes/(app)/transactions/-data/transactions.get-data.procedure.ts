@@ -9,7 +9,6 @@ import { dbMiddleware } from '#/server/middleware'
 interface Input {
   journey: User['journey']
   page?: number
-  userId: User['id']
 }
 
 const pageSize = 20
@@ -18,12 +17,14 @@ export const getTransactionsData = createServerFn()
   .middleware([dbMiddleware])
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
-    const { userId, page = 1, journey } = data
-    const { db, session } = context
+    const { page = 1, journey } = data
+    const { db, user } = context
 
-    if (userId !== session?.userId) {
+    if (!user) {
       throw notFound()
     }
+
+    const userId = user.id
 
     const whereClause = and(
       eq(transactions.userId, userId),

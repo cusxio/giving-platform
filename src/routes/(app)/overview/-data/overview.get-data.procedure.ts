@@ -16,7 +16,6 @@ export type GetOverviewDataResponse = Awaited<
 
 interface Input {
   journey: User['journey']
-  userId: User['id']
   year: 'all' | number
 }
 
@@ -24,12 +23,14 @@ export const getOverviewData = createServerFn()
   .middleware([dbMiddleware])
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
-    const { db, session } = context
-    const { userId, year, journey } = data
+    const { db, user } = context
+    const { year, journey } = data
 
-    if (userId !== session?.userId) {
+    if (!user) {
       throw notFound()
     }
+
+    const userId = user.id
 
     const { startDateUTC, endDateUTCExclusive } = getYearDateRange(year)
 

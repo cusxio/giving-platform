@@ -37,11 +37,11 @@ export const requestOtp = createServerFn({ method: 'POST' })
   .inputValidator((v: RequestOtpInput) => v)
   .handler(
     async ({ data, context }): Promise<RequestOtpResponse | undefined> => {
-      const { session, authService, logger } = context
+      const { user, authService, logger } = context
 
-      if (session !== null) {
+      if (user !== null) {
         logger.info(
-          { event: 'auth.request_otp.redirected', user_id: session.userId },
+          { event: 'auth.request_otp.redirected', user_id: user.id },
           'User already logged in',
         )
         throw redirect({ to: '/' })

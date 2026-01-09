@@ -24,10 +24,10 @@ export const updatePrivacyMode = createServerFn()
   .middleware([dbMiddleware])
   .inputValidator((v: UpdatePrivacyModeInput) => v)
   .handler(async ({ context, data }): Promise<UpdatePrivacyModeResponse> => {
-    const { db, session, logger } = context
+    const { db, user, logger } = context
     const { privacyMode } = data
 
-    const userId = session?.userId
+    const userId = user?.id
 
     if (userId === undefined) {
       logger.warn(

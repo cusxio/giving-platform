@@ -4,7 +4,7 @@ import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { AnyDBOrTransaction, DB } from '#/db/client'
 import type { Session } from '#/db/schema'
-import { sessions } from '#/db/schema'
+import { sessions, users } from '#/db/schema'
 
 export class SessionRepository {
   #db: DB
@@ -50,15 +50,27 @@ export class SessionRepository {
     return ok(session ?? null)
   }
 
-  async findSessionById(sessionId: Session['id']) {
+  async findSessionByIdWithUser(sessionId: Session['id']) {
     const result = await tryAsync(
-      () => this.#db.select().from(sessions).where(eq(sessions.id, sessionId)),
+      () =>
+        this.#db
+          .select({
+            session: {
+              id: sessions.id,
+              tokenHash: sessions.tokenHash,
+              expiresAt: sessions.expiresAt,
+            },
+            user: { id: users.id, role: users.role, journey: users.journey },
+          })
+          .from(sessions)
+          .innerJoin(users, eq(sessions.userId, users.id))
+          .where(eq(sessions.id, sessionId)),
       createDBError,
     )
 
     if (!result.ok) return result
 
-    const session = result.value[0]
-    return ok(session ?? null)
+    const sessionWithUser = result.value[0]
+    return ok(sessionWithUser ?? null)
   }
 }

@@ -50,7 +50,7 @@ export const startContribution = createServerFn({ method: 'POST' })
   .middleware([contributionServiceMiddleware, eghlServiceMiddleware])
   .inputValidator((v: StartContributionInput) => v)
   .handler(async ({ data, context }): Promise<StartContributionResponse> => {
-    const { contributionService, session, eghlService, logger } = context
+    const { contributionService, user, eghlService, logger } = context
 
     const parseResult = trySync(
       () =>
@@ -115,7 +115,7 @@ export const startContribution = createServerFn({ method: 'POST' })
     const txResult = await contributionService.createPendingContribution(
       itemsToInsert,
       { email, firstName, lastName },
-      session,
+      user,
     )
 
     if (!txResult.ok) {

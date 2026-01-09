@@ -11,7 +11,7 @@ export function createAvailableTransactionYearsQuery(
 ) {
   return queryOptions({
     queryKey: ['overview-years', journey, userId],
-    queryFn: () => getAvailableTransactionYears({ data: { journey, userId } }),
+    queryFn: () => getAvailableTransactionYears({ data: { journey } }),
     // 5 minutes
     staleTime: 5 * 60 * 1000,
   })
@@ -24,6 +24,6 @@ export function createOverviewQueryOptions(
 ) {
   return queryOptions({
     queryKey: ['overview', { userId, year, journey }],
-    queryFn: () => getOverviewData({ data: { userId, year, journey } }),
+    queryFn: () => getOverviewData({ data: { year, journey } }),
   })
 }

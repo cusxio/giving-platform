@@ -1,3 +1,4 @@
+import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
 
@@ -16,7 +17,11 @@ export const getReportsData = createServerFn()
   .inputValidator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { startDateUTC, endDateUTCExclusive } = data
-    const { db } = context
+    const { db, user } = context
+
+    if (user?.role !== 'su') {
+      throw notFound()
+    }
 
     // Aggregate first, then join to funds for name lookup
     const aggregated = db

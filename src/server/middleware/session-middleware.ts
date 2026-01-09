@@ -3,14 +3,15 @@ import { getCookie, setResponseHeader } from '@tanstack/react-start/server'
 
 import { logger } from '#/core/logger'
 import { db } from '#/db/client'
-import type { Session } from '#/db/schema'
+import type { Session, User } from '#/db/schema'
 import { SESSION_COOKIE_NAME } from '#/features/session/constants'
 import { SessionRepository } from '#/features/session/session.repository'
 import { SessionService } from '#/features/session/session.service'
 import { clearSessionCookie } from '#/features/session/utils'
 
 export const sessionMiddleware = createMiddleware().server<{
-  session: null | Session
+  session: null | Pick<Session, 'expiresAt' | 'id' | 'tokenHash'>
+  user: null | Pick<User, 'id' | 'journey' | 'role'>
 }>(async ({ next }) => {
   const sessionRepository = new SessionRepository(db)
   const sessionService = new SessionService(sessionRepository)
@@ -19,7 +20,7 @@ export const sessionMiddleware = createMiddleware().server<{
 
   // We don't create sessions for unauthenticated users
   if (sessionId === undefined) {
-    return next({ context: { session: null } })
+    return next({ context: { session: null, user: null } })
   }
 
   const verifyResult = await sessionService.verifyCookieSession(sessionId)
@@ -65,14 +66,14 @@ export const sessionMiddleware = createMiddleware().server<{
       }
     }
 
-    return next({ context: { session: null } })
+    return next({ context: { session: null, user: null } })
   }
 
-  const { serializedCookie, session } = verifyResult.value
+  const { serializedCookie, session, user } = verifyResult.value
 
   if (serializedCookie !== null) {
     setResponseHeader('Set-Cookie', serializedCookie)
   }
 
-  return next({ context: { session } })
+  return next({ context: { session, user } })
 })

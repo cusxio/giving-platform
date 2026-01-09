@@ -8,9 +8,9 @@ import { dbMiddleware } from '#/server/middleware'
 export const getSavedPaymentMethods = createServerFn()
   .middleware([dbMiddleware])
   .handler(async ({ context }) => {
-    const { db, session } = context
+    const { db, user } = context
 
-    const userId = session?.userId
+    const userId = user?.id
     if (userId === undefined) {
       return []
     }
