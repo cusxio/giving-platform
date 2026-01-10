@@ -17,3 +17,13 @@ export function useAuthUser() {
 
   return data.value
 }
+
+export function useOptionalAuthUser() {
+  const { data } = useSuspenseQueryDeferred(createUserQueryOptions())
+
+  if (data.type !== 'SUCCESS') {
+    return
+  }
+
+  return data.value
+}
