@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { and, eq, gt, inArray, lt } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import {
   addDays,
@@ -21,13 +21,14 @@ import {
 } from '#/server/middleware'
 
 const LOG_EVENTS = {
-  JOB_START: 'eghl.cron.job_info',
+  JOB_START: 'eghl.cron.job_start',
   UNAUTHORIZED: 'eghl.cron.unauthorized',
   QUERY_FAILED: 'eghl.cron.query_failed',
   NOT_EXISTS: 'eghl.cron.not_exists',
   STILL_PENDING: 'eghl.cron.still_pending',
   SYNCING_STATUS: 'eghl.cron.syncing_status',
   FINALIZATION_FAILED: 'eghl.cron.finalization_failed',
+  BATCH_UPDATE_FAILED: 'eghl.cron.batch_update_failed',
   COMPLETE: 'eghl.cron.complete',
 }
 
@@ -39,7 +40,10 @@ export const Route = createFileRoute('/api/eghl/cron')({
         const { eghlService, paymentService, logger, db } = context
         const authHeader = request.headers.get('authorization')
 
-        if (authHeader !== `Bearer ${CRON_SECRET}`) {
+        if (
+          CRON_SECRET === undefined ||
+          authHeader !== `Bearer ${CRON_SECRET}`
+        ) {
           logger.warn(
             { event: LOG_EVENTS.UNAUTHORIZED },
             'Unauthorized cron job attempt',
@@ -47,23 +51,34 @@ export const Route = createFileRoute('/api/eghl/cron')({
           return new Response('Unauthorized', { status: 401 })
         }
 
-        const pendingTransactions = await db
-          .select({
-            transactionId: transactions.id,
-            amountInCents: transactions.amount,
-            createdAt: transactions.createdAt,
-          })
-          .from(transactions)
-          .where(
-            and(
-              eq(transactions.status, 'pending'),
-              // between 15 minutes ago and 2 days ago
-              lt(transactions.createdAt, addMinutes(now(), -15)),
-              gt(transactions.createdAt, addDays(now(), -2)),
-            ),
-          )
-
         logger.info({ event: LOG_EVENTS.JOB_START }, 'Starting eGHL cron job')
+
+        let pendingTransactions
+        try {
+          pendingTransactions = await db
+            .select({
+              transactionId: transactions.id,
+              amountInCents: transactions.amount,
+              createdAt: transactions.createdAt,
+            })
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.status, 'pending'),
+                // between 15 minutes ago and 2 days ago
+                lt(transactions.createdAt, addMinutes(now(), -15)),
+                gt(transactions.createdAt, addDays(now(), -2)),
+              ),
+            )
+            .orderBy(asc(transactions.createdAt))
+            .limit(25)
+        } catch (error: unknown) {
+          logger.error(
+            { event: LOG_EVENTS.QUERY_FAILED, err: error },
+            'Failed to fetch pending transactions',
+          )
+          return new Response('Internal Server Error', { status: 500 })
+        }
 
         let finalizedCount = 0
         let failCount = 0
@@ -116,7 +131,6 @@ export const Route = createFileRoute('/api/eghl/cron')({
               )
 
               transactionsToMarkFailed.push(pendingTransaction.transactionId)
-              failCount++
             }
             continue
           }
@@ -167,10 +181,30 @@ export const Route = createFileRoute('/api/eghl/cron')({
 
         // Batch update all transactions that need to be marked as failed
         if (transactionsToMarkFailed.length > 0) {
-          await db
-            .update(transactions)
-            .set({ status: 'failed' })
-            .where(inArray(transactions.id, transactionsToMarkFailed))
+          try {
+            const result = await db
+              .update(transactions)
+              .set({ status: 'failed' })
+              .where(
+                and(
+                  inArray(transactions.id, transactionsToMarkFailed),
+                  eq(transactions.status, 'pending'),
+                ),
+              )
+            failCount = result.rowCount
+          } catch (error: unknown) {
+            logger.error(
+              {
+                event: LOG_EVENTS.BATCH_UPDATE_FAILED,
+                err: error,
+                count: transactionsToMarkFailed.length,
+                sampleIds: transactionsToMarkFailed.slice(0, 10),
+              },
+              'Failed to mark transactions as failed',
+            )
+            errorCount += transactionsToMarkFailed.length
+            failCount = 0
+          }
         }
 
         logger.info(
