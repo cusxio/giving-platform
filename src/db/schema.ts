@@ -41,7 +41,7 @@ export const funds = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // Fund lookup by name (contribution service)
+    // WHERE name IN (?) - contribution service
     index('funds_name_idx').on(table.name),
   ],
 )
@@ -87,7 +87,7 @@ export const users = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // Email lookup (auth, contribution service)
+    // WHERE email = ? - auth, contribution service
     uniqueIndex('users_email_idx').on(table.email),
   ],
 )
@@ -135,27 +135,25 @@ export const transactions = pgTable(
     createdAs: text('created_as', { enum: ['user', 'guest'] }).notNull(),
   },
   (table) => [
-    // User transactions with status and date filtering (overview, transactions list)
+    // WHERE userId = ? AND status = ? ORDER BY createdAt - overview, transactions list
     index('transactions_user_id_status_created_at_idx').on(
       table.userId,
       table.status,
       table.createdAt,
     ),
-    // User transactions with journey filtering (overview with start_fresh)
+    // WHERE userId = ? AND status = ? AND createdAs = ? - overview with journey filter
     index('transactions_user_id_status_created_as_created_at_idx').on(
       table.userId,
       table.status,
       table.createdAs,
       table.createdAt,
     ),
-    // Global status queries with date range (insights, reports)
+    // WHERE status = ? AND createdAt BETWEEN - insights, reports, cron
     index('transactions_status_created_at_idx').on(
       table.status,
       table.createdAt,
     ),
-    // Aggregations with amount (insights - median, percentile)
-    index('transactions_status_amount_idx').on(table.status, table.amount),
-    // Guest transaction existence check (welcome page)
+    // WHERE userId = ? AND createdAs = ? - guest transaction check
     index('transactions_user_id_created_as_idx').on(
       table.userId,
       table.createdAs,
@@ -178,9 +176,9 @@ export const transactionItems = pgTable(
       .notNull(),
   },
   (table) => [
-    // Transaction items lookup by transaction (joins)
+    // WHERE transactionId = ? - JOINs (small, cache-friendly)
     index('transaction_items_transaction_id_idx').on(table.transactionId),
-    // Reports aggregation - covering index
+    // WHERE transactionId = ? - covering index for reports
     index('transaction_items_transaction_id_fund_id_amount_idx').on(
       table.transactionId,
       table.fundId,
@@ -209,7 +207,7 @@ export const payments = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // Payment lookup by transaction (receipt, transaction details)
+    // WHERE transactionId = ? - receipt, transaction details
     index('payments_transaction_id_idx').on(table.transactionId),
   ],
 )
@@ -238,18 +236,20 @@ export const savedPaymentMethods = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // User's saved cards with expiry filtering and lastUsedAt ordering
+    // WHERE userId = ? AND cardExp >= ? ORDER BY lastUsedAt - saved cards list
     index('saved_payment_methods_user_id_card_exp_last_used_idx').on(
       table.userId,
       table.cardExp,
       table.lastUsedAt,
     ),
-    // Prevent duplicate cards per user
+    // UNIQUE (userId, cardNoMask, cardExp) - prevent duplicate cards
     uniqueIndex('saved_payment_methods_user_id_card_no_mask_card_exp_idx').on(
       table.userId,
       table.cardNoMask,
       table.cardExp,
     ),
+    // WHERE token = ? - update lastUsedAt
+    index('saved_payment_methods_token_idx').on(table.token),
   ],
 )
 export type SavedPaymentMethod = InferSelectModel<typeof savedPaymentMethods>
@@ -273,7 +273,7 @@ export const sessions = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    // Session validation - ensures unique token hashes
+    // WHERE tokenHash = ? - session validation
     uniqueIndex('sessions_token_hash_idx').on(table.tokenHash),
   ],
 )
@@ -297,12 +297,12 @@ export const tokens = pgTable(
     usedAt: timestamptz(),
   },
   (table) => [
-    // Token validation - scoped to user to avoid collisions (OTP space is only 10^6)
-    uniqueIndex('tokens_user_id_token_hash_idx').on(
-      table.userId,
+    // WHERE tokenHash = ? - mark token as used (unique per user for OTP collision safety)
+    uniqueIndex('tokens_token_hash_user_id_idx').on(
       table.tokenHash,
+      table.userId,
     ),
-    // Find latest valid token for user (OTP verification)
+    // WHERE userId = ? AND expiresAt > ? AND usedAt IS NULL ORDER BY createdAt - OTP verification
     index('tokens_user_id_expires_at_used_at_created_at_idx').on(
       table.userId,
       table.expiresAt,
@@ -331,7 +331,7 @@ export const rateLimitAttempts = pgTable(
       .notNull(),
   },
   (table) => [
-    // Lookup by identifier + action (rate limit check)
+    // WHERE identifier = ? AND action = ? - rate limit check
     uniqueIndex('rate_limit_attempts_identifier_action_idx').on(
       table.identifier,
       table.action,
