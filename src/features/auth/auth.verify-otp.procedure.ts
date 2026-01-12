@@ -155,7 +155,18 @@ export const verifyOtp = createServerFn()
       setResponseHeader('Set-Cookie', serializedCookie)
 
       // Reset rate limit on successful verification
-      await rateLimitService.resetOtpVerify(email)
+      const resetResult = await rateLimitService.resetOtpVerify(email)
+      if (!resetResult.ok) {
+        logger.error(
+          {
+            event: 'auth.verify_otp.rate_limit_reset_failed',
+            err: resetResult.error.error,
+            error_type: resetResult.error.type,
+            email,
+          },
+          'Failed to reset rate limit after successful verification',
+        )
+      }
 
       logger.info(
         { event: 'auth.verify_otp.success', email, mode },
