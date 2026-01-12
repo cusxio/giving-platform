@@ -14,6 +14,36 @@ export class TokenRepository {
     this.#db = db
   }
 
+  /**
+   * Atomically claim a token if it hasn't been used yet.
+   * Returns true if successfully claimed, false if already used (lost race).
+   */
+  async claimTokenIfUnused(
+    tokenId: Token['id'],
+    tokenHash: Token['tokenHash'],
+  ) {
+    const result = await tryAsync(
+      () =>
+        this.#db
+          .update(tokens)
+          .set({ usedAt: now() })
+          .where(
+            and(
+              eq(tokens.id, tokenId),
+              eq(tokens.tokenHash, tokenHash),
+              isNull(tokens.usedAt),
+              gt(tokens.expiresAt, now()),
+            ),
+          )
+          .returning({ id: tokens.id }),
+      createDBError,
+    )
+
+    if (!result.ok) return result
+
+    return ok(result.value.length === 1)
+  }
+
   async createToken(
     userId: TokenInsert['userId'],
     tokenHash: TokenInsert['tokenHash'],

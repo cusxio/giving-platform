@@ -70,6 +70,21 @@ export class UserRepository {
     return db.select().from(users).where(eq(users.id, userId))
   }
 
+  async markUserAsActiveById(userId: User['id']) {
+    const result = await tryAsync(
+      () =>
+        this.#db
+          .update(users)
+          .set({ status: 'active', emailVerifiedAt: now() })
+          .where(eq(users.id, userId)),
+      createDBError,
+    )
+
+    if (!result.ok) return result
+
+    return ok()
+  }
+
   markUserAsActiveByIdQuery(
     userId: User['id'],
     db: AnyDBOrTransaction = this.#db,

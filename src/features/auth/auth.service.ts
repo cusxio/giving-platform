@@ -1,6 +1,6 @@
 import { constantTimeEqual } from '@oslojs/crypto/subtle'
 import { render, toPlainText } from '@react-email/components'
-import { BatchItem } from 'drizzle-orm/batch'
+import type { BatchItem } from 'drizzle-orm/batch'
 import { nanoid } from 'nanoid'
 import { createElement } from 'react'
 
@@ -47,11 +47,11 @@ export class AuthService {
   ) {
     const { sessionRepository, tokenRepository, userRepository } = repositories
     const { emailService } = services
+    this.#db = db
     this.#sessionRepository = sessionRepository
     this.#tokenRepository = tokenRepository
     this.#userRepository = userRepository
     this.#emailService = emailService
-    this.#db = db
   }
 
   async login(
@@ -155,16 +155,30 @@ export class AuthService {
       return err({ type: 'InvalidOtpError' })
     }
 
+    // Atomically claim the token - prevents race condition where two concurrent
+    // requests could both use the same OTP
+    const claimResult = await this.#tokenRepository.claimTokenIfUnused(
+      token.id,
+      token.tokenHash,
+    )
+
+    if (!claimResult.ok) return claimResult
+
+    if (!claimResult.value) {
+      // Token was already used by a concurrent request
+      return err({ type: 'InvalidRequestError' })
+    }
+
+    // Token successfully claimed, now create session (and activate user if signup)
     const rawToken = nanoid()
-    const tokenHash = hashToken(rawToken)
+    const sessionTokenHash = hashToken(rawToken)
     const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
 
     const queries: [BatchItem<'pg'>, ...BatchItem<'pg'>[]] = [
       this.#sessionRepository.createSessionQuery(
-        { tokenHash, userId: user.id, expiresAt },
+        { tokenHash: sessionTokenHash, userId: user.id, expiresAt },
         this.#db,
       ),
-      this.#tokenRepository.markTokenAsUsedQuery(token.tokenHash, this.#db),
     ]
 
     if (mode === 'signup') {
@@ -173,24 +187,27 @@ export class AuthService {
       )
     }
 
-    const txResult = await tryAsync(async () => {
+    const batchResult = await tryAsync(async () => {
       const [sessionResult] = (await this.#db.batch(queries)) as [
         Session[],
         ...unknown[],
       ]
-      const session = sessionResult[0]
-
-      if (!session) {
-        throw new Error('Session creation returned no result')
-      }
-      return session
+      return sessionResult[0]
     }, createDBError)
 
-    if (!txResult.ok) return txResult
+    if (!batchResult.ok) return batchResult
+
+    const session = batchResult.value
+    if (!session) {
+      return err({
+        type: 'DBEmptyReturnError' as const,
+        error: new DBEmptyReturnError(),
+      })
+    }
 
     const cookieValue = serializeSessionCookie({
       expiresAt,
-      cookieValue: `${txResult.value.id}.${rawToken}`,
+      cookieValue: `${session.id}.${rawToken}`,
     })
 
     return ok(cookieValue)

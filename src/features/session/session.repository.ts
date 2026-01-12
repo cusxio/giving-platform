@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm'
 
 import { createDBError } from '#/core/errors'
-import { ok, tryAsync } from '#/core/result'
+import { err, ok, tryAsync } from '#/core/result'
 import type { AnyDBOrTransaction, DB } from '#/db/client'
+import { DBEmptyReturnError } from '#/db/errors'
 import type { Session } from '#/db/schema'
 import { sessions, users } from '#/db/schema'
 
@@ -10,6 +11,27 @@ export class SessionRepository {
   #db: DB
   constructor(db: DB) {
     this.#db = db
+  }
+
+  async createSession(
+    input: Pick<Session, 'expiresAt' | 'tokenHash' | 'userId'>,
+  ) {
+    const result = await tryAsync(
+      () => this.#db.insert(sessions).values(input).returning(),
+      createDBError,
+    )
+
+    if (!result.ok) return result
+
+    const session = result.value[0]
+    if (!session) {
+      return err({
+        type: 'DBEmptyReturnError' as const,
+        error: new DBEmptyReturnError(),
+      })
+    }
+
+    return ok(session)
   }
 
   createSessionQuery(

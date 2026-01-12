@@ -141,7 +141,7 @@ export const verifyOtp = createServerFn()
             }
           }
           case 'DBQueryError':
-          case 'TransactionRollbackError': {
+          case 'DBEmptyReturnError': {
             logger.error(
               {
                 event: 'auth.verify_otp.failed',

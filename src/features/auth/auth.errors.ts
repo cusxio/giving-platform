@@ -1,7 +1,6 @@
 import type {
   DBEmptyReturnErrorResult,
   DBQueryErrorResult,
-  TransactionRollbackErrorResult,
 } from '#/core/errors'
 
 export type AuthLoginError =
@@ -15,10 +14,10 @@ export type AuthSignUpError =
   | DBQueryErrorResult
 
 export type AuthValidateOtpError =
+  | DBEmptyReturnErrorResult
   | DBQueryErrorResult
   | InvalidOtpError
   | InvalidRequestError
-  | TransactionRollbackErrorResult
 
 export interface RateLimitExceededError {
   readonly retryAfterSeconds: number

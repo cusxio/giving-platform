@@ -80,7 +80,9 @@ export class RateLimitService {
 
     if (!allowed) {
       const windowEndTime = windowStartedAt.getTime() + windowSeconds * 1000
-      const retryAfterSeconds = Math.ceil((windowEndTime - now().getTime()) / 1000)
+      const retryAfterSeconds = Math.ceil(
+        (windowEndTime - now().getTime()) / 1000,
+      )
 
       return err({
         type: 'RateLimitExceededError',
