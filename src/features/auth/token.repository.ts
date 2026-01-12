@@ -3,7 +3,7 @@ import { and, desc, eq, gt, isNull } from 'drizzle-orm'
 import { addMinutes, now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { AnyDBOrTransaction, DB, DBTransaction } from '#/db/client'
+import type { DB, DBTransaction } from '#/db/client'
 import type { Token, TokenInsert, User } from '#/db/schema'
 import { tokens } from '#/db/schema'
 
@@ -85,15 +85,5 @@ export class TokenRepository {
 
     const token = result.value[0]
     return ok(token ?? null)
-  }
-
-  markTokenAsUsedQuery(
-    tokenHash: Token['tokenHash'],
-    db: AnyDBOrTransaction = this.#db,
-  ) {
-    return db
-      .update(tokens)
-      .set({ usedAt: now() })
-      .where(eq(tokens.tokenHash, tokenHash))
   }
 }
