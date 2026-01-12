@@ -109,6 +109,21 @@ export const Route = createFileRoute('/api/eghl/cron')({
 
           const eghlResponse = result.value
 
+          // eGHL internal error - skip and retry on next cron run
+          if (eghlResponse.TxnExists === EghlTxnExists.InternalError) {
+            logger.warn(
+              {
+                event: LOG_EVENTS.QUERY_FAILED,
+                transaction_id: pendingTransaction.transactionId,
+                txn_exists: eghlResponse.TxnExists,
+                query_desc: eghlResponse.QueryDesc,
+              },
+              'eGHL returned internal error. Will retry on next run',
+            )
+            errorCount++
+            continue
+          }
+
           // Transaction not found at eGHL
           if (eghlResponse.TxnExists === EghlTxnExists.NotFound) {
             // SAFEGUARD: Only mark as failed if it's older than 30 minutes.
