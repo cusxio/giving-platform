@@ -124,6 +124,12 @@ function getEnterEmailErrorMessage(
       )
     }
 
+    if (code === 'RATE_LIMIT_EXCEEDED') {
+      return (
+        response.error.message ?? 'Too many requests. Please try again later.'
+      )
+    }
+
     return (
       <>
         There is no account associated with this email address. Consider{' '}
@@ -153,10 +159,16 @@ function getEnterOtpErrorMessage(
     const { code } = response.error
 
     if (code === 'INVALID_REQUEST') {
-      return 'We couldn’t process your request. Please check your input and try again.'
+      return "We couldn't process your request. Please check your input and try again."
     }
 
-    return 'This code doesn’t match the one we sent, typo?'
+    if (code === 'RATE_LIMIT_EXCEEDED') {
+      return (
+        response.error.message ?? 'Too many attempts. Please try again later.'
+      )
+    }
+
+    return "This code doesn't match the one we sent, typo?"
   }
 
   if (response.type === 'VALIDATION_ERROR') {

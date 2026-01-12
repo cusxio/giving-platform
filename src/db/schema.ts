@@ -310,3 +310,30 @@ export const tokens = pgTable(
 
 export type Token = InferSelectModel<typeof tokens>
 export type TokenInsert = InferInsertModel<typeof tokens>
+
+// Rate limiting
+export const rateLimitAttempts = pgTable(
+  'rate_limit_attempts',
+  {
+    id: serial().primaryKey(),
+    identifier: varchar({ length: 255 }).notNull(),
+    action: text({ enum: ['otp_request', 'otp_verify'] }).notNull(),
+    attemptCount: integer().default(1).notNull(),
+    windowStartedAt: timestamptz()
+      .default(sql`now()`)
+      .notNull(),
+    lastAttemptAt: timestamptz()
+      .default(sql`now()`)
+      .notNull(),
+  },
+  (table) => [
+    // Lookup by identifier + action (rate limit check)
+    uniqueIndex('rate_limit_attempts_identifier_action_idx').on(
+      table.identifier,
+      table.action,
+    ),
+  ],
+)
+
+export type RateLimitAttempt = InferSelectModel<typeof rateLimitAttempts>
+export type RateLimitAttemptInsert = InferInsertModel<typeof rateLimitAttempts>

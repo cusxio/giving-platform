@@ -20,6 +20,11 @@ export type AuthValidateOtpError =
   | InvalidRequestError
   | TransactionRollbackErrorResult
 
+export interface RateLimitExceededError {
+  readonly retryAfterSeconds: number
+  readonly type: 'RateLimitExceededError'
+}
+
 interface AlreadyExistsError {
   readonly type: 'AlreadyExistsError'
 }

@@ -32,14 +32,17 @@ export type VerifyOtpResponse =
   | SuccessResponse
   | ValidationErrorResponse
 
-type VerifyOtpBusinessErrorCode = 'INVALID_OTP' | 'INVALID_REQUEST'
+type VerifyOtpBusinessErrorCode =
+  | 'INVALID_OTP'
+  | 'INVALID_REQUEST'
+  | 'RATE_LIMIT_EXCEEDED'
 
 export const verifyOtp = createServerFn()
   .middleware([authServiceMiddleware])
   .inputValidator((v: VerifyOtpInput) => v)
   .handler(
     async ({ context, data }): Promise<undefined | VerifyOtpResponse> => {
-      const { user, authService, logger } = context
+      const { user, authService, rateLimitService, logger } = context
 
       if (user !== null) {
         logger.info(
@@ -72,6 +75,39 @@ export const verifyOtp = createServerFn()
       }
 
       const { mode, otp, email } = parseResult.value
+
+      // Check rate limit before processing
+      const rateLimitResult = await rateLimitService.checkOtpVerify(email)
+      if (!rateLimitResult.ok) {
+        const { type } = rateLimitResult.error
+        if (type === 'RateLimitExceededError') {
+          logger.warn(
+            {
+              event: 'auth.verify_otp.rate_limited',
+              email,
+              retry_after_seconds: rateLimitResult.error.retryAfterSeconds,
+            },
+            'Rate limit exceeded for OTP verification',
+          )
+          return {
+            type: 'BUSINESS_ERROR',
+            error: {
+              code: 'RATE_LIMIT_EXCEEDED',
+              message: `Too many attempts. Please try again in ${Math.ceil(rateLimitResult.error.retryAfterSeconds / 60)} minutes.`,
+            },
+          }
+        }
+        // DB error
+        logger.error(
+          {
+            event: 'auth.verify_otp.rate_limit_check_failed',
+            err: rateLimitResult.error.error,
+            error_type: type,
+          },
+          'Rate limit check failed',
+        )
+        return { type: 'SERVER_ERROR' }
+      }
 
       logger.info(
         { event: 'auth.verify_otp.attempt', email, mode },
@@ -124,6 +160,9 @@ export const verifyOtp = createServerFn()
 
       const serializedCookie = userResult.value
       setResponseHeader('Set-Cookie', serializedCookie)
+
+      // Reset rate limit on successful verification
+      await rateLimitService.resetOtpVerify(email)
 
       logger.info(
         { event: 'auth.verify_otp.success', email, mode },

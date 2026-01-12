@@ -30,14 +30,17 @@ export type RequestOtpResponse =
   | SuccessResponse
   | ValidationErrorResponse
 
-type RequestOtpBusinessErrorCode = 'ALREADY_EXISTS' | 'NOT_EXISTS'
+type RequestOtpBusinessErrorCode =
+  | 'ALREADY_EXISTS'
+  | 'NOT_EXISTS'
+  | 'RATE_LIMIT_EXCEEDED'
 
 export const requestOtp = createServerFn({ method: 'POST' })
   .middleware([authServiceMiddleware])
   .inputValidator((v: RequestOtpInput) => v)
   .handler(
     async ({ data, context }): Promise<RequestOtpResponse | undefined> => {
-      const { user, authService, logger } = context
+      const { user, authService, rateLimitService, logger } = context
 
       if (user !== null) {
         logger.info(
@@ -70,6 +73,39 @@ export const requestOtp = createServerFn({ method: 'POST' })
       }
 
       const { email, mode } = parseResult.value
+
+      // Check rate limit before processing
+      const rateLimitResult = await rateLimitService.checkOtpRequest(email)
+      if (!rateLimitResult.ok) {
+        const { type } = rateLimitResult.error
+        if (type === 'RateLimitExceededError') {
+          logger.warn(
+            {
+              event: 'auth.request_otp.rate_limited',
+              email,
+              retry_after_seconds: rateLimitResult.error.retryAfterSeconds,
+            },
+            'Rate limit exceeded for OTP request',
+          )
+          return {
+            type: 'BUSINESS_ERROR',
+            error: {
+              code: 'RATE_LIMIT_EXCEEDED',
+              message: `Too many requests. Please try again in ${Math.ceil(rateLimitResult.error.retryAfterSeconds / 60)} minutes.`,
+            },
+          }
+        }
+        // DB error
+        logger.error(
+          {
+            event: 'auth.request_otp.rate_limit_check_failed',
+            err: rateLimitResult.error.error,
+            error_type: type,
+          },
+          'Rate limit check failed',
+        )
+        return { type: 'SERVER_ERROR' }
+      }
 
       logger.info(
         { event: 'auth.request_otp.attempt', email, mode },
