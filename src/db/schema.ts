@@ -296,8 +296,11 @@ export const tokens = pgTable(
     usedAt: timestamptz(),
   },
   (table) => [
-    // Token validation by hash (mark as used)
-    uniqueIndex('tokens_token_hash_idx').on(table.tokenHash),
+    // Token validation - scoped to user to avoid collisions (OTP space is only 10^6)
+    uniqueIndex('tokens_user_id_token_hash_idx').on(
+      table.userId,
+      table.tokenHash,
+    ),
     // Find latest valid token for user (OTP verification)
     index('tokens_user_id_expires_at_used_at_created_at_idx').on(
       table.userId,
