@@ -33,8 +33,7 @@ export type VerifyOtpResponse =
   | ValidationErrorResponse
 
 type VerifyOtpBusinessErrorCode =
-  | 'INVALID_OTP'
-  | 'INVALID_REQUEST'
+  | 'INVALID_OR_EXPIRED_OTP'
   | 'RATE_LIMIT_EXCEEDED'
 
 export const verifyOtp = createServerFn()
@@ -119,25 +118,19 @@ export const verifyOtp = createServerFn()
       if (!userResult.ok) {
         const { type } = userResult.error
         switch (type) {
-          case 'InvalidOtpError': {
-            logger.warn(
-              { event: 'auth.verify_otp.invalid', email, reason: 'wrong_code' },
-              'Invalid code provided',
-            )
-            return { type: 'BUSINESS_ERROR', error: { code: 'INVALID_OTP' } }
-          }
+          case 'InvalidOtpError':
           case 'InvalidRequestError': {
+            // Log the specific reason internally, but return a unified error to the client
+            // to prevent user enumeration (attacker can't tell if code was wrong vs expired/missing)
+            const reason =
+              type === 'InvalidOtpError' ? 'wrong_code' : 'expired_or_missing'
             logger.warn(
-              {
-                event: 'auth.verify_otp.invalid',
-                email,
-                reason: 'expired_or_missing',
-              },
-              'Invalid Request (Expired or missing)',
+              { event: 'auth.verify_otp.invalid', email, reason },
+              'Invalid or expired code',
             )
             return {
               type: 'BUSINESS_ERROR',
-              error: { code: 'INVALID_REQUEST' },
+              error: { code: 'INVALID_OR_EXPIRED_OTP' },
             }
           }
           case 'DBQueryError':

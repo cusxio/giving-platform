@@ -158,17 +158,14 @@ function getEnterOtpErrorMessage(
   if (response.type === 'BUSINESS_ERROR') {
     const { code } = response.error
 
-    if (code === 'INVALID_REQUEST') {
-      return "We couldn't process your request. Please check your input and try again."
+    if (code === 'INVALID_OR_EXPIRED_OTP') {
+      return 'Invalid or expired code. Please check your code or request a new one.'
     }
 
-    if (code === 'RATE_LIMIT_EXCEEDED') {
-      return (
-        response.error.message ?? 'Too many attempts. Please try again later.'
-      )
-    }
-
-    return "This code doesn't match the one we sent, typo?"
+    // RATE_LIMIT_EXCEEDED
+    return (
+      response.error.message ?? 'Too many attempts. Please try again later.'
+    )
   }
 
   if (response.type === 'VALIDATION_ERROR') {
