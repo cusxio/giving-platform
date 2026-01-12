@@ -47,13 +47,14 @@ export class TokenRepository {
   async createToken(
     userId: TokenInsert['userId'],
     tokenHash: TokenInsert['tokenHash'],
+    mode: TokenInsert['mode'],
     db: DB | DBTransaction = this.#db,
   ) {
     const tokenRes = await tryAsync(
       () =>
         db
           .insert(tokens)
-          .values({ expiresAt: addMinutes(now(), 5), tokenHash, userId }),
+          .values({ expiresAt: addMinutes(now(), 5), tokenHash, userId, mode }),
       createDBError,
     )
 

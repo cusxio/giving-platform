@@ -143,6 +143,11 @@ export class AuthService {
       return err({ type: 'InvalidRequestError' })
     }
 
+    // Validate that the token was issued for the same mode (login vs signup)
+    if (token.mode !== mode) {
+      return err({ type: 'InvalidRequestError' })
+    }
+
     const expectedTokenHash = hashToken(otp)
 
     const encoder = new TextEncoder()
@@ -222,6 +227,7 @@ export class AuthService {
     const tokenRes = await this.#tokenRepository.createToken(
       userId,
       hashToken(otp),
+      mode,
     )
 
     if (!tokenRes.ok) return tokenRes

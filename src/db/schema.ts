@@ -289,6 +289,7 @@ export const tokens = pgTable(
     userId: userId()
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
+    mode: text({ enum: ['login', 'signup'] }).notNull(),
     createdAt: timestamptz()
       .default(sql`now()`)
       .notNull(),
