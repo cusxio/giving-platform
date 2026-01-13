@@ -28,7 +28,7 @@ export const getReportsData = createServerFn()
       .select({
         fundId: transactionItems.fundId,
         createdAs: transactions.createdAs,
-        totalAmount: safeSum(transactionItems.amount),
+        totalAmount: safeSum(transactionItems.amount).as('totalAmount'),
       })
       .from(transactions)
       .where(
