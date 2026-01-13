@@ -5,11 +5,13 @@ import queryString from 'query-string'
 
 import { createParseError } from '#/core/errors'
 import { centsToRinggit } from '#/core/money'
+import type { Result } from '#/core/result'
 import { err, ok, tryAsync, trySync } from '#/core/result'
 import { Transaction } from '#/db/schema'
 import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/envvars'
 
-import type { EghlPaymentResponse } from './eghl.schema'
+import type { EghlQueryError } from './eghl.errors'
+import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
 import { EghlQueryResponseSchema } from './eghl.schema'
 
 interface CreatePaymentRequestParams {
@@ -79,7 +81,9 @@ export class EghlService {
     })
   }
 
-  async queryTransactionStatus(params: QueryTransactionStatusParams) {
+  async queryTransactionStatus(
+    params: QueryTransactionStatusParams,
+  ): Promise<Result<EghlQueryResponse, EghlQueryError>> {
     const { transactionId, amountInCents } = params
     const amount = centsToRinggit(amountInCents)
 
@@ -110,7 +114,7 @@ export class EghlService {
           body: new URLSearchParams({ ...requestParams, HashValue }),
         }),
       (error: unknown) => ({
-        type: 'FETCH_ERROR' as const,
+        type: 'EghlFetchError',
         error: error as TypeError,
       }),
     )
@@ -121,12 +125,12 @@ export class EghlService {
 
     const responseText = await response.text()
     if (!response.ok) {
-      return err({ type: 'QUERY_ERROR' as const, message: responseText })
+      return err({ type: 'EghlQueryResponseError', message: responseText })
     }
 
     const qsResult = trySync(
       () => queryString.parse(responseText),
-      () => ({ type: 'SERVER_ERROR' as const }),
+      () => ({ type: 'EghlServerError' }),
     )
     if (!qsResult.ok) return qsResult
 
@@ -139,7 +143,7 @@ export class EghlService {
     const eghlResponse = parseResult.value
 
     if (!this.verifyPaymentResponse(eghlResponse)) {
-      return err({ type: 'EGHL_VERIFICATION_ERROR' as const })
+      return err({ type: 'EghlVerificationError' })
     }
 
     return ok(eghlResponse)

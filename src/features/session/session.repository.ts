@@ -26,7 +26,7 @@ export class SessionRepository {
     const session = result.value[0]
     if (!session) {
       return err({
-        type: 'DBEmptyReturnError' as const,
+        type: 'DBEmptyReturnError',
         error: new DBEmptyReturnError(),
       })
     }

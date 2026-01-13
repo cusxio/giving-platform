@@ -205,7 +205,7 @@ export class AuthService {
     const session = batchResult.value
     if (!session) {
       return err({
-        type: 'DBEmptyReturnError' as const,
+        type: 'DBEmptyReturnError',
         error: new DBEmptyReturnError(),
       })
     }

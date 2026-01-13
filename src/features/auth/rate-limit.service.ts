@@ -2,6 +2,7 @@ import { now } from '#/core/date'
 import type { DBQueryErrorResult } from '#/core/errors'
 import type { Result } from '#/core/result'
 import { err, ok } from '#/core/result'
+import type { User } from '#/db/schema'
 
 import type { RateLimitExceededError } from './auth.errors'
 import type { RateLimitRepository } from './rate-limit.repository'
@@ -29,7 +30,7 @@ export class RateLimitService {
    * Check rate limit for OTP request.
    * Increments attempt count and returns whether the request is allowed.
    */
-  async checkOtpRequest(email: string): Promise<RateLimitResult> {
+  async checkOtpRequest(email: User['email']): Promise<RateLimitResult> {
     return this.#checkRateLimit(
       email.toLowerCase(),
       'otp_request',
@@ -42,7 +43,7 @@ export class RateLimitService {
    * Check rate limit for OTP verification.
    * Increments attempt count and returns whether the verification attempt is allowed.
    */
-  async checkOtpVerify(email: string): Promise<RateLimitResult> {
+  async checkOtpVerify(email: User['email']): Promise<RateLimitResult> {
     return this.#checkRateLimit(
       email.toLowerCase(),
       'otp_verify',
@@ -54,7 +55,7 @@ export class RateLimitService {
   /**
    * Reset rate limit after successful OTP verification.
    */
-  async resetOtpVerify(email: string) {
+  async resetOtpVerify(email: User['email']) {
     return this.#repository.reset(email.toLowerCase(), 'otp_verify')
   }
 

@@ -47,21 +47,21 @@ export const Route = createFileRoute('/api/eghl/callback')({
               )
               return badRequest
             }
-            case 'EGHL_VERIFICATION_ERROR': {
+            case 'EghlVerificationError': {
               logger.error(
                 { event: 'eghl.callback.verification_failed' },
                 'Signature verification failed (Potential tampering)',
               )
               return badRequest
             }
-            case 'INVALID_METHOD': {
+            case 'EghlInvalidMethodError': {
               logger.warn(
                 { event: 'eghl.callback.method_invalid' },
                 'Invalid HTTP method received',
               )
               return badRequest
             }
-            case 'SERVER_ERROR': {
+            case 'EghlServerError': {
               logger.error(
                 { event: 'eghl.callback.read_failed' },
                 'Failed to read request body',

@@ -1,14 +1,17 @@
 import queryString from 'query-string'
 
 import { createParseError } from '#/core/errors'
+import type { Result } from '#/core/result'
 import { err, ok, tryAsync, trySync } from '#/core/result'
+import type { EghlCallbackError } from '#/features/payment-gateway/eghl.errors'
+import type { EghlPaymentResponse } from '#/features/payment-gateway/eghl.schema'
 import { EghlPaymentResponseSchema } from '#/features/payment-gateway/eghl.schema'
 import { EghlService } from '#/features/payment-gateway/eghl.service'
 
 export async function parseAndVerifyEghlResponse(
   request: Request,
   eghlService: EghlService,
-) {
+): Promise<Result<EghlPaymentResponse, EghlCallbackError>> {
   let raw: string
 
   if (request.method === 'GET') {
@@ -16,7 +19,7 @@ export async function parseAndVerifyEghlResponse(
   } else if (request.method === 'POST') {
     const bodyResult = await tryAsync(
       () => request.text(),
-      () => ({ type: 'SERVER_ERROR' as const }),
+      () => ({ type: 'EghlServerError' }),
     )
 
     if (!bodyResult.ok) {
@@ -24,12 +27,12 @@ export async function parseAndVerifyEghlResponse(
     }
     raw = bodyResult.value
   } else {
-    return err({ type: 'INVALID_METHOD' as const })
+    return err({ type: 'EghlInvalidMethodError' })
   }
 
   const qsResult = trySync(
     () => queryString.parse(raw),
-    () => ({ type: 'SERVER_ERROR' as const }),
+    () => ({ type: 'EghlServerError' }),
   )
   if (!qsResult.ok) return qsResult
 
@@ -42,7 +45,7 @@ export async function parseAndVerifyEghlResponse(
   const eghlResponse = parseResult.value
 
   if (!eghlService.verifyPaymentResponse(eghlResponse)) {
-    return err({ type: 'EGHL_VERIFICATION_ERROR' as const })
+    return err({ type: 'EghlVerificationError' })
   }
 
   return ok(eghlResponse)

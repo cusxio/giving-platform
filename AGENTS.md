@@ -72,6 +72,15 @@ if (!result.ok) {
 // Use result.value
 ```
 
+**Error Type Naming Convention**:
+
+| Layer                                                                           | Convention           | Examples                                                        |
+| ------------------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------- |
+| Services/Repositories/Errors (`*.service.ts`, `*.repository.ts`, `*.errors.ts`) | PascalCase           | `SessionNotFoundError`, `EghlVerificationError`, `DBQueryError` |
+| Procedures (`*.procedure.ts`) - API responses to frontend                       | SCREAMING_SNAKE_CASE | `SUCCESS`, `SERVER_ERROR`, `BUSINESS_ERROR`, `VALIDATION_ERROR` |
+
+Error types are defined in `*.errors.ts` files with `readonly type: 'ErrorName'`. The `tryAsync`/`trySync` utilities use `const E` generic to preserve literal types automatically - no need for `as const` or `satisfies`.
+
 **Server Functions (Procedures)**: Server-side logic uses TanStack Start's `createServerFn` with middleware chains. Procedures follow the naming convention `*.procedure.ts` and return typed response objects:
 
 ```typescript

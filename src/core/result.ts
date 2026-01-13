@@ -26,7 +26,7 @@ export const getOrThrow = <T, E>(result: Result<T, E>): T => {
   }
 }
 
-export const trySync = <T, E>(
+export const trySync = <T, const E>(
   fn: () => T,
   mapError: (error: unknown) => E,
 ): Result<T, E> => {
@@ -37,7 +37,7 @@ export const trySync = <T, E>(
   }
 }
 
-export const tryAsync = async <T, E>(
+export const tryAsync = async <T, const E>(
   promiseFn: () => Promise<T>,
   mapError: (error: unknown) => E,
 ): Promise<Result<T, E>> =>

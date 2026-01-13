@@ -43,21 +43,21 @@ export const Route = createFileRoute('/api/eghl/return')({
               )
               break
             }
-            case 'EGHL_VERIFICATION_ERROR': {
+            case 'EghlVerificationError': {
               logger.error(
                 { event: 'eghl.return.verification_failed' },
                 'Signature verification failed (Potential tampering)',
               )
               break
             }
-            case 'INVALID_METHOD': {
+            case 'EghlInvalidMethodError': {
               logger.warn(
                 { event: 'eghl.return.method_invalid' },
                 'Invalid HTTP method received',
               )
               break
             }
-            case 'SERVER_ERROR': {
+            case 'EghlServerError': {
               logger.error(
                 { event: 'eghl.return.read_failed' },
                 'Failed to read request body',
@@ -145,21 +145,21 @@ export const Route = createFileRoute('/api/eghl/return')({
               )
               break
             }
-            case 'EGHL_VERIFICATION_ERROR': {
+            case 'EghlVerificationError': {
               logger.error(
                 { event: 'eghl.return.verification_failed' },
                 'Signature verification failed (Potential tampering)',
               )
               break
             }
-            case 'INVALID_METHOD': {
+            case 'EghlInvalidMethodError': {
               logger.warn(
                 { event: 'eghl.return.method_invalid' },
                 'Invalid HTTP method received',
               )
               break
             }
-            case 'SERVER_ERROR': {
+            case 'EghlServerError': {
               logger.error(
                 { event: 'eghl.return.read_failed' },
                 'Failed to read request body',

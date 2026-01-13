@@ -2,6 +2,7 @@ import { inArray } from 'drizzle-orm'
 
 import type { Fund } from '#/core/brand/funds'
 import { createTransactionError } from '#/core/errors'
+import type { Result } from '#/core/result'
 import { tryAsync } from '#/core/result'
 import type { DBPool } from '#/db/client'
 import { TransactionRollbackError } from '#/db/errors'
@@ -9,6 +10,8 @@ import type { User } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
 
 import type { UserRepository } from '../user/user.repository'
+
+import type { CreatePendingContributionError } from './contribution.errors'
 
 interface ContributionItem {
   amountInCents: number
@@ -48,7 +51,12 @@ export class ContributionService {
     _items: ContributionItem[],
     userDetails: UserDetails,
     user: null | Pick<User, 'id'>,
-  ) {
+  ): Promise<
+    Result<
+      { customerName: string; transactionId: string },
+      CreatePendingContributionError
+    >
+  > {
     const items = _items.map((i) => ({
       ...i,
       fund: i.fund.charAt(0).toUpperCase() + i.fund.slice(1),
@@ -161,10 +169,10 @@ export class ContributionService {
         }),
       (error) => {
         if (error instanceof GuestEmailExistsError)
-          return { type: 'GuestEmailExistsError' as const, error }
+          return { type: 'GuestEmailExistsError', error }
 
         if (error instanceof EmailBelongsToAnotherUserError)
-          return { type: 'EmailBelongsToAnotherUserError' as const, error }
+          return { type: 'EmailBelongsToAnotherUserError', error }
 
         return createTransactionError(error)
       },
