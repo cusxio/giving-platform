@@ -12,11 +12,8 @@ import { DATABASE_URL } from '#/envvars'
 const DATABASE_LOCAL_URL = 'db.localtest.me'
 neonConfig.fetchEndpoint = (host) => {
   if (host === DATABASE_LOCAL_URL) {
-    const protocol = 'http'
-    const port = 4444
-    return `${protocol}://${host}:${port}/sql`
+    return `http://${host}:4444/sql`
   }
-
   return `https://${host}/sql`
 }
 
@@ -24,12 +21,11 @@ neonConfig.fetchEndpoint = (host) => {
 neonConfig.pipelineConnect = false
 neonConfig.useSecureWebSocket =
   new URL(DATABASE_URL).hostname !== DATABASE_LOCAL_URL
-neonConfig.wsProxy = (host) => {
+neonConfig.wsProxy = (host, port) => {
   if (host === DATABASE_LOCAL_URL) {
-    const port = 4444
-    return `${host}:${port}/v1`
+    return `${host}:4444/v1`
   }
-  return `${host}/v2`
+  return `${host}/v2?address=${host}:${port}`
 }
 
 const pool = new Pool({ connectionString: DATABASE_URL })
