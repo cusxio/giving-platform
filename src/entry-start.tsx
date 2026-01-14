@@ -1,7 +1,15 @@
 import { createStart } from '@tanstack/react-start'
 
-import { loggingMiddleware, sessionMiddleware } from './server/middleware'
+import {
+  loggingMiddleware,
+  maintenanceMiddleware,
+  sessionMiddleware,
+} from './server/middleware'
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [sessionMiddleware, loggingMiddleware],
+  requestMiddleware: [
+    maintenanceMiddleware,
+    sessionMiddleware,
+    loggingMiddleware,
+  ],
 }))

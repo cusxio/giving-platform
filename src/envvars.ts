@@ -41,7 +41,7 @@ export const {
   //
   DATABASE_AUTH_TOKEN,
   DATABASE_URL,
-  //kj
+  //
   EGHL_PASSWORD,
   EGHL_SERVICE_ID,
   EGHL_URL,

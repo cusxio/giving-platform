@@ -3,6 +3,7 @@ export { contributionServiceMiddleware } from './contribution-service-middleware
 export { dbMiddleware } from './db-middleware'
 export { eghlServiceMiddleware } from './eghl-service-middleware'
 export { loggingMiddleware } from './logging-middleware'
+export { maintenanceMiddleware } from './maintenance-middleware'
 export { paymentServiceMiddleware } from './payment-service-middleware'
 export { sessionMiddleware } from './session-middleware'
 export { transactionRepositoryMiddleware } from './transaction-repository-middleware'

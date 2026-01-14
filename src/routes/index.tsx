@@ -1,14 +1,21 @@
+import { BarricadeIcon } from '@phosphor-icons/react/dist/ssr'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { FooterCopyright } from '#/components/footer-copyright'
+import { HeaderLogo } from '#/components/header-logo'
 import { createUserQueryOptions } from '#/features/session/session.queries'
 import { useSuspenseQueryDeferred } from '#/hooks'
 import { Nav } from '#/routes/-components/nav'
+import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
 
 export const Route = createFileRoute('/')({
   async beforeLoad({ context }) {
+    if (process.env.MAINTENANCE_MODE === 'true') {
+      return { isMaintenanceMode: true }
+    }
+
     const result = await context.queryClient.ensureQueryData(
       createUserQueryOptions(),
     )
@@ -16,12 +23,14 @@ export const Route = createFileRoute('/')({
     if (result.type === 'SUCCESS' && result.value.user.journey === null) {
       throw redirect({ to: '/welcome', replace: true })
     }
+
+    return { isMaintenanceMode: false }
   },
 
   component: RouteComponent,
 })
 
-function RouteComponent() {
+function IndexContent() {
   const { data } = useSuspenseQueryDeferred(createUserQueryOptions())
   const userQueryResult = data.type === 'SUCCESS' ? data.value : undefined
   const user = userQueryResult?.user
@@ -43,4 +52,36 @@ function RouteComponent() {
       <FooterCopyright />
     </>
   )
+}
+
+function RouteComponent() {
+  const { isMaintenanceMode } = Route.useRouteContext()
+
+  if (isMaintenanceMode) {
+    return (
+      <>
+        <HeaderLogo />
+        <main className="-mt-14 flex shrink-0 grow flex-col items-center justify-center gap-y-4 px-4">
+          <span
+            className={cx(
+              'flex h-16 w-16 items-center justify-center rounded-full',
+              'bg-base-warning text-fg-warning',
+            )}
+          >
+            <BarricadeIcon size={32} />
+          </span>
+          <h1 className="mt-4 text-center text-4xl font-bold text-balance">
+            We’ll Be Right Back
+          </h1>
+
+          <p className="text-center text-balance text-fg-muted">
+            We’re performing scheduled maintenance to improve performance and
+            reliability. Thanks for your patience.
+          </p>
+        </main>
+      </>
+    )
+  }
+
+  return <IndexContent />
 }
