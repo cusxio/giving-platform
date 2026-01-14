@@ -26,6 +26,7 @@ export default defineConfig(({ mode, command }) => {
           plugins: ['./src/server/opentelemetry/nitro'],
           ...(mode === 'production' && {
             preset: 'vercel',
+            features: { websocket: true },
             vercel: { functions: { runtime: 'bun1.x', regions: ['sin1'] } },
           }),
         }),
