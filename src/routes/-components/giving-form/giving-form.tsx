@@ -30,7 +30,7 @@ export function GivingForm(props: GivingFormProps) {
   const { data: savedPaymentMethods } = useSuspenseQueryDeferred(
     createSavedPaymentMethodsQueryOptions(authenticated),
   )
-  const { store, view, setView, submitPayment } = useGivingForm(
+  const { store, view, submitPayment } = useGivingForm(
     user,
     savedPaymentMethods[0]?.token,
     { initialFunds, initialView },
@@ -39,7 +39,6 @@ export function GivingForm(props: GivingFormProps) {
   store.useSubmit(async () => {
     if (view === 'amounts') {
       onContinue(extractFundAmounts(store))
-      setView('details')
       return
     }
 
@@ -49,9 +48,8 @@ export function GivingForm(props: GivingFormProps) {
   const handleGoBack = useCallback(() => {
     if (view === 'details') {
       onBack()
-      setView('amounts')
     }
-  }, [view, onBack, setView])
+  }, [view, onBack])
 
   if (view === 'redirecting') {
     return (

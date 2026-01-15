@@ -47,7 +47,8 @@ export function useGivingForm(
   const store = useFormStore({
     defaultValues: getInitialFormValues(user, savedPaymentToken, initialFunds),
   })
-  const [view, setView] = useState<GivingFormView>(initialView)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const view: GivingFormView = isRedirecting ? 'redirecting' : initialView
 
   const isInitialMountRef = useRef(true)
   useDeepCompareEffect(() => {
@@ -76,10 +77,15 @@ export function useGivingForm(
 
   const submitPayment = useCallback(async () => {
     const values = store.getState().values
-    await handleFormSubmission(values, startContribution, store, setView)
+    await handleFormSubmission(
+      values,
+      startContribution,
+      store,
+      setIsRedirecting,
+    )
   }, [store, startContribution])
 
-  return { store, view, setView, submitPayment }
+  return { store, view, submitPayment }
 }
 
 function getFormValues(
@@ -160,7 +166,7 @@ async function handleFormSubmission(
   values: ReturnType<typeof getInitialFormValues>,
   startContribution: ReturnType<typeof useStartContributionMutation>,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
-  setView: Dispatch<SetStateAction<GivingFormView>>,
+  setIsRedirecting: Dispatch<SetStateAction<boolean>>,
 ) {
   const { email, firstName, lastName, token, ...contributionAmounts } = values
 
@@ -176,7 +182,7 @@ async function handleFormSubmission(
     const success = handleSubmissionResponse(res, email, store)
 
     if (success) {
-      setView('redirecting')
+      setIsRedirecting(true)
     }
   } catch {
     toast.unexpected()
