@@ -1,8 +1,10 @@
 import { Form } from '@ariakit/react'
 import { useQuery } from '@tanstack/react-query'
+import { useCallback } from 'react'
 
 import { Spinner } from '#/components/ui/spinner'
 import { funds } from '#/core/brand'
+import type { Fund } from '#/core/brand/funds'
 import type { User } from '#/db/schema'
 
 import { createSavedPaymentMethodsQueryOptions } from '../../-index.queries'
@@ -10,24 +12,47 @@ import { createSavedPaymentMethodsQueryOptions } from '../../-index.queries'
 import { GivingFormDetails } from './giving-form-details'
 import { GivingFormFund } from './giving-form-fund'
 import { GivingFormTotal } from './giving-form-total'
-import { useGivingForm } from './use-giving-form'
+import type { GivingFormView } from './use-giving-form'
+import { extractFundAmounts, useGivingForm } from './use-giving-form'
 
 interface GivingFormProps {
+  initialFunds: Partial<Record<Fund, string>>
+  initialView: GivingFormView
+  onBack: () => void
+  onContinue: (funds: Record<Fund, string>) => void
   user?: Pick<User, 'email' | 'firstName' | 'lastName'>
 }
 
 export function GivingForm(props: GivingFormProps) {
-  const { user } = props
+  const { user, initialFunds, initialView, onContinue, onBack } = props
   const authenticated = user ? true : false
 
   const { data } = useQuery(
     createSavedPaymentMethodsQueryOptions(authenticated),
   )
   const savedPaymentMethods = data ?? []
-  const { store, view, onGoBack } = useGivingForm(
+  const { store, view, setView, submitPayment } = useGivingForm(
     user,
     savedPaymentMethods[0]?.token,
+    { initialFunds, initialView },
   )
+
+  store.useSubmit(async () => {
+    if (view === 'amounts') {
+      onContinue(extractFundAmounts(store))
+      setView('details')
+      return
+    }
+
+    await submitPayment()
+  })
+
+  const handleGoBack = useCallback(() => {
+    if (view === 'details') {
+      onBack()
+      setView('amounts')
+    }
+  }, [view, onBack, setView])
 
   if (view === 'redirecting') {
     return (
@@ -64,7 +89,7 @@ export function GivingForm(props: GivingFormProps) {
         />
       )}
 
-      <GivingFormTotal onGoBack={onGoBack} store={store} view={view} />
+      <GivingFormTotal onGoBack={handleGoBack} store={store} view={view} />
     </Form>
   )
 }

@@ -1,6 +1,8 @@
-import { FormStore, useFormStore } from '@ariakit/react'
+import type { FormStore } from '@ariakit/react'
+import { useFormStore } from '@ariakit/react'
 import { Link } from '@tanstack/react-router'
-import { Dispatch, SetStateAction, useCallback, useRef, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useDeepCompareEffect } from 'use-deep-compare'
 
 import { __NORMAL_CHECKOUT__ } from '#/components/ui/payment-methods'
@@ -9,10 +11,8 @@ import { assertExhaustive } from '#/core/assert-exhaustive'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
 import type { SavedPaymentMethod, User } from '#/db/schema'
-import {
-  StartContributionResponse,
-  useStartContributionMutation,
-} from '#/features/giving/contribution.mutations'
+import type { StartContributionResponse } from '#/features/giving/contribution.mutations'
+import { useStartContributionMutation } from '#/features/giving/contribution.mutations'
 
 export type GivingFormStore = ReturnType<typeof useGivingForm>['store']
 export type GivingFormView = 'amounts' | 'details' | 'redirecting'
@@ -22,14 +22,32 @@ interface UseGivingFormInput {
   user?: Pick<User, 'email' | 'firstName' | 'lastName'>
 }
 
+interface UseGivingFormOptions {
+  initialFunds: Partial<Record<Fund, string>>
+  initialView: GivingFormView
+}
+
+export function extractFundAmounts(
+  store: GivingFormStore,
+): Record<Fund, string> {
+  const values = store.getState().values
+  return Object.fromEntries(funds.map((f) => [f, values[f]])) as Record<
+    Fund,
+    string
+  >
+}
+
 export function useGivingForm(
   user: UseGivingFormInput['user'],
   savedPaymentToken: UseGivingFormInput['savedPaymentToken'],
+  options: UseGivingFormOptions,
 ) {
+  const { initialFunds, initialView } = options
+
   const store = useFormStore({
-    defaultValues: getInitialFormValues(user, savedPaymentToken),
+    defaultValues: getInitialFormValues(user, savedPaymentToken, initialFunds),
   })
-  const [view, setView] = useState<GivingFormView>('amounts')
+  const [view, setView] = useState<GivingFormView>(initialView)
 
   const isInitialMountRef = useRef(true)
   useDeepCompareEffect(() => {
@@ -54,23 +72,14 @@ export function useGivingForm(
     })
   }, [user, store.setValues, savedPaymentToken])
 
-  const onGoBack = useCallback(() => {
-    if (view === 'details') {
-      setView('amounts')
-    }
-  }, [view])
-
   const startContribution = useStartContributionMutation()
-  store.useSubmit(async ({ values }) => {
-    if (view === 'amounts') {
-      setView('details')
-      return
-    }
 
+  const submitPayment = useCallback(async () => {
+    const values = store.getState().values
     await handleFormSubmission(values, startContribution, store, setView)
-  })
+  }, [store, startContribution])
 
-  return { store, view, onGoBack }
+  return { store, view, setView, submitPayment }
 }
 
 function getFormValues(
@@ -88,11 +97,11 @@ function getFormValues(
 function getInitialFormValues(
   user: UseGivingFormInput['user'],
   savedPaymentToken: UseGivingFormInput['savedPaymentToken'],
+  initialFunds?: Partial<Record<Fund, string>>,
 ) {
-  const fundValues = Object.fromEntries(funds.map((f) => [f, ''])) as Record<
-    Fund,
-    string
-  >
+  const fundValues = Object.fromEntries(
+    funds.map((f) => [f, initialFunds?.[f] ?? '']),
+  ) as Record<Fund, string>
   return { ...fundValues, ...getFormValues(user, savedPaymentToken) }
 }
 

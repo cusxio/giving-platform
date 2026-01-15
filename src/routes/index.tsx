@@ -1,5 +1,6 @@
 import { BarricadeIcon } from '@phosphor-icons/react/dist/ssr'
 import { createFileRoute, redirect } from '@tanstack/react-router'
+import * as v from 'valibot'
 
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
@@ -11,8 +12,30 @@ import { Nav } from '#/routes/-components/nav'
 import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
+import { useGivingUrl } from './-hooks/use-giving-url'
+
+const searchSchema = v.object({
+  offering: v.optional(
+    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
+  ),
+  tithe: v.optional(
+    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
+  ),
+  mission: v.optional(
+    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
+  ),
+  future: v.optional(
+    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
+  ),
+})
 
 export const Route = createFileRoute('/')({
+  validateSearch(search) {
+    const result = v.safeParse(searchSchema, search)
+    if (!result.success) return {}
+    return result.output
+  },
+
   async beforeLoad({ context }) {
     if (process.env.MAINTENANCE_MODE === 'true') {
       return { isMaintenanceMode: true }
@@ -35,6 +58,8 @@ export const Route = createFileRoute('/')({
 function IndexContent() {
   const authUser = useOptionalAuthUser()
   const user = authUser?.user
+  const { initialFunds, hasFundParams, setFundsInUrl, clearUrl } =
+    useGivingUrl()
 
   return (
     <>
@@ -46,7 +71,13 @@ function IndexContent() {
 
       <main className="flex shrink-0 grow flex-col items-center justify-center px-4">
         <div className="w-full max-w-118 pt-12 pb-24">
-          <GivingForm user={user} />
+          <GivingForm
+            initialFunds={initialFunds}
+            initialView={hasFundParams ? 'details' : 'amounts'}
+            onBack={clearUrl}
+            onContinue={setFundsInUrl}
+            user={user}
+          />
         </div>
       </main>
 
