@@ -4,6 +4,7 @@ import * as v from 'valibot'
 
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
+import { funds } from '#/core/brand'
 import {
   createUserQueryOptions,
   useOptionalAuthUser,
@@ -13,6 +14,7 @@ import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
 import { useGivingUrl } from './-hooks/use-giving-url'
+import { createSavedPaymentMethodsQueryOptions } from './-index.queries'
 
 const searchSchema = v.object({
   offering: v.optional(
@@ -29,6 +31,13 @@ const searchSchema = v.object({
   ),
 })
 
+function hasFundParams(search: v.InferOutput<typeof searchSchema>) {
+  return funds.some((fund) => {
+    const val = search[fund]
+    return val !== undefined && val > 0
+  })
+}
+
 export const Route = createFileRoute('/')({
   validateSearch(search) {
     const result = v.safeParse(searchSchema, search)
@@ -36,9 +45,9 @@ export const Route = createFileRoute('/')({
     return result.output
   },
 
-  async beforeLoad({ context }) {
+  async beforeLoad({ context, search }) {
     if (process.env.MAINTENANCE_MODE === 'true') {
-      return { isMaintenanceMode: true }
+      return { isMaintenanceMode: true, isAuthenticated: false }
     }
 
     const result = await context.queryClient.ensureQueryData(
@@ -49,7 +58,21 @@ export const Route = createFileRoute('/')({
       throw redirect({ to: '/welcome', replace: true })
     }
 
-    return { isMaintenanceMode: false }
+    const isAuthenticated = result.type === 'SUCCESS'
+
+    return {
+      isMaintenanceMode: false,
+      isAuthenticated,
+      shouldPreloadPaymentMethods: isAuthenticated && hasFundParams(search),
+    }
+  },
+
+  async loader({ context }) {
+    if (context.shouldPreloadPaymentMethods === true) {
+      await context.queryClient.ensureQueryData(
+        createSavedPaymentMethodsQueryOptions(true),
+      )
+    }
   },
 
   component: RouteComponent,

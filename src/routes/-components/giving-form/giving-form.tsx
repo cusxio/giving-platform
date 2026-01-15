@@ -1,11 +1,11 @@
 import { Form } from '@ariakit/react'
-import { useQuery } from '@tanstack/react-query'
 import { useCallback } from 'react'
 
 import { Spinner } from '#/components/ui/spinner'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
 import type { User } from '#/db/schema'
+import { useSuspenseQueryDeferred } from '#/hooks'
 
 import { createSavedPaymentMethodsQueryOptions } from '../../-index.queries'
 
@@ -27,10 +27,9 @@ export function GivingForm(props: GivingFormProps) {
   const { user, initialFunds, initialView, onContinue, onBack } = props
   const authenticated = user ? true : false
 
-  const { data } = useQuery(
+  const { data: savedPaymentMethods } = useSuspenseQueryDeferred(
     createSavedPaymentMethodsQueryOptions(authenticated),
   )
-  const savedPaymentMethods = data ?? []
   const { store, view, setView, submitPayment } = useGivingForm(
     user,
     savedPaymentMethods[0]?.token,
