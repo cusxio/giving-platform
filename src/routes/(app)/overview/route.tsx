@@ -131,7 +131,7 @@ function RouteComponent() {
   return (
     <div
       className={cx(
-        'srhink-0 mx-auto w-full grow p-4',
+        'mx-auto w-full shrink-0 grow p-4',
         'max-w-120 bp-overview-2col:max-w-5xl',
       )}
     >

@@ -146,9 +146,7 @@ function convertToWeeklyFormat(
   }
 
   // Sort by week number
-  result.sort((a, b) => a.week - b.week)
-
-  return result
+  return [...result].sort((a, b) => a.week - b.week)
 }
 
 function getColorForYear(year: number | string, years: (number | string)[]) {
