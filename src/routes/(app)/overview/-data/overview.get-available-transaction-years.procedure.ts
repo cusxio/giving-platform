@@ -25,7 +25,7 @@ export const getAvailableTransactionYears = createServerFn()
     const userId = user.id
 
     const year =
-      sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`.as(
+      sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::integer`.as(
         'year',
       )
     const results = await db

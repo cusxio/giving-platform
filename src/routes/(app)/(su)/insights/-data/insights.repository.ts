@@ -24,20 +24,20 @@ export class InsightsRepository {
         averageAmount: roundedAvg(transactions.amount),
         medianAmount: sql<number>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${transactions.amount})`,
         // User vs Guest breakdown
-        userCount: sql<number>`COUNT(*) FILTER (WHERE ${transactions.createdAs} = 'user')`,
-        guestCount: sql<number>`COUNT(*) FILTER (WHERE ${transactions.createdAs} = 'guest')`,
+        userCount: sql<number>`COUNT(*) FILTER (WHERE ${transactions.createdAs} = 'user')::integer`,
+        guestCount: sql<number>`COUNT(*) FILTER (WHERE ${transactions.createdAs} = 'guest')::integer`,
         // Weekend vs Weekday breakdown
-        weekendCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) IN (0, 6))`,
-        weekdayCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) NOT IN (0, 6))`,
+        weekendCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) IN (0, 6))::integer`,
+        weekdayCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) NOT IN (0, 6))::integer`,
       })
       .from(transactions)
       .where(eq(transactions.status, 'success'))
   }
 
   weeklyCumulativeTotalsByYearQuery() {
-    const week = sql<number>`EXTRACT(WEEK FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
-    const year = sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::int`
-    const cutoffYear = sql<number>`EXTRACT(YEAR FROM NOW() AT TIME ZONE ${clientTz})::int - 4`
+    const week = sql<number>`EXTRACT(WEEK FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::integer`
+    const year = sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::integer`
+    const cutoffYear = sql<number>`EXTRACT(YEAR FROM NOW() AT TIME ZONE ${clientTz})::integer - 4`
 
     const weeklyTotals = this.#db.$with('weekly_totals').as(
       this.#db
@@ -57,7 +57,7 @@ export class InsightsRepository {
         year: weeklyTotals.year,
         week: weeklyTotals.week,
         weeklyAmount: weeklyTotals.weeklyAmount,
-        cumulativeAmount: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})`,
+        cumulativeAmount: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})::integer`,
       })
       .from(weeklyTotals)
       .orderBy(asc(weeklyTotals.year), asc(weeklyTotals.week))
