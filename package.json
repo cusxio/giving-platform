@@ -18,7 +18,7 @@
     "@eslint/js": "^10.0.1",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/lora": "^5.2.8",
-    "@moonrepo/cli": "^1.41.7",
+    "@moonrepo/cli": "^2",
     "@neondatabase/serverless": "^1.0.2",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.212.0",

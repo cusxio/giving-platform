@@ -13,7 +13,7 @@
         "@eslint/js": "^10.0.1",
         "@fontsource-variable/geist": "^5.2.8",
         "@fontsource-variable/lora": "^5.2.8",
-        "@moonrepo/cli": "^1.41.7",
+        "@moonrepo/cli": "^2",
         "@neondatabase/serverless": "^1.0.2",
         "@opentelemetry/api": "^1.9.0",
         "@opentelemetry/api-logs": "^0.212.0",
@@ -387,21 +387,19 @@
 
     "@js-sdsl/ordered-map": ["@js-sdsl/ordered-map@4.4.2", "", {}, "sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw=="],
 
-    "@moonrepo/cli": ["@moonrepo/cli@1.41.7", "", { "dependencies": { "detect-libc": "^2.0.4" }, "optionalDependencies": { "@moonrepo/core-linux-arm64-gnu": "1.41.7", "@moonrepo/core-linux-arm64-musl": "1.41.7", "@moonrepo/core-linux-x64-gnu": "1.41.7", "@moonrepo/core-linux-x64-musl": "1.41.7", "@moonrepo/core-macos-arm64": "1.41.7", "@moonrepo/core-macos-x64": "1.41.7", "@moonrepo/core-windows-x64-msvc": "1.41.7" }, "bin": { "moon": "moon.js" } }, "sha512-zZdE/2m/V/33B3DZOhsuNwRPme+WZiEpggcK6N2og6FCezD/4AxNjc9uZNPBAj2qaDFl3Q+bgtfrHBjdKy4ilg=="],
+    "@moonrepo/cli": ["@moonrepo/cli@2.0.3", "", { "dependencies": { "detect-libc": "^2.1.2" }, "optionalDependencies": { "@moonrepo/core-linux-arm64-gnu": "2.0.3", "@moonrepo/core-linux-arm64-musl": "2.0.3", "@moonrepo/core-linux-x64-gnu": "2.0.3", "@moonrepo/core-linux-x64-musl": "2.0.3", "@moonrepo/core-macos-arm64": "2.0.3", "@moonrepo/core-windows-x64-msvc": "2.0.3" }, "bin": { "moon": "moon.js", "moonx": "moonx.js" } }, "sha512-Q9lZUy+hORaJjM7gEW2SZVGe62qdGsYR2To7gx1zMOJdR9/H/TCPBVJDmZK6vjYikdrdQkSLo1ypX5Z8TBmRFQ=="],
 
-    "@moonrepo/core-linux-arm64-gnu": ["@moonrepo/core-linux-arm64-gnu@1.41.7", "", { "os": "linux", "cpu": "arm64" }, "sha512-Opa+jmNLYsHMRlJcmIn78kKY+76CT/93BvynxuMICPfaQqJTAR/5WPGre1omehGlkg5rbiVshsNTiaa+2bHzpA=="],
+    "@moonrepo/core-linux-arm64-gnu": ["@moonrepo/core-linux-arm64-gnu@2.0.3", "", { "os": "linux", "cpu": "arm64" }, "sha512-4QvLPfOUEkrtdoPc2IAgi8W6ZdaYDBPYFO/YSavhMTiVMM0LnYoDeoao5UGGlV0P6tk1gZJzv2AVz6TC6flXxA=="],
 
-    "@moonrepo/core-linux-arm64-musl": ["@moonrepo/core-linux-arm64-musl@1.41.7", "", { "os": "linux", "cpu": "arm64" }, "sha512-0ipCRwg75iFWfsjxIYY9IAm/cMoUy9iUk/qs2+JhruFeDrY6tCdV9Nyo8F2h45WC+/2qwZ7IMEdfWNPJT0TSyA=="],
+    "@moonrepo/core-linux-arm64-musl": ["@moonrepo/core-linux-arm64-musl@2.0.3", "", { "os": "linux", "cpu": "arm64" }, "sha512-sFL8zHKfpV6wjNslMINUJzqA+9hvXAREdLZkqpIdcKreAcOCgbHxL4QKkFZ0LaLeHWxij8d+gp3U6o4Uc3pM0w=="],
 
-    "@moonrepo/core-linux-x64-gnu": ["@moonrepo/core-linux-x64-gnu@1.41.7", "", { "os": "linux", "cpu": "x64" }, "sha512-iHLaZF0ryKhFTf5G/dFrQHPEFII9p88pXXUl17U9tjfeziFyksbdkQrZhNv6sfbE0bDJGPA3H5TEMR93ZwXo/A=="],
+    "@moonrepo/core-linux-x64-gnu": ["@moonrepo/core-linux-x64-gnu@2.0.3", "", { "os": "linux", "cpu": "x64" }, "sha512-XSRDk+yLLQB8BMueseBcMt3ayzZF6HQR2Cv/dZQD/m8F1bGQw3E3XnH7C6m1kY0o5ou8A37ujrMyb0GgG09nLg=="],
 
-    "@moonrepo/core-linux-x64-musl": ["@moonrepo/core-linux-x64-musl@1.41.7", "", { "os": "linux", "cpu": "x64" }, "sha512-0nZMjOBBSGHNUSIGcCBrfxgKVmeZQjmXpeMVfO3YG9e2irFR2neHbNIud6vLapC+StgV2UbrKoExR+HRtoyzuA=="],
+    "@moonrepo/core-linux-x64-musl": ["@moonrepo/core-linux-x64-musl@2.0.3", "", { "os": "linux", "cpu": "x64" }, "sha512-ShIjhOUhfYy3k5sjHBfjLmzq6n1+vIHSAfUWcGVzbMdlnGp5g4UxXGOHZxOopPtcaXJbGNv9IxR10HiTJtErcQ=="],
 
-    "@moonrepo/core-macos-arm64": ["@moonrepo/core-macos-arm64@1.41.7", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Z6okifZS8MA6aXFQ1q/Ej45aAq6i2riDgqWB9CmBVqV7JIdJMLP4++ir+FqGu9S0G34SFgspV0g+mrfFgR+/Nw=="],
+    "@moonrepo/core-macos-arm64": ["@moonrepo/core-macos-arm64@2.0.3", "", { "os": "darwin", "cpu": "arm64" }, "sha512-MgdCNoUVYYeohUaIsSWWK63hIOie9/bjTeVLDhFvoooNNJrL6i5uBXij9XTtir3iSy9CCXO9COwnvkCuopcNEA=="],
 
-    "@moonrepo/core-macos-x64": ["@moonrepo/core-macos-x64@1.41.7", "", { "os": "darwin", "cpu": "x64" }, "sha512-mOHO4/Ag331oVAxg1QNfaWCNfrKdy6HsUJXNY11ERvpNsi0Fh+qnZ+if3ZiC9jwUdwjw2MvtCRxrlXgtI/shrQ=="],
-
-    "@moonrepo/core-windows-x64-msvc": ["@moonrepo/core-windows-x64-msvc@1.41.7", "", { "os": "win32", "cpu": "x64" }, "sha512-p7CiKyWh4j1lhdF81vcacQmgPLV/di3nU5QXjg1lL2mF296HMx4H8sOlcxD/RieGfFW0Qfg5zIreugCHCNUCeA=="],
+    "@moonrepo/core-windows-x64-msvc": ["@moonrepo/core-windows-x64-msvc@2.0.3", "", { "os": "win32", "cpu": "x64" }, "sha512-zetuREncxv0X7WzL3tr5QGEdNz9/KtT5arbHqtCwrxJ3g1uEjay4bhsllzpph6X9gn5godhT26XZOmnYTZi5CA=="],
 
     "@mswjs/interceptors": ["@mswjs/interceptors@0.41.3", "", { "dependencies": { "@open-draft/deferred-promise": "^2.2.0", "@open-draft/logger": "^0.3.0", "@open-draft/until": "^2.0.0", "is-node-process": "^1.2.0", "outvariant": "^1.4.3", "strict-event-emitter": "^0.5.1" } }, "sha512-cXu86tF4VQVfwz8W1SPbhoRyHJkti6mjH/XJIxp40jhO4j2k1m4KYrEykxqWPkFF3vrK4rgQppBh//AwyGSXPA=="],
 

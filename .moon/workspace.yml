@@ -6,7 +6,7 @@ projects:
 
 vcs:
   defaultBranch: main
-  manager: 'git'
+  client: 'git'
   hooks:
     commit-msg:
       - 'bun commitlint --edit $1'
