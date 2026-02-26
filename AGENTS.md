@@ -10,18 +10,18 @@ bun dev
 
 # Run tests
 bun test:watch           # Watch mode
-bun moon run test        # Single run via moon
+bun moon run app:test        # Single run via moon
 
 # Lint and format
-bun moon run lint        # Check linting
-bun moon run format      # Check formatting
-bun moon run fix/all     # Fix both lint and format issues
+bun moon run app:lint        # Check linting
+bun moon run app:format      # Check formatting
+bun moon run app:fix/all     # Fix both lint and format issues
 
 # Type checking
-bun moon run typecheck
+bun moon run app:typecheck
 
 # Build for production
-bun moon run build       # Builds via Vercel
+bun moon run app:build       # Builds via Vercel
 
 # Database
 bunx drizzle-kit push    # Push schema changes
