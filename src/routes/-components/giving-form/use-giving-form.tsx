@@ -183,6 +183,8 @@ async function handleFormSubmission(
 
     if (success) {
       setIsRedirecting(true)
+    } else {
+      toast.unexpected()
     }
   } catch {
     toast.unexpected()

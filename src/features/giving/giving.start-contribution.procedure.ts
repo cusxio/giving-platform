@@ -54,12 +54,16 @@ export const startContribution = createServerFn({ method: 'POST' })
 
     const parseResult = trySync(
       () =>
-        schema.Parse({
-          ...data,
-          email: data.email.toLowerCase().trim(),
-          firstName: data.firstName.trim(),
-          lastName: data.lastName.trim(),
-        }),
+        schema.Parse(
+          // Convert coerces contribution amounts from form strings to numbers
+          // before validation (TypeBox 1.1+ no longer does this automatically)
+          schema.Convert({
+            ...data,
+            email: data.email.toLowerCase().trim(),
+            firstName: data.firstName.trim(),
+            lastName: data.lastName.trim(),
+          }),
+        ),
       createParseError,
     )
 
