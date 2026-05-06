@@ -2,16 +2,11 @@ import { envSchema } from 'env-schema'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
 
-const exporter = Type.String({
-  pattern: '^(otlp|console|none)(,(otlp|console|none))*$',
-})
+const exporter = Type.String({ pattern: '^(otlp|console|none)(,(otlp|console|none))*$' })
 
 const schema = Type.Object({
   BASE_URL: Type.Optional(Type.String()),
-  NODE_ENV: Type.Union([
-    Type.Literal('development'),
-    Type.Literal('production'),
-  ]),
+  NODE_ENV: Type.Union([Type.Literal('development'), Type.Literal('production')]),
   SESSION_SECRET: Type.String(),
   CRON_SECRET: Type.Optional(Type.String()),
   //

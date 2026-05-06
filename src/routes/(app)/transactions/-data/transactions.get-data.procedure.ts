@@ -29,19 +29,17 @@ export const getTransactionsData = createServerFn()
     const whereClause = and(
       eq(transactions.userId, userId),
       inArray(transactions.status, ['success', 'failed']),
-      journey === 'start_fresh'
-        ? eq(transactions.createdAs, 'user')
-        : undefined,
+      journey === 'start_fresh' ? eq(transactions.createdAs, 'user') : undefined,
     )
 
     const [total, txs] = await db.batch([
       db.select({ value: count() }).from(transactions).where(whereClause),
       db
         .select({
-          id: transactions.id,
           amount: transactions.amount,
-          status: transactions.status,
           createdAt: transactions.createdAt,
+          id: transactions.id,
+          status: transactions.status,
         })
         .from(transactions)
         .where(whereClause)
@@ -50,5 +48,5 @@ export const getTransactionsData = createServerFn()
         .offset(pageSize * (page - 1)),
     ])
 
-    return { totalCount: total[0]?.value ?? 0, transactions: txs, pageSize }
+    return { pageSize, totalCount: total[0]?.value ?? 0, transactions: txs }
   })

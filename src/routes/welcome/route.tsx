@@ -11,19 +11,17 @@ import { WelcomeMigrate } from './-components/welcome-migrate'
 import { createWelcomeQueryOptions } from './-welcome.queries'
 
 export const Route = createFileRoute('/welcome')({
-  async loader({ context }) {
-    const { user } = await context.queryClient.ensureQueryData(
-      createWelcomeQueryOptions(),
-    )
-
-    if (user.journey !== null) {
-      throw redirect({ to: '/', replace: true })
-    }
-  },
-
   component: RouteComponent,
 
   head: () => ({ meta: [{ title: `Welcome · ${config.entity}` }] }),
+
+  async loader({ context }) {
+    const { user } = await context.queryClient.ensureQueryData(createWelcomeQueryOptions())
+
+    if (user.journey !== null) {
+      throw redirect({ replace: true, to: '/' })
+    }
+  },
 })
 
 function RouteComponent() {
@@ -37,10 +35,7 @@ function RouteComponent() {
         {view === 'intro' && <WelcomeIntro />}
 
         {view === 'form' && (
-          <WelcomeForm
-            guestTransactionExists={guestTransactionExists}
-            user={user}
-          />
+          <WelcomeForm guestTransactionExists={guestTransactionExists} user={user} />
         )}
 
         {view === 'migrate' && <WelcomeMigrate />}

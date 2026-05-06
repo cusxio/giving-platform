@@ -1,17 +1,8 @@
-import type {
-  DBEmptyReturnErrorResult,
-  DBQueryErrorResult,
-} from '#/core/errors'
+import type { DBEmptyReturnErrorResult, DBQueryErrorResult } from '#/core/errors'
 
-export type AuthLoginError =
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
-  | NotExistsError
+export type AuthLoginError = DBEmptyReturnErrorResult | DBQueryErrorResult | NotExistsError
 
-export type AuthSignUpError =
-  | AlreadyExistsError
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
+export type AuthSignUpError = AlreadyExistsError | DBEmptyReturnErrorResult | DBQueryErrorResult
 
 export type AuthValidateOtpError =
   | DBEmptyReturnErrorResult

@@ -1,3 +1,4 @@
+/* oxlint-disable vitest/no-hooks, vitest/no-importing-vitest-globals, vitest/require-top-level-describe */
 import { afterAll, afterEach, beforeAll } from 'vitest'
 
 import { server } from '../mocks/server' // We will create this next
@@ -8,7 +9,7 @@ beforeAll(() => {
 })
 
 // Reset any request handlers that we may add during the tests,
-// so they don't affect other tests.
+// So they don't affect other tests.
 afterEach(() => {
   server.resetHandlers()
 })

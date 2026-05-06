@@ -27,7 +27,7 @@ export function AuthFormOtp(props: AuthFormOtpProps) {
         <EnvelopeSimpleIcon className="mx-auto" size={40} />
         <h1 className="text-center text-xl font-bold">Check your email</h1>
         <p className="text-center text-fg-muted">
-          We've just sent a 6-digit verification code to <br />
+          We’ve just sent a 6-digit verification code to <br />
           <span className="text-fg-1">
             {store.getValue<string>(store.names.email).toLowerCase()}
           </span>
@@ -46,15 +46,9 @@ export function AuthFormOtp(props: AuthFormOtpProps) {
               return <InputOtp onChange={handleChange} {...rest} />
             }}
           />
-          <FormError
-            name={store.names.otp}
-            render={<Alert className="empty:hidden" />}
-          />
+          <FormError name={store.names.otp} render={<Alert className="empty:hidden" />} />
         </div>
-        <FormSubmitButton
-          className={cx(buttonVariants.white, 'h-9')}
-          submitting={submitting}
-        >
+        <FormSubmitButton className={cx(buttonVariants.white, 'h-9')} submitting={submitting}>
           Continue with code
         </FormSubmitButton>
       </div>

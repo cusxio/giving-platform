@@ -8,27 +8,24 @@ import type { Session } from '#/db/schema'
 import { sessions, users } from '#/db/schema'
 
 export class SessionRepository {
-  #db: DB
+  readonly #db: DB
   constructor(db: DB) {
     this.#db = db
   }
 
-  async createSession(
-    input: Pick<Session, 'expiresAt' | 'tokenHash' | 'userId'>,
-  ) {
+  async createSession(input: Pick<Session, 'expiresAt' | 'tokenHash' | 'userId'>) {
     const result = await tryAsync(
       () => this.#db.insert(sessions).values(input).returning(),
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const session = result.value[0]
+    const [session] = result.value
     if (!session) {
-      return err({
-        type: 'DBEmptyReturnError',
-        error: new DBEmptyReturnError(),
-      })
+      return err({ error: new DBEmptyReturnError(), type: 'DBEmptyReturnError' })
     }
 
     return ok(session)
@@ -47,28 +44,25 @@ export class SessionRepository {
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
     return ok()
   }
 
-  async extendSession(
-    sessionId: Session['id'],
-    expiresAt: Session['expiresAt'],
-  ) {
+  async extendSession(sessionId: Session['id'], expiresAt: Session['expiresAt']) {
     const result = await tryAsync(
       () =>
-        this.#db
-          .update(sessions)
-          .set({ expiresAt })
-          .where(eq(sessions.id, sessionId))
-          .returning(),
+        this.#db.update(sessions).set({ expiresAt }).where(eq(sessions.id, sessionId)).returning(),
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const session = result.value[0]
+    const [session] = result.value
     return ok(session ?? null)
   }
 
@@ -78,11 +72,11 @@ export class SessionRepository {
         this.#db
           .select({
             session: {
+              expiresAt: sessions.expiresAt,
               id: sessions.id,
               tokenHash: sessions.tokenHash,
-              expiresAt: sessions.expiresAt,
             },
-            user: { id: users.id, role: users.role, journey: users.journey },
+            user: { id: users.id, journey: users.journey, role: users.role },
           })
           .from(sessions)
           .innerJoin(users, eq(sessions.userId, users.id))
@@ -90,9 +84,11 @@ export class SessionRepository {
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const sessionWithUser = result.value[0]
+    const [sessionWithUser] = result.value
     return ok(sessionWithUser ?? null)
   }
 }

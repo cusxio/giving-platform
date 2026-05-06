@@ -11,16 +11,14 @@ import type {
   ValidationErrorResponse,
 } from '#/core/procedure-response-types'
 import { trySync } from '#/core/result'
-import { User } from '#/db/schema'
+import type { User } from '#/db/schema'
 import { userRepositoryMiddleware } from '#/server/middleware'
 
 const schema = Compile(
   Type.Object({
-    firstName: Type.Optional(Type.String({ minLength: 1, maxLength: 32 })),
-    lastName: Type.Optional(Type.String({ minLength: 1, maxLength: 32 })),
-    journey: Type.Optional(
-      Type.Union([Type.Literal('start_fresh'), Type.Literal('migrate')]),
-    ),
+    firstName: Type.Optional(Type.String({ maxLength: 32, minLength: 1 })),
+    journey: Type.Optional(Type.Union([Type.Literal('start_fresh'), Type.Literal('migrate')])),
+    lastName: Type.Optional(Type.String({ maxLength: 32, minLength: 1 })),
   }),
 )
 
@@ -34,87 +32,68 @@ export type UpdateUserResponse =
 export const updateUser = createServerFn({ method: 'POST' })
   .middleware([userRepositoryMiddleware])
   .inputValidator((v: UpdateUserInput) => v)
-  .handler(
-    async ({ data, context }): Promise<undefined | UpdateUserResponse> => {
-      const { logger, user, userRepository } = context
+  .handler(async ({ data, context }): Promise<undefined | UpdateUserResponse> => {
+    const { logger, user, userRepository } = context
 
-      const userId = user?.id
-      if (userId === undefined) {
-        logger.warn(
-          { event: 'user.update_user.unauthorized' },
-          'Unauthorized update attempt',
-        )
-        throw redirect({ to: '/auth/login' })
-      }
+    const userId = user?.id
+    if (userId === undefined) {
+      logger.warn({ event: 'user.update_user.unauthorized' }, 'Unauthorized update attempt')
+      throw redirect({ to: '/auth/login' })
+    }
 
-      const { firstName, lastName, ...dataRest } = data
-      const parseResult = trySync(
-        () =>
-          schema.Parse({
-            firstName: firstName?.trim(),
-            lastName: lastName?.trim(),
-            ...dataRest,
-          }),
-        createParseError,
-      )
+    const { firstName, lastName, ...dataRest } = data
+    const parseResult = trySync(
+      () => schema.Parse({ firstName: firstName?.trim(), lastName: lastName?.trim(), ...dataRest }),
+      createParseError,
+    )
 
-      if (!parseResult.ok) {
-        logger.warn(
-          {
-            event: 'user.update_user.validation_failed',
-            err: parseResult.error.error,
-            error_type: parseResult.error.type,
-          },
-          'Input validation failed',
-        )
-
-        return {
-          type: 'VALIDATION_ERROR',
-          errors: parseResult.error.error.cause.errors.map((v) => {
-            return { path: v.instancePath, message: v.message }
-          }),
-        }
-      }
-
-      logger.info(
+    if (!parseResult.ok) {
+      logger.warn(
         {
-          event: 'user.update_user.attempt',
-          user_id: userId,
-          fields: Object.keys(data),
+          err: parseResult.error.error,
+          error_type: parseResult.error.type,
+          event: 'user.update_user.validation_failed',
         },
-        'Updating user profile',
+        'Input validation failed',
       )
 
-      const userResult = await userRepository.updateUserById(
-        userId,
-        parseResult.value,
-      )
-
-      if (!userResult.ok) {
-        logger.error(
-          {
-            event: 'user.update_user.failed',
-            err: userResult.error.error,
-            error_type: userResult.error.type,
-          },
-          'DB failed to update user profile',
-        )
-        return { type: 'SERVER_ERROR' }
+      return {
+        errors: parseResult.error.error.cause.errors.map((v) => ({
+          path: v.instancePath,
+          message: v.message,
+        })),
+        type: 'VALIDATION_ERROR',
       }
+    }
 
-      if (!userResult.value) {
-        logger.error(
-          { event: 'user.update_user.empty_result' },
-          'Update query executed but returned no record',
-        )
-        return { type: 'SERVER_ERROR' }
-      }
+    logger.info(
+      { event: 'user.update_user.attempt', fields: Object.keys(data), user_id: userId },
+      'Updating user profile',
+    )
 
-      logger.info(
-        { event: 'user.update_user.success', user_id: userId },
-        'User updated successfully',
+    const userResult = await userRepository.updateUserById(userId, parseResult.value)
+
+    if (!userResult.ok) {
+      logger.error(
+        {
+          err: userResult.error.error,
+          error_type: userResult.error.type,
+          event: 'user.update_user.failed',
+        },
+        'DB failed to update user profile',
       )
+      return { type: 'SERVER_ERROR' }
+    }
 
-      return { type: 'SUCCESS', value: { user: userResult.value } }
-    },
-  )
+    if (!userResult.value) {
+      logger.error(
+        { event: 'user.update_user.empty_result' },
+        'Update query executed but returned no record',
+      )
+      return { type: 'SERVER_ERROR' }
+    }
+
+    logger.info({ event: 'user.update_user.success', user_id: userId }, 'User updated successfully')
+
+    return { type: 'SUCCESS', value: { user: userResult.value } }
+  })

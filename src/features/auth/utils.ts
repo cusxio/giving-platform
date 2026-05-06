@@ -3,7 +3,7 @@ import { generateRandomString } from '@oslojs/crypto/random'
 
 const random: RandomReader = {
   read(bytes) {
-    crypto.getRandomValues(bytes)
+    bytes.set(crypto.getRandomValues(new Uint8Array(bytes.byteLength)))
   },
 }
 

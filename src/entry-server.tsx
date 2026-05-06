@@ -1,7 +1,9 @@
-import {
-  createStartHandler,
-  defaultStreamHandler,
-} from '@tanstack/react-start/server'
+// oxlint-disable import/first
+
+import { FastResponse } from 'srvx'
+globalThis.Response = FastResponse
+
+import { createStartHandler, defaultStreamHandler } from '@tanstack/react-start/server'
 import { createServerEntry } from '@tanstack/react-start/server-entry'
 
 import { createTracedHandler } from './server/opentelemetry/create-traced-handler'

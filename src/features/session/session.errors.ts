@@ -1,8 +1,4 @@
-import type {
-  DBEmptyReturnErrorResult,
-  DBQueryErrorResult,
-  ParseError,
-} from '#/core/errors'
+import type { DBEmptyReturnErrorResult, DBQueryErrorResult, ParseError } from '#/core/errors'
 
 export type VerificationError =
   | DBEmptyReturnErrorResult
@@ -31,20 +27,20 @@ interface SessionNotFoundError {
   readonly type: 'SessionNotFoundError'
 }
 
-// interface DBError {
-//   error: DBEmptyReturnError | DBQueryError
-//   type: 'DATABASE_ERROR'
+// Interface DBError {
+//   Error: DBEmptyReturnError | DBQueryError
+//   Type: 'DATABASE_ERROR'
 // }
 //
-// interface ExpiredError {
-//   type: 'SESSION_EXPIRED'
+// Interface ExpiredError {
+//   Type: 'SESSION_EXPIRED'
 // }
 //
-// interface InvalidSessionError {
-//   cookie: string
-//   type: 'INVALID_SESSION'
+// Interface InvalidSessionError {
+//   Cookie: string
+//   Type: 'INVALID_SESSION'
 // }
 //
-// interface NotFoundError {
-//   type: 'SESSION_NOT_FOUND'
+// Interface NotFoundError {
+//   Type: 'SESSION_NOT_FOUND'
 // }

@@ -1,5 +1,4 @@
-/* eslint-disable perfectionist/sort-modules */
-import { neon, neonConfig, Pool } from '@neondatabase/serverless'
+import { Pool, neon, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { drizzle as drizzlePool } from 'drizzle-orm/neon-serverless'
 
@@ -8,7 +7,7 @@ import { DATABASE_URL } from '#/envvars'
 // Required for PlanetScale Postgres connections
 // https://planetscale.com/docs/postgres/connecting/neon-serverless-driver
 
-// http
+// Http
 const DATABASE_LOCAL_URL = 'db.localtest.me'
 neonConfig.fetchEndpoint = (host) => {
   if (host === DATABASE_LOCAL_URL) {
@@ -17,10 +16,9 @@ neonConfig.fetchEndpoint = (host) => {
   return `https://${host}/sql`
 }
 
-// ws
+// Ws
 neonConfig.pipelineConnect = false
-neonConfig.useSecureWebSocket =
-  new URL(DATABASE_URL).hostname !== DATABASE_LOCAL_URL
+neonConfig.useSecureWebSocket = new URL(DATABASE_URL).hostname !== DATABASE_LOCAL_URL
 neonConfig.wsProxy = (host, port) => {
   if (host === DATABASE_LOCAL_URL) {
     return `${host}:4444/v1`
@@ -29,15 +27,13 @@ neonConfig.wsProxy = (host, port) => {
 }
 
 const pool = new Pool({ connectionString: DATABASE_URL })
-export const dbPool = drizzlePool({ client: pool, casing: 'snake_case' })
+export const dbPool = drizzlePool({ casing: 'snake_case', client: pool })
 
 export type DBPool = typeof dbPool
-export type DBPoolTransaction = Parameters<
-  Parameters<DBPool['transaction']>[0]
->[0]
+export type DBPoolTransaction = Parameters<Parameters<DBPool['transaction']>[0]>[0]
 
 const client = neon(DATABASE_URL)
-export const db = drizzle({ client, casing: 'snake_case' })
+export const db = drizzle({ casing: 'snake_case', client })
 
 export type DB = typeof db
 export type DBTransaction = Parameters<Parameters<DB['transaction']>[0]>[0]

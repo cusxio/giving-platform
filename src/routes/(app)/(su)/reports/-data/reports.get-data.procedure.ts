@@ -26,8 +26,8 @@ export const getReportsData = createServerFn()
     // Aggregate first, then join to funds for name lookup
     const aggregated = db
       .select({
-        fundId: transactionItems.fundId,
         createdAs: transactions.createdAs,
+        fundId: transactionItems.fundId,
         totalAmount: safeSum(transactionItems.amount).as('totalAmount'),
       })
       .from(transactions)
@@ -38,17 +38,14 @@ export const getReportsData = createServerFn()
           lt(transactions.createdAt, endDateUTCExclusive),
         ),
       )
-      .innerJoin(
-        transactionItems,
-        eq(transactionItems.transactionId, transactions.id),
-      )
+      .innerJoin(transactionItems, eq(transactionItems.transactionId, transactions.id))
       .groupBy(transactionItems.fundId, transactions.createdAs)
       .as('aggregated')
 
     const rows = await db
       .select({
-        fundName: funds.name,
         createdAs: aggregated.createdAs,
+        fundName: funds.name,
         totalAmount: aggregated.totalAmount,
       })
       .from(aggregated)
@@ -56,7 +53,8 @@ export const getReportsData = createServerFn()
       .orderBy(desc(aggregated.createdAs), asc(funds.name))
 
     return rows.map((row) => ({
-      ...row,
+      createdAs: row.createdAs,
+      fundName: row.fundName,
       totalAmount: centsToRinggit(row.totalAmount),
     }))
   })

@@ -10,13 +10,7 @@ export function Table(props: HTMLAttributes<HTMLTableElement>) {
 export function TableBody(props: HTMLAttributes<HTMLTableSectionElement>) {
   const { className, ...rest } = props
   return (
-    <tbody
-      className={cx(
-        'border border-border [&_tr:last-child]:border-0',
-        className,
-      )}
-      {...rest}
-    />
+    <tbody className={cx('border border-border [&_tr:last-child]:border-0', className)} {...rest} />
   )
 }
 
@@ -24,11 +18,7 @@ export function TableCell(props: HTMLAttributes<HTMLTableCellElement>) {
   const { className, ...rest } = props
   return (
     <td
-      className={cx(
-        'px-4 py-2',
-        'border-r border-border last:border-none',
-        className,
-      )}
+      className={cx('px-4 py-2', 'border-r border-border last:border-none', className)}
       {...rest}
     />
   )
@@ -55,12 +45,7 @@ export function TableHead(props: HTMLAttributes<HTMLTableCellElement>) {
 
 export function TableHeader(props: HTMLAttributes<HTMLTableSectionElement>) {
   const { className, ...rest } = props
-  return (
-    <thead
-      className={cx('border border-border [&_tr]:border-b', className)}
-      {...rest}
-    />
-  )
+  return <thead className={cx('border border-border [&_tr]:border-b', className)} {...rest} />
 }
 
 export function TableRow(props: HTMLAttributes<HTMLTableRowElement>) {

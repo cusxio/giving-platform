@@ -1,9 +1,5 @@
 import type { Icon } from '@phosphor-icons/react'
-import {
-  CheckCircleIcon,
-  HourglassIcon,
-  WarningCircleIcon,
-} from '@phosphor-icons/react/dist/ssr'
+import { CheckCircleIcon, HourglassIcon, WarningCircleIcon } from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
 import type { Transaction } from '#/db/schema'

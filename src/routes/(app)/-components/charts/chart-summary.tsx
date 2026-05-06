@@ -7,11 +7,7 @@ import {
   ChartSummaryValue,
   ChartTitle,
 } from '#/components/ui/chart'
-import {
-  createCurrencyFormatter,
-  createDateFormatter,
-  REDACTED_VALUE,
-} from '#/core/formatters'
+import { REDACTED_VALUE, createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 
 interface ChartSummaryProps {
   averageAmount: number
@@ -35,18 +31,15 @@ export function ChartSummary(props: ChartSummaryProps) {
   } = props
 
   const currencyFormatter = useCallback(
-    (value: number) =>
-      createCurrencyFormatter({ showSymbol: true }).format(value, privacyMode),
+    (value: number) => createCurrencyFormatter({ showSymbol: true }).format(value, privacyMode),
     [privacyMode],
   )
 
-  const dateFormatter = useCallback((date: Date) => {
-    return createDateFormatter({
-      month: 'short',
-      year: 'numeric',
-      day: 'numeric',
-    }).format(date)
-  }, [])
+  const dateFormatter = useCallback(
+    (date: Date) =>
+      createDateFormatter({ day: 'numeric', month: 'short', year: 'numeric' }).format(date),
+    [],
+  )
 
   return (
     <ChartContainer>
@@ -78,16 +71,12 @@ export function ChartSummary(props: ChartSummaryProps) {
         <div className="grid grid-cols-2 gap-x-1">
           <ChartSummaryItem>
             <ChartSummaryLabel>Average Gift</ChartSummaryLabel>
-            <ChartSummaryValue>
-              {currencyFormatter(averageAmount)}
-            </ChartSummaryValue>
+            <ChartSummaryValue>{currencyFormatter(averageAmount)}</ChartSummaryValue>
           </ChartSummaryItem>
 
           <ChartSummaryItem>
             <ChartSummaryLabel>Highest Gift</ChartSummaryLabel>
-            <ChartSummaryValue>
-              {currencyFormatter(largestAmount)}
-            </ChartSummaryValue>
+            <ChartSummaryValue>{currencyFormatter(largestAmount)}</ChartSummaryValue>
             {largestAmountDate && (
               <span className="text-xs text-fg-subtle/80">
                 on {dateFormatter(largestAmountDate)}

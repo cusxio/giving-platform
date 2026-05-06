@@ -14,19 +14,13 @@ export function OverviewEmpty(props: OverviewEmptyProps) {
     <div className="flex flex-col items-center gap-y-4 border border-border bg-base-1 px-4 py-24">
       <CalendarXIcon size={32} />
 
-      <h1 className="text-center text-xl text-fg-1 sm:text-2xl">
-        No contributions yet for {year}
-      </h1>
+      <h1 className="text-center text-xl text-fg-1 sm:text-2xl">No contributions yet for {year}</h1>
 
       <p className="text-center text-balance text-fg-muted">
-        Your overview will update automatically once you make your first gift of
-        the year.
+        Your overview will update automatically once you make your first gift of the year.
       </p>
 
-      <Button
-        className={cx(buttonVariants.lime, 'mt-4 h-10 gap-x-2')}
-        render={<Link to="/" />}
-      >
+      <Button className={cx(buttonVariants.lime, 'mt-4 h-10 gap-x-2')} render={<Link to="/" />}>
         Make a contribution
         <HandHeartIcon size={20} weight="duotone" />
       </Button>

@@ -5,7 +5,7 @@ import { useServerFn } from '@tanstack/react-start'
 import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 
-import { GetUserResponse } from '../auth/auth.get-user.procedure'
+import type { GetUserResponse } from '../auth/auth.get-user.procedure'
 
 import type { UpdatePrivacyModeInput } from './user.update-privacy-mode.procedure'
 import { updatePrivacyMode } from './user.update-privacy-mode.procedure'
@@ -22,25 +22,25 @@ export function useUpdatePrivacyModeMutation() {
       queryClient.setQueryData<Extract<GetUserResponse, { type: 'SUCCESS' }>>(
         ['auth-user'],
         (prev) => {
-          if (!prev) return
+          if (!prev) {
+            return prev
+          }
           return {
+            type: prev.type,
             value: {
               ...prev.value,
-              userSettings: {
-                ...prev.value.userSettings,
-                privacyMode: nextPrivacyMode,
-              },
+              userSettings: { ...prev.value.userSettings, privacyMode: nextPrivacyMode },
             },
-            type: prev.type,
           }
         },
       )
     },
-    onSuccess(res) {
+    async onSuccess(res) {
       switch (res.type) {
         case 'AUTH_ERROR': {
           toast.error(res.message)
-          return navigate({ to: '/auth/login' })
+          await navigate({ to: '/auth/login' })
+          break
         }
         case 'SERVER_ERROR': {
           toast.unexpected()
@@ -59,7 +59,5 @@ export function useUpdatePrivacyModeMutation() {
 
 export function useUpdateUserMutation() {
   const $updateUser = useServerFn(updateUser)
-  return useMutation({
-    mutationFn: (input: UpdateUserInput) => $updateUser({ data: input }),
-  })
+  return useMutation({ mutationFn: (input: UpdateUserInput) => $updateUser({ data: input }) })
 }

@@ -10,7 +10,7 @@ import { rateLimitAttempts } from '#/db/schema'
 type Action = RateLimitAttempt['action']
 
 export class RateLimitRepository {
-  #db: DB
+  readonly #db: DB
 
   constructor(db: DB) {
     this.#db = db
@@ -19,11 +19,7 @@ export class RateLimitRepository {
   /**
    * Atomically checks rate limit and increments attempt count.
    */
-  async checkAndIncrement(
-    identifier: string,
-    action: Action,
-    windowSeconds: number,
-  ) {
+  async checkAndIncrement(identifier: string, action: Action, windowSeconds: number) {
     const currentTime = now()
     const windowStart = addSeconds(currentTime, -windowSeconds)
 
@@ -32,14 +28,13 @@ export class RateLimitRepository {
         this.#db
           .insert(rateLimitAttempts)
           .values({
-            identifier,
             action,
             attemptCount: 1,
-            windowStartedAt: currentTime,
+            identifier,
             lastAttemptAt: currentTime,
+            windowStartedAt: currentTime,
           })
           .onConflictDoUpdate({
-            target: [rateLimitAttempts.identifier, rateLimitAttempts.action],
             set: {
               // Reset count to 1 if window expired, otherwise increment
               attemptCount: sql`
@@ -57,14 +52,17 @@ export class RateLimitRepository {
               `,
               lastAttemptAt: sql`${currentTime}`,
             },
+            target: [rateLimitAttempts.identifier, rateLimitAttempts.action],
           })
           .returning(),
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const record = result.value[0]
+    const [record] = result.value
     return ok({
       attemptCount: record?.attemptCount ?? 1,
       windowStartedAt: record?.windowStartedAt ?? currentTime,
@@ -74,11 +72,7 @@ export class RateLimitRepository {
   /**
    * Get current attempt count without incrementing.
    */
-  async getAttemptCount(
-    identifier: string,
-    action: Action,
-    windowSeconds: number,
-  ) {
+  async getAttemptCount(identifier: string, action: Action, windowSeconds: number) {
     const windowStart = addSeconds(now(), -windowSeconds)
 
     const result = await tryAsync(
@@ -97,7 +91,9 @@ export class RateLimitRepository {
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
     return ok(result.value[0]?.attemptCount ?? 0)
   }
@@ -111,10 +107,7 @@ export class RateLimitRepository {
         this.#db
           .delete(rateLimitAttempts)
           .where(
-            and(
-              eq(rateLimitAttempts.identifier, identifier),
-              eq(rateLimitAttempts.action, action),
-            ),
+            and(eq(rateLimitAttempts.identifier, identifier), eq(rateLimitAttempts.action, action)),
           ),
       createDBError,
     )

@@ -11,10 +11,7 @@ import { CartesianGrid } from './cartesian-grid'
 import { XAxis } from './x-axis'
 import { YAXis } from './y-axis'
 
-interface BarChartProps extends Omit<
-  CartesianChartProps,
-  'data' | 'margin' | 'responsive'
-> {
+interface BarChartProps extends Omit<CartesianChartProps, 'data' | 'margin' | 'responsive'> {
   data: Data[]
   privacyMode: boolean
 }
@@ -24,35 +21,25 @@ interface Data {
   totalAmount: number
 }
 
-type TooltipPayload = { payload: Data }[]
+type BarTooltipPayload = readonly { payload: Data }[]
 
 export function BarChart(props: BarChartProps) {
   const { privacyMode, ...rest } = props
   const xTickFormatter = useCallback(
     (value: number) =>
-      createDateFormatter({ month: 'short' }).format(
-        now(clientTz).setMonth(value - 1),
-      ),
+      createDateFormatter({ month: 'short' }).format(now(clientTz).setMonth(value - 1)),
     [],
   )
 
   const yTickFormatter = useCallback(
-    (value: number) =>
-      createCurrencyFormatter({ notation: 'compact' }).format(
-        value,
-        privacyMode,
-      ),
+    (value: number) => createCurrencyFormatter({ notation: 'compact' }).format(value, privacyMode),
     [privacyMode],
   )
 
   return (
     <ChartContainer>
       <ChartTitle>Contribution by Month</ChartTitle>
-      <RechartBarChart
-        margin={{ left: 0, top: 0, bottom: 0, right: 0 }}
-        responsive
-        {...rest}
-      >
+      <RechartBarChart margin={{ bottom: 0, left: 0, right: 0, top: 0 }} responsive {...rest}>
         <CartesianGrid />
 
         <Tooltip content={TooltipContent} cursor={false} useTranslate3d />
@@ -67,8 +54,8 @@ export function BarChart(props: BarChartProps) {
   )
 }
 
-function TooltipContent(props: TooltipContentProps<number, string>) {
-  const payload = props.payload as TooltipPayload
+function TooltipContent(props: TooltipContentProps) {
+  const payload = props.payload as BarTooltipPayload
 
   const current = payload[0]?.payload
 
@@ -83,9 +70,7 @@ function TooltipContent(props: TooltipContentProps<number, string>) {
           </span>
 
           <span className="font-mono text-sm">
-            {createCurrencyFormatter({ showSymbol: true }).format(
-              current.totalAmount,
-            )}
+            {createCurrencyFormatter({ showSymbol: true }).format(current.totalAmount)}
           </span>
         </div>
       )}

@@ -20,7 +20,7 @@ export type RateLimitResult = Result<
 >
 
 export class RateLimitService {
-  #repository: RateLimitRepository
+  readonly #repository: RateLimitRepository
 
   constructor(repository: RateLimitRepository) {
     this.#repository = repository
@@ -65,11 +65,7 @@ export class RateLimitService {
     maxAttempts: number,
     windowSeconds: number,
   ): Promise<RateLimitResult> {
-    const result = await this.#repository.checkAndIncrement(
-      identifier,
-      action,
-      windowSeconds,
-    )
+    const result = await this.#repository.checkAndIncrement(identifier, action, windowSeconds)
 
     if (!result.ok) {
       return result
@@ -81,13 +77,11 @@ export class RateLimitService {
 
     if (!allowed) {
       const windowEndTime = windowStartedAt.getTime() + windowSeconds * 1000
-      const retryAfterSeconds = Math.ceil(
-        (windowEndTime - now().getTime()) / 1000,
-      )
+      const retryAfterSeconds = Math.ceil((windowEndTime - now().getTime()) / 1000)
 
       return err({
-        type: 'RateLimitExceededError',
         retryAfterSeconds: Math.max(0, retryAfterSeconds),
+        type: 'RateLimitExceededError',
       })
     }
 

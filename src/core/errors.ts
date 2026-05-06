@@ -1,9 +1,6 @@
 import type { ParseError as TypeboxParseError } from 'typebox/value'
 
-import type {
-  DBQueryErrorResult,
-  TransactionRollbackErrorResult,
-} from '../db/errors'
+import type { DBQueryErrorResult, TransactionRollbackErrorResult } from '../db/errors'
 
 export interface ParseError {
   readonly error: TypeboxParseError
@@ -11,19 +8,17 @@ export interface ParseError {
 }
 
 export function createDBError(error: unknown): DBQueryErrorResult {
-  return { type: 'DBQueryError', error: error as DBQueryErrorResult['error'] }
+  return { error: error as DBQueryErrorResult['error'], type: 'DBQueryError' }
 }
 
 export function createParseError(error: unknown): ParseError {
-  return { type: 'ParseError', error: error as TypeboxParseError }
+  return { error: error as TypeboxParseError, type: 'ParseError' }
 }
 
-export function createTransactionError(
-  error: unknown,
-): TransactionRollbackErrorResult {
+export function createTransactionError(error: unknown): TransactionRollbackErrorResult {
   return {
-    type: 'TransactionRollbackError',
     error: error as TransactionRollbackErrorResult['error'],
+    type: 'TransactionRollbackError',
   }
 }
 

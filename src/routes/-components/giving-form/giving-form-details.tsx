@@ -8,7 +8,7 @@ import { PaymentMethods } from '#/components/ui/payment-methods'
 import { UserFormFields } from '#/components/user-form-fields'
 import { funds } from '#/core/brand'
 import { ringgitToCents } from '#/core/money'
-import { SavedPaymentMethod } from '#/db/schema'
+import type { SavedPaymentMethod } from '#/db/schema'
 import { useLogoutMutation } from '#/features/auth/auth.mutations'
 
 import type { GivingFormStore } from './use-giving-form'
@@ -34,7 +34,7 @@ export function GivingFormDetails(props: GivingFormDetailsProps) {
         continue
       }
 
-      txItems.push({ fundName: fund, amountInCents: ringgitToCents(amount) })
+      txItems.push({ amountInCents: ringgitToCents(amount), fundName: fund })
     }
 
     return txItems
@@ -92,10 +92,7 @@ export function GivingFormDetails(props: GivingFormDetailsProps) {
         <div className="flex flex-col gap-y-6 border border-border bg-base-0 p-4">
           <div className="text-lg">3. Payment Method</div>
 
-          <PaymentMethods
-            savedPaymentMethods={savedPaymentMethods}
-            store={store}
-          />
+          <PaymentMethods savedPaymentMethods={savedPaymentMethods} store={store} />
         </div>
       )}
     </div>

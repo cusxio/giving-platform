@@ -39,11 +39,9 @@ export function TransactionsTable(props: TransactionsTableProps) {
           return (
             <TableRow className="text-fg-muted/80" key={id}>
               <TableCell className="tabular-nums">
-                {createDateFormatter({
-                  day: 'numeric',
-                  month: 'numeric',
-                  year: 'numeric',
-                }).format(createdAt)}
+                {createDateFormatter({ day: 'numeric', month: 'numeric', year: 'numeric' }).format(
+                  createdAt,
+                )}
               </TableCell>
 
               <TableCell className="text-center">
@@ -57,10 +55,10 @@ export function TransactionsTable(props: TransactionsTableProps) {
               </TableCell>
 
               <TableCell className="text-center font-mono">
-                {createCurrencyFormatter({
-                  showSymbol: true,
-                  decimal: 'if-needed',
-                }).format(centsToRinggit(amountInCents), privacyMode)}
+                {createCurrencyFormatter({ decimal: 'if-needed', showSymbol: true }).format(
+                  centsToRinggit(amountInCents),
+                  privacyMode,
+                )}
               </TableCell>
 
               <TableCell className="text-right">

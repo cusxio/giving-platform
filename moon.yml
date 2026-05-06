@@ -1,81 +1,113 @@
+# yaml-language-server: $schema=.moon/cache/schemas/tasks.json
+# https://moonrepo.dev/docs/config/tasks
+$schema: .moon/cache/schemas/tasks.json
+
 fileGroups:
   sources:
-    - 'src/**/*'
-  configs:
-    - '*.{js,ts,json}'
+    - src/**/*
+    - '*.ts'
+    - '*.tsx'
+    - '*.json'
 
 tasks:
-  lint:
-    command: 'eslint'
-    args:
-      - '--max-warnings=0'
-      - '.'
-    inputs:
-      - '/.gitignore'
-      - '@group(sources)'
-      - '@group(configs)'
-      - '/eslint.config.ts'
+  # ── QOL ────────────────────────────────────────────────────
 
-  fix/lint:
-    extends: 'lint'
-    options:
-      mergeArgs: 'prepend'
+  lint:
+    command: oxlint
     args:
-      - '--fix'
+      - --type-aware
+      - --no-error-on-unmatched-pattern
+      - --config
+      - oxlint.config.ts
+    inputs:
+      - group: sources
+      - /.gitignore
+      - /oxlint.config.ts
+    options:
+      affectedFiles: args
+      shell: false
 
   format:
-    command: 'prettier'
+    extends: _format
     args:
-      - '--check'
-      - '--log-level=warn'
-      - '--ignore-path'
-      - '@in(0)'
-      - '.'
-    inputs:
-      - '/.gitignore'
-      - '@group(sources)'
-      - '@group(configs)'
-      - '/prettier.config.js'
-
-  fix/format:
-    extends: 'format'
+      - --write
     options:
-      mergeArgs: 'prepend'
+      cache: false
+      internal: false
+
+  format-check:
+    extends: _format
     args:
-      - '--write'
-
-  fix/all:
-    command: 'noop'
-    deps:
-      - 'fix/lint'
-      - 'fix/format'
-    inputs: []
+      - --check
     options:
-      runDepsInParallel: false
+      internal: false
 
   typecheck:
-    command: 'tsc'
+    command: tsc
     args:
-      - '--noEmit'
+      - --noEmit
     inputs:
-      - '@group(sources)'
-      - '@group(configs)'
-      - '/tsconfig.json'
+      - group: sources
+      - /tsconfig.json
+
+  fix:
+    command: noop
+    deps:
+      - lint-fix
+      - format
+    inputs: []
+    options:
+      cache: false
+      runDepsInParallel: false
+
+  # ── QOL (internal) ─────────────────────────────────────────
+
+  _format:
+    command: oxfmt
+    args:
+      - --no-error-on-unmatched-pattern
+      - --config
+      - oxfmt.config.ts
+    inputs:
+      - group: sources
+      - /.gitignore
+      - /oxfmt.config.ts
+    options:
+      affectedFiles: args
+      shell: false
+      internal: true
+
+  lint-fix:
+    extends: lint
+    args:
+      - --fix
+    options:
+      cache: false
+
+  # ── Test ───────────────────────────────────────────────────
 
   test:
-    command: 'vitest'
+    command: vitest
     args:
-      - '--run'
+      - --run
     inputs:
-      - '@group(sources)'
-      - '/vite.config.ts'
-      - '/tsconfig.json'
+      - group: sources
+      - /vite.config.ts
+      - /tsconfig.json
+
+  # ── Build ──────────────────────────────────────────────────
 
   build:
-    command: 'bunx vercel build'
+    command: pnpm
+    args:
+      - exec
+      - vercel
+      - build
     inputs:
-      - '@group(sources)'
-      - '/vite.config.ts'
-      - '/tsconfig.json'
+      - group: sources
+      - /vite.config.ts
+      - /tsconfig.json
     outputs:
       - .vercel/output
+    options:
+      cache: false

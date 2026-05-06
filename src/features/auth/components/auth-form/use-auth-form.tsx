@@ -6,21 +6,15 @@ import { useState } from 'react'
 import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 
-import type {
-  RequestOtpResponse,
-  VerifyOtpResponse,
-} from '../../auth.mutations'
-import {
-  useRequestOtpMutation,
-  useVerifyOtpMutation,
-} from '../../auth.mutations'
+import type { RequestOtpResponse, VerifyOtpResponse } from '../../auth.mutations'
+import { useRequestOtpMutation, useVerifyOtpMutation } from '../../auth.mutations'
 
 const fallback = 'Something unexpected has occurred. Please try again later.'
 
 export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
   const [view, setView] = useState<'enter-email' | 'enter-otp'>('enter-email')
   const store = useFormStore({
-    defaultValues: { otp: '', email: defaultEmail ?? '' },
+    defaultValues: { email: defaultEmail ?? '', otp: '' },
     setValues(values) {
       if (view === 'enter-otp' && values.otp.length === 6) {
         void store.submit()
@@ -37,11 +31,17 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
   store.useSubmit(async (state) => {
     const { otp, email } = state.values
 
-    // enter-email flow
+    // Enter-email flow
     if (view === 'enter-email') {
       try {
-        const res = await requestOtp.mutateAsync({ mode, email })
-        switch (res?.type) {
+        const res = await requestOtp.mutateAsync({ email, mode })
+
+        if (!res) {
+          toast.unexpected()
+          return
+        }
+
+        switch (res.type) {
           case 'BUSINESS_ERROR':
           case 'VALIDATION_ERROR': {
             store.setError(
@@ -68,9 +68,11 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
     }
 
     try {
-      const res = await verifyOtp.mutateAsync({ otp, email, mode })
+      const res = await verifyOtp.mutateAsync({ email, mode, otp })
 
-      if (!res) return
+      if (!res) {
+        return
+      }
 
       switch (res.type) {
         case 'BUSINESS_ERROR':
@@ -98,7 +100,7 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
 
   const submitting = useStoreState(store, 'submitting')
 
-  return { submitting, view, store }
+  return { store, submitting, view }
 }
 
 function getEnterEmailErrorMessage(
@@ -112,11 +114,7 @@ function getEnterEmailErrorMessage(
       return (
         <>
           This email address already exists.{' '}
-          <Link
-            className="font-bold underline"
-            search={{ email }}
-            to="/auth/login"
-          >
+          <Link className="font-bold underline" search={{ email }} to="/auth/login">
             Log in
           </Link>{' '}
           instead?
@@ -125,19 +123,13 @@ function getEnterEmailErrorMessage(
     }
 
     if (code === 'RATE_LIMIT_EXCEEDED') {
-      return (
-        response.error.message ?? 'Too many requests. Please try again later.'
-      )
+      return response.error.message ?? 'Too many requests. Please try again later.'
     }
 
     return (
       <>
         There is no account associated with this email address. Consider{' '}
-        <Link
-          className="font-bold underline"
-          search={{ email }}
-          to="/welcome/signup"
-        >
+        <Link className="font-bold underline" search={{ email }} to="/welcome/signup">
           signing up
         </Link>
         ?
@@ -152,9 +144,7 @@ function getEnterEmailErrorMessage(
   return fallback
 }
 
-function getEnterOtpErrorMessage(
-  response: Exclude<VerifyOtpResponse, { type: 'SUCCESS' }>,
-) {
+function getEnterOtpErrorMessage(response: Exclude<VerifyOtpResponse, { type: 'SUCCESS' }>) {
   if (response.type === 'BUSINESS_ERROR') {
     const { code } = response.error
 
@@ -163,9 +153,7 @@ function getEnterOtpErrorMessage(
     }
 
     // RATE_LIMIT_EXCEEDED
-    return (
-      response.error.message ?? 'Too many attempts. Please try again later.'
-    )
+    return response.error.message ?? 'Too many attempts. Please try again later.'
   }
 
   if (response.type === 'VALIDATION_ERROR') {

@@ -4,11 +4,6 @@ import { Button as BaseButton } from '@ariakit/react'
 import { cx } from '#/styles/cx'
 
 export const buttonVariants = {
-  white: cx(
-    'px-4 text-sm font-semibold transition-colors',
-    'bg-fg-1 text-base-1',
-    'hover:bg-fg-1/90 active:bg-fg-1/80',
-  ),
   lime: cx(
     'px-4 text-sm font-semibold transition-colors',
     'bg-[#d4ff70] text-base-1',
@@ -20,16 +15,18 @@ export const buttonVariants = {
     'bg-surface text-fg-muted',
     'hover:bg-elevated hover:text-fg-default',
   ),
+  white: cx(
+    'px-4 text-sm font-semibold transition-colors',
+    'bg-fg-1 text-base-1',
+    'hover:bg-fg-1/90 active:bg-fg-1/80',
+  ),
 }
 
 export function Button(props: ButtonProps) {
   const { className, ...rest } = props
   return (
     <BaseButton
-      className={cx(
-        'inline-flex items-center justify-center select-none',
-        className,
-      )}
+      className={cx('inline-flex items-center justify-center select-none', className)}
       {...rest}
     />
   )

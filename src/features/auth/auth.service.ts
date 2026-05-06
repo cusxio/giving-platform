@@ -1,8 +1,8 @@
 import { constantTimeEqual } from '@oslojs/crypto/subtle'
-import { render, toPlainText } from '@react-email/components'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { nanoid } from 'nanoid'
 import { createElement } from 'react'
+import { render, toPlainText } from 'react-email'
 
 import { config } from '#/core/brand'
 import { createDBError } from '#/core/errors'
@@ -21,20 +21,16 @@ import type { SessionRepository } from '../session/session.repository'
 import { serializeSessionCookie } from '../session/utils'
 import type { UserRepository } from '../user/user.repository'
 
-import type {
-  AuthLoginError,
-  AuthSignUpError,
-  AuthValidateOtpError,
-} from './auth.errors'
+import type { AuthLoginError, AuthSignUpError, AuthValidateOtpError } from './auth.errors'
 import type { TokenRepository } from './token.repository'
 import { generateOtp } from './utils'
 
 export class AuthService {
-  #db: DB
-  #emailService: EmailService
-  #sessionRepository: SessionRepository
-  #tokenRepository: TokenRepository
-  #userRepository: UserRepository
+  readonly #db: DB
+  readonly #emailService: EmailService
+  readonly #sessionRepository: SessionRepository
+  readonly #tokenRepository: TokenRepository
+  readonly #userRepository: UserRepository
 
   constructor(
     db: DB,
@@ -54,9 +50,7 @@ export class AuthService {
     this.#emailService = emailService
   }
 
-  async login(
-    email: User['email'],
-  ): Promise<Result<void, AuthLoginError | SendEmailError>> {
+  async login(email: User['email']): Promise<Result<void, AuthLoginError | SendEmailError>> {
     const userRes = await this.#userRepository.findUserByEmail(email)
 
     if (!userRes.ok) {
@@ -71,7 +65,9 @@ export class AuthService {
 
     const sendRes = await this.#generateOtpForUser(user.id, user.email, 'login')
 
-    if (!sendRes.ok) return sendRes
+    if (!sendRes.ok) {
+      return sendRes
+    }
 
     return ok()
   }
@@ -80,26 +76,25 @@ export class AuthService {
     return this.#sessionRepository.deleteSessionById(sessionId)
   }
 
-  async signup(
-    email: User['email'],
-  ): Promise<Result<void, AuthSignUpError | SendEmailError>> {
+  async signup(email: User['email']): Promise<Result<void, AuthSignUpError | SendEmailError>> {
     const userRes = await this.#userRepository.findUserByEmail(email)
 
-    if (!userRes.ok) return userRes
+    if (!userRes.ok) {
+      return userRes
+    }
 
     let user = userRes.value
 
     if (user === null) {
       const createRes = await this.#userRepository.createUser({ email })
 
-      if (!createRes.ok) return createRes
+      if (!createRes.ok) {
+        return createRes
+      }
 
       user = createRes.value
       if (user === null) {
-        return err({
-          type: 'DBEmptyReturnError',
-          error: new DBEmptyReturnError(),
-        })
+        return err({ error: new DBEmptyReturnError(), type: 'DBEmptyReturnError' })
       }
     }
 
@@ -107,13 +102,11 @@ export class AuthService {
       return err({ type: 'AlreadyExistsError' })
     }
 
-    const sendRes = await this.#generateOtpForUser(
-      user.id,
-      user.email,
-      'signup',
-    )
+    const sendRes = await this.#generateOtpForUser(user.id, user.email, 'signup')
 
-    if (!sendRes.ok) return sendRes
+    if (!sendRes.ok) {
+      return sendRes
+    }
 
     return ok()
   }
@@ -125,7 +118,9 @@ export class AuthService {
   ): Promise<Result<string, AuthValidateOtpError>> {
     const userRes = await this.#userRepository.findUserByEmail(email)
 
-    if (!userRes.ok) return userRes
+    if (!userRes.ok) {
+      return userRes
+    }
 
     const user = userRes.value
 
@@ -135,7 +130,9 @@ export class AuthService {
 
     const tokenRes = await this.#tokenRepository.findToken(user.id)
 
-    if (!tokenRes.ok) return tokenRes
+    if (!tokenRes.ok) {
+      return tokenRes
+    }
 
     const token = tokenRes.value
 
@@ -161,13 +158,12 @@ export class AuthService {
     }
 
     // Atomically claim the token - prevents race condition where two concurrent
-    // requests could both use the same OTP
-    const claimResult = await this.#tokenRepository.claimTokenIfUnused(
-      token.id,
-      token.tokenHash,
-    )
+    // Requests could both use the same OTP
+    const claimResult = await this.#tokenRepository.claimTokenIfUnused(token.id, token.tokenHash)
 
-    if (!claimResult.ok) return claimResult
+    if (!claimResult.ok) {
+      return claimResult
+    }
 
     if (!claimResult.value) {
       // Token was already used by a concurrent request
@@ -181,72 +177,55 @@ export class AuthService {
 
     const queries: [BatchItem<'pg'>, ...BatchItem<'pg'>[]] = [
       this.#sessionRepository.createSessionQuery(
-        { tokenHash: sessionTokenHash, userId: user.id, expiresAt },
+        { expiresAt, tokenHash: sessionTokenHash, userId: user.id },
         this.#db,
       ),
     ]
 
     if (mode === 'signup') {
-      queries.push(
-        this.#userRepository.markUserAsActiveByIdQuery(user.id, this.#db),
-      )
+      queries.push(this.#userRepository.markUserAsActiveByIdQuery(user.id, this.#db))
     }
 
     const batchResult = await tryAsync(async () => {
-      const [sessionResult] = (await this.#db.batch(queries)) as [
-        Session[],
-        ...unknown[],
-      ]
+      const [sessionResult] = (await this.#db.batch(queries)) as [Session[], ...unknown[]]
       return sessionResult[0]
     }, createDBError)
 
-    if (!batchResult.ok) return batchResult
+    if (!batchResult.ok) {
+      return batchResult
+    }
 
     const session = batchResult.value
     if (!session) {
-      return err({
-        type: 'DBEmptyReturnError',
-        error: new DBEmptyReturnError(),
-      })
+      return err({ error: new DBEmptyReturnError(), type: 'DBEmptyReturnError' })
     }
 
     const cookieValue = serializeSessionCookie({
-      expiresAt,
       cookieValue: `${session.id}.${rawToken}`,
+      expiresAt,
     })
 
     return ok(cookieValue)
   }
 
-  async #generateOtpForUser(
-    userId: User['id'],
-    email: User['email'],
-    mode: 'login' | 'signup',
-  ) {
+  async #generateOtpForUser(userId: User['id'], email: User['email'], mode: 'login' | 'signup') {
     const otp = generateOtp()
-    const tokenRes = await this.#tokenRepository.createToken(
-      userId,
-      hashToken(otp),
-      mode,
-    )
+    const tokenRes = await this.#tokenRepository.createToken(userId, hashToken(otp), mode)
 
-    if (!tokenRes.ok) return tokenRes
+    if (!tokenRes.ok) {
+      return tokenRes
+    }
 
     const template = mode === 'login' ? Login : EmailVerification
     const html = await render(createElement(template, { otp }))
     const text = toPlainText(html)
     const subject =
-      mode === 'signup'
-        ? `${config.name} Sign Up Verification`
-        : `Login for ${config.name}`
-    const emailRes = await this.#emailService.sendEmail({
-      to: email,
-      html,
-      text,
-      subject,
-    })
+      mode === 'signup' ? `${config.name} Sign Up Verification` : `Login for ${config.name}`
+    const emailRes = await this.#emailService.sendEmail({ html, subject, text, to: email })
 
-    if (!emailRes.ok) return emailRes
+    if (!emailRes.ok) {
+      return emailRes
+    }
 
     return ok()
   }

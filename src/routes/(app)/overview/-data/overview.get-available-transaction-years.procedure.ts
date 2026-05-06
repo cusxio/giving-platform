@@ -35,9 +35,7 @@ export const getAvailableTransactionYears = createServerFn()
         and(
           eq(transactions.userId, userId),
           eq(transactions.status, 'success'),
-          journey === 'start_fresh'
-            ? eq(transactions.createdAs, 'user')
-            : undefined,
+          journey === 'start_fresh' ? eq(transactions.createdAs, 'user') : undefined,
         ),
       )
       .orderBy(asc(year))

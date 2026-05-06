@@ -14,10 +14,5 @@ const alertVariants = {
 export function Alert(props: AlertProps) {
   const { className, variant = 'error', ...rest } = props
 
-  return (
-    <div
-      className={cx('p-2 text-sm', alertVariants[variant], className)}
-      {...rest}
-    />
-  )
+  return <div className={cx('p-2 text-sm', alertVariants[variant], className)} {...rest} />
 }

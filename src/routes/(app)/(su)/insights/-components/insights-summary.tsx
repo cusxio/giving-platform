@@ -20,14 +20,14 @@ export function InsightsSummary(props: InsightsSummaryProps) {
   const { totalAmount, noOfContributions, averageAmount, medianAmount } = props
 
   const currencyFormatter = useCallback(
-    (value: number) =>
-      createCurrencyFormatter({ showSymbol: true }).format(value),
+    (value: number) => createCurrencyFormatter({ showSymbol: true }).format(value),
     [],
   )
 
-  const noOfContributionsFormatter = useCallback((value: number) => {
-    return new Intl.NumberFormat().format(value)
-  }, [])
+  const noOfContributionsFormatter = useCallback(
+    (value: number) => new Intl.NumberFormat().format(value),
+    [],
+  )
 
   return (
     <ChartContainer>
@@ -43,24 +43,18 @@ export function InsightsSummary(props: InsightsSummaryProps) {
 
         <ChartSummaryItem>
           <ChartSummaryLabel>Transactions</ChartSummaryLabel>
-          <ChartSummaryValue>
-            {noOfContributionsFormatter(noOfContributions)}
-          </ChartSummaryValue>
+          <ChartSummaryValue>{noOfContributionsFormatter(noOfContributions)}</ChartSummaryValue>
         </ChartSummaryItem>
 
         <div className="grid grid-cols-2 gap-x-1">
           <ChartSummaryItem>
             <ChartSummaryLabel>Median Amount</ChartSummaryLabel>
-            <ChartSummaryValue>
-              {currencyFormatter(medianAmount)}
-            </ChartSummaryValue>
+            <ChartSummaryValue>{currencyFormatter(medianAmount)}</ChartSummaryValue>
           </ChartSummaryItem>
 
           <ChartSummaryItem>
             <ChartSummaryLabel>Average Amount</ChartSummaryLabel>
-            <ChartSummaryValue>
-              {currencyFormatter(averageAmount)}
-            </ChartSummaryValue>
+            <ChartSummaryValue>{currencyFormatter(averageAmount)}</ChartSummaryValue>
           </ChartSummaryItem>
         </div>
       </div>

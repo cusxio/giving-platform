@@ -1,7 +1,4 @@
-import {
-  ArrowLeftIcon,
-  WarningCircleIcon,
-} from '@phosphor-icons/react/dist/ssr'
+import { ArrowLeftIcon, WarningCircleIcon } from '@phosphor-icons/react/dist/ssr'
 import { Link } from '@tanstack/react-router'
 
 import { cx } from '#/styles/cx'
@@ -19,9 +16,7 @@ export function NotFound() {
         <div className="flex flex-col items-center gap-y-4">
           <WarningCircleIcon className="text-fg-warning" size={32} />
 
-          <h1 className="text-center text-xl text-fg-1 sm:text-2xl">
-            This page isn’t available
-          </h1>
+          <h1 className="text-center text-xl text-fg-1 sm:text-2xl">This page isn’t available</h1>
           <p className="text-center text-balance text-fg-muted">
             But your purpose here still is — let’s take you home.
           </p>
@@ -29,11 +24,7 @@ export function NotFound() {
 
         <Button
           render={
-            <Link
-              className={cx(buttonVariants.subtle, 'mt-4 h-10 gap-x-2')}
-              replace
-              to="/"
-            />
+            <Link className={cx(buttonVariants.subtle, 'mt-4 h-10 gap-x-2')} replace to="/" />
           }
         >
           <ArrowLeftIcon />

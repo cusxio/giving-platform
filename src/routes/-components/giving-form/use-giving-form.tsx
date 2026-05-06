@@ -27,14 +27,9 @@ interface UseGivingFormOptions {
   initialView: GivingFormView
 }
 
-export function extractFundAmounts(
-  store: GivingFormStore,
-): Record<Fund, string> {
-  const values = store.getState().values
-  return Object.fromEntries(funds.map((f) => [f, values[f]])) as Record<
-    Fund,
-    string
-  >
+export function extractFundAmounts(store: GivingFormStore): Record<Fund, string> {
+  const { values } = store.getState()
+  return Object.fromEntries(funds.map((f) => [f, values[f]])) as Record<Fund, string>
 }
 
 export function useGivingForm(
@@ -76,16 +71,11 @@ export function useGivingForm(
   const startContribution = useStartContributionMutation()
 
   const submitPayment = useCallback(async () => {
-    const values = store.getState().values
-    await handleFormSubmission(
-      values,
-      startContribution,
-      store,
-      setIsRedirecting,
-    )
+    const { values } = store.getState()
+    await handleFormSubmission(values, startContribution, store, setIsRedirecting)
   }, [store, startContribution])
 
-  return { store, view, submitPayment }
+  return { store, submitPayment, view }
 }
 
 function getFormValues(
@@ -105,17 +95,15 @@ function getInitialFormValues(
   savedPaymentToken: UseGivingFormInput['savedPaymentToken'],
   initialFunds?: Partial<Record<Fund, string>>,
 ) {
-  const fundValues = Object.fromEntries(
-    funds.map((f) => [f, initialFunds?.[f] ?? '']),
-  ) as Record<Fund, string>
+  const fundValues = Object.fromEntries(funds.map((f) => [f, initialFunds?.[f] ?? ''])) as Record<
+    Fund,
+    string
+  >
   return { ...fundValues, ...getFormValues(user, savedPaymentToken) }
 }
 
 function handleBusinessError(
-  error: Extract<
-    StartContributionResponse,
-    { type: 'BUSINESS_ERROR' }
-  >['error'],
+  error: Extract<StartContributionResponse, { type: 'BUSINESS_ERROR' }>['error'],
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
   email: string,
 ) {
@@ -126,16 +114,11 @@ function handleBusinessError(
         'email_info',
         // @ts-expect-error https://github.com/ariakit/ariakit/issues/2815
         <>
-          <span className="pr-2">👋🏻</span> We recognize this email! For security
-          reasons, please{' '}
-          <Link
-            className="font-bold underline"
-            search={{ email }}
-            to="/auth/login"
-          >
+          <span className="pr-2">👋🏻</span> We recognize this email! For security reasons, please{' '}
+          <Link className="font-bold underline" search={{ email }} to="/auth/login">
             log in
           </Link>{' '}
-          to give. We'll send you a one-time code to verify.
+          to give. We’ll send you a one-time code to verify.
         </>,
       )
       break
@@ -149,10 +132,7 @@ function handleBusinessError(
     }
 
     case 'USER_MISMATCH': {
-      store.setError(
-        store.names.email,
-        'This email cannot be used while you’re logged in.',
-      )
+      store.setError(store.names.email, 'This email cannot be used while you’re logged in.')
       break
     }
 
@@ -172,10 +152,10 @@ async function handleFormSubmission(
 
   try {
     const res = await startContribution.mutateAsync({
+      contributions: contributionAmounts,
       email,
       firstName,
       lastName,
-      contributions: contributionAmounts,
       token: token === __NORMAL_CHECKOUT__ ? undefined : token,
     })
 
@@ -195,7 +175,7 @@ function handleSubmissionResponse(
   res: StartContributionResponse,
   email: string,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
-) {
+): boolean {
   switch (res.type) {
     case 'BUSINESS_ERROR': {
       handleBusinessError(res.error, store, email)
@@ -208,7 +188,7 @@ function handleSubmissionResponse(
     }
 
     case 'SUCCESS': {
-      window.location.replace(res.value.redirectURL)
+      globalThis.location.replace(res.value.redirectURL)
       return true
     }
 
@@ -221,6 +201,8 @@ function handleSubmissionResponse(
       assertExhaustive(res)
     }
   }
+
+  return false
 }
 
 function handleValidationErrors(

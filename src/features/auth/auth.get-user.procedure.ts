@@ -1,9 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import type {
-  AuthErrorResponse,
-  SuccessResponse,
-} from '#/core/procedure-response-types'
+import type { AuthErrorResponse, SuccessResponse } from '#/core/procedure-response-types'
 import type { User, UserSettings } from '#/db/schema'
 import {
   dbMiddleware,
@@ -16,20 +13,13 @@ export type GetUserResponse =
   | SuccessResponse<{ user: User; userSettings: UserSettings }>
 
 export const getUser = createServerFn()
-  .middleware([
-    dbMiddleware,
-    userRepositoryMiddleware,
-    userSettingsRepositoryMiddleware,
-  ])
+  .middleware([dbMiddleware, userRepositoryMiddleware, userSettingsRepositoryMiddleware])
   .handler(async ({ context }): Promise<GetUserResponse> => {
     const { user, db, userRepository, userSettingsRepository, logger } = context
 
     const userId = user?.id
     if (userId === undefined) {
-      logger.debug(
-        { event: 'auth.get_user.guest' },
-        'No session found, returning AUTH_ERROR',
-      )
+      logger.debug({ event: 'auth.get_user.guest' }, 'No session found, returning AUTH_ERROR')
       return { type: 'AUTH_ERROR' }
     }
 
@@ -50,10 +40,7 @@ export const getUser = createServerFn()
       type: 'SUCCESS',
       value: {
         user: foundUser,
-        userSettings: userSettingsResult[0] ?? {
-          userId: foundUser.id,
-          privacyMode: false,
-        },
+        userSettings: userSettingsResult[0] ?? { privacyMode: false, userId: foundUser.id },
       },
     }
   })

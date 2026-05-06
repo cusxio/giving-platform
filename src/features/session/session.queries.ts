@@ -5,7 +5,7 @@ import { useSuspenseQueryDeferred } from '#/hooks'
 import { getUser } from '../auth/auth.get-user.procedure'
 
 export function createUserQueryOptions() {
-  return queryOptions({ queryKey: ['auth-user'], queryFn: () => getUser() })
+  return queryOptions({ queryFn: () => getUser(), queryKey: ['auth-user'] })
 }
 
 export function useAuthUser() {
@@ -20,10 +20,7 @@ export function useAuthUser() {
 
 export function useOptionalAuthUser() {
   const { data } = useSuspenseQueryDeferred(createUserQueryOptions())
+  const authUser = data.type === 'SUCCESS' ? data.value : undefined
 
-  if (data.type !== 'SUCCESS') {
-    return
-  }
-
-  return data.value
+  return authUser
 }

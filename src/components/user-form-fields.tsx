@@ -11,9 +11,7 @@ interface UserFormFieldsProps {
 }
 
 const alert = <Alert className="mt-3 text-balance empty:hidden" />
-const alertInfo = (
-  <Alert className="mt-3 text-balance empty:hidden" variant="info" />
-)
+const alertInfo = <Alert className="mt-3 text-balance empty:hidden" variant="info" />
 
 export function UserFormFields(props: UserFormFieldsProps) {
   const { store, emailReadOnly = false, nameReadOnly = false } = props

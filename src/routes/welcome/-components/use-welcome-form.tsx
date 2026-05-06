@@ -3,10 +3,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { User } from '#/db/schema'
+import type { User } from '#/db/schema'
 import { useUpdateUserMutation } from '#/features/user/user.mutations'
 
-import { getWelcomeData } from '../-data/welcome.get-data.procedure'
+import type { getWelcomeData } from '../-data/welcome.get-data.procedure'
 
 export function useWelcomeForm(params: {
   guestTransactionExists: boolean
@@ -15,10 +15,10 @@ export function useWelcomeForm(params: {
   const { user, guestTransactionExists } = params
   const store = useFormStore({
     defaultValues: {
+      __error: '',
+      email: user.email,
       firstName: user.firstName ?? '',
       lastName: user.lastName ?? '',
-      email: user.email,
-      __error: '',
     },
   })
 
@@ -28,10 +28,7 @@ export function useWelcomeForm(params: {
   })
 
   const setServerError = useCallback(() => {
-    store.setError(
-      store.names.__error,
-      'Something went wrong on our end. Please try again later.',
-    )
+    store.setError(store.names.__error, 'Something went wrong on our end. Please try again later.')
   }, [store])
 
   const updateUser = useUpdateUserMutation()
@@ -42,24 +39,31 @@ export function useWelcomeForm(params: {
         {
           firstName: state.values.firstName,
           lastName: state.values.lastName,
-          // undefined because it will be handled in the following flow
+          // Undefined because it will be handled in the following flow
           journey: guestTransactionExists ? undefined : 'start_fresh',
         },
         {
           onSuccess(data) {
-            if (data?.type !== 'SUCCESS') return
+            if (data?.type !== 'SUCCESS') {
+              return
+            }
 
-            queryClient.setQueryData<
-              Awaited<ReturnType<typeof getWelcomeData>>
-            >(['welcome'], (prev) => {
-              if (!prev) return
-              return { ...prev, user: { ...prev.user, ...data.value.user } }
-            })
+            queryClient.setQueryData<Awaited<ReturnType<typeof getWelcomeData>>>(
+              ['welcome'],
+              (prev) => {
+                if (!prev) {
+                  return prev
+                }
+                return { ...prev, user: { ...prev.user, ...data.value.user } }
+              },
+            )
           },
         },
       )
 
-      if (!res) return
+      if (!res) {
+        return
+      }
 
       switch (res.type) {
         case 'SERVER_ERROR': {
@@ -93,5 +97,5 @@ export function useWelcomeForm(params: {
 
   const submitting = useStoreState(store, 'submitting')
 
-  return { store, submitting, status }
+  return { status, store, submitting }
 }

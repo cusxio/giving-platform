@@ -1,17 +1,15 @@
+import type { Context } from '@opentelemetry/api'
 import {
-  context,
-  Context,
-  propagation,
   ROOT_CONTEXT,
   SpanKind,
   SpanStatusCode,
+  context,
+  propagation,
   trace,
 } from '@opentelemetry/api'
-import { createStartHandler } from '@tanstack/react-start/server'
+import type { createStartHandler } from '@tanstack/react-start/server'
 
-export function createTracedHandler<
-  T extends ReturnType<typeof createStartHandler>,
->(handler: T) {
+export function createTracedHandler<T extends ReturnType<typeof createStartHandler>>(handler: T) {
   return async function tracedHandler(...args: Parameters<T>) {
     const [request] = args
     const url = new URL(request.url)
@@ -23,14 +21,14 @@ export function createTracedHandler<
     return tracer.startActiveSpan(
       spanName,
       {
-        kind: SpanKind.SERVER,
         attributes: {
           'http.request.method': request.method,
-          'url.path': url.pathname,
-          'url.full': request.url,
           'tanstack.type': 'request',
+          'url.full': request.url,
+          'url.path': url.pathname,
           ...(url.search && { 'url.search': url.search }),
         },
+        kind: SpanKind.SERVER,
       },
       parentContext,
       async (span) => {
@@ -42,15 +40,9 @@ export function createTracedHandler<
           span.setAttribute('http.response.status_code', response.status)
 
           if (response.status >= 500) {
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: `HTTP ${response.status}`,
-            })
+            span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${response.status}` })
           } else if (response.status >= 400) {
-            span.setStatus({
-              code: SpanStatusCode.UNSET,
-              message: `HTTP ${response.status}`,
-            })
+            span.setStatus({ code: SpanStatusCode.UNSET, message: `HTTP ${response.status}` })
           } else {
             span.setStatus({ code: SpanStatusCode.OK })
           }
@@ -84,9 +76,15 @@ function extractContextFromRequest(request: Request): Context {
   const tracestate = request.headers.get('tracestate')
   const baggage = request.headers.get('baggage')
 
-  if (traceparent !== null) carrier.traceparent = traceparent
-  if (tracestate !== null) carrier.tracestate = tracestate
-  if (baggage !== null) carrier.baggage = baggage
+  if (traceparent !== null) {
+    carrier.traceparent = traceparent
+  }
+  if (tracestate !== null) {
+    carrier.tracestate = tracestate
+  }
+  if (baggage !== null) {
+    carrier.baggage = baggage
+  }
 
   // Return ROOT_CONTEXT if no trace headers present
   if (Object.keys(carrier).length === 0) {

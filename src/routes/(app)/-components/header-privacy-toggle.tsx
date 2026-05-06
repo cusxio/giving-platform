@@ -2,7 +2,7 @@ import { EyeIcon, EyeSlashIcon } from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
 import { Button } from '#/components/ui/button'
-import { UserSettings } from '#/db/schema'
+import type { UserSettings } from '#/db/schema'
 import { useUpdatePrivacyModeMutation } from '#/features/user/user.mutations'
 
 interface HeaderPrivacyToggleProps {
@@ -22,10 +22,7 @@ export function HeaderPrivacyToggle(props: HeaderPrivacyToggleProps) {
         togglePrivacyMode.mutate(!privacyMode)
       }}
     >
-      {createElement(privacyMode ? EyeSlashIcon : EyeIcon, {
-        weight: 'duotone',
-        size: 22,
-      })}
+      {createElement(privacyMode ? EyeSlashIcon : EyeIcon, { size: 22, weight: 'duotone' })}
     </Button>
   )
 }

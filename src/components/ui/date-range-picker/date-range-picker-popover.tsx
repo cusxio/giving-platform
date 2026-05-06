@@ -2,11 +2,7 @@ import type { PopoverStore } from '@ariakit/react'
 import { Popover, PopoverArrow } from '@ariakit/react'
 import { CaretLeftIcon, CaretRightIcon } from '@phosphor-icons/react/dist/ssr'
 import { useCallback } from 'react'
-import type {
-  ChevronProps,
-  NextMonthButtonProps,
-  PropsRange,
-} from 'react-day-picker'
+import type { ChevronProps, NextMonthButtonProps, PropsRange } from 'react-day-picker'
 import { DayPicker } from 'react-day-picker'
 
 import { cx } from '#/styles/cx'
@@ -32,9 +28,7 @@ export function DateRangePickerPopover(props: DateRangePickerPopoverProps) {
     [onChange],
   )
 
-  const handlePresetChange = useCallback<
-    DateRangePickerPresetsProps['onChange']
-  >(
+  const handlePresetChange = useCallback<DateRangePickerPresetsProps['onChange']>(
     (nextRange) => {
       onChange(nextRange)
     },
@@ -61,10 +55,7 @@ export function DateRangePickerPopover(props: DateRangePickerPopoverProps) {
         classNames={{
           root: cx('relative'),
           nav: cx('absolute inset-x-0 top-1', 'flex justify-between'),
-          month_caption: cx(
-            'flex h-10 items-center justify-center',
-            'text-sm font-medium',
-          ),
+          month_caption: cx('flex h-10 items-center justify-center', 'text-sm font-medium'),
           //
           range_start: cx('range_start'),
           range_end: cx('range_end'),
@@ -76,7 +67,7 @@ export function DateRangePickerPopover(props: DateRangePickerPopoverProps) {
             'group-data-[outside=true]:text-fg-subtle',
             'text-fg-1',
 
-            // hover
+            // Hover
             String.raw`group-[:not(.range\_start):not(.range\_end):not(.range\_middle)]:hover:bg-elevated`,
             String.raw`group-[:not(.range\_start):not(.range\_end):not(.range\_middle)]:hover:text-fg-1`,
 
@@ -95,9 +86,9 @@ export function DateRangePickerPopover(props: DateRangePickerPopoverProps) {
           weeks: cx('grid gap-y-2'),
         }}
         components={{
-          PreviousMonthButton: DateRangePickerMonthButton,
-          NextMonthButton: DateRangePickerMonthButton,
           Chevron: DateRangePickerChevron,
+          NextMonthButton: DateRangePickerMonthButton,
+          PreviousMonthButton: DateRangePickerMonthButton,
         }}
         footer={<DateRangePickerPresets onChange={handlePresetChange} />}
         mode="range"

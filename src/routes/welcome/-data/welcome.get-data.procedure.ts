@@ -1,27 +1,23 @@
 import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-// import {
+// Import {
 //   AuthErrorResponse,
 //   SuccessResponse,
 // } from '#/core/procedure-response-types'
-// import { User } from '#/db/schema'
+// Import { User } from '#/db/schema'
 import {
   dbMiddleware,
   transactionRepositoryMiddleware,
   userRepositoryMiddleware,
 } from '#/server/middleware'
 
-// type GetWelcomeDataResponse =
+// Type GetWelcomeDataResponse =
 //   | AuthErrorResponse
 //   | SuccessResponse<{ exists: boolean; user: User }>
 
 export const getWelcomeData = createServerFn()
-  .middleware([
-    dbMiddleware,
-    userRepositoryMiddleware,
-    transactionRepositoryMiddleware,
-  ])
+  .middleware([dbMiddleware, userRepositoryMiddleware, transactionRepositoryMiddleware])
   .handler(async ({ context }) => {
     const { db, userRepository, transactionRepository, user } = context
     const userId = user?.id
@@ -39,5 +35,5 @@ export const getWelcomeData = createServerFn()
       throw notFound()
     }
 
-    return { user: foundUser, guestTransactionExists: exists ? true : false }
+    return { guestTransactionExists: Boolean(exists), user: foundUser }
   })

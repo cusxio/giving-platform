@@ -5,7 +5,7 @@ import { Compile } from 'typebox/compile'
 import { SESSION_COOKIE_NAME } from './constants'
 
 export function clearSessionCookie() {
-  return serializeSessionCookie({ expiresAt: new Date(0), cookieValue: '' })
+  return serializeSessionCookie({ cookieValue: '', expiresAt: new Date(0) })
 }
 
 export function serializeSessionCookie({
@@ -26,7 +26,7 @@ export function serializeSessionCookie({
 
 export const cookieValueSchema = Compile(
   Type.Object({
-    sessionId: Type.String({ minLength: 21, maxLength: 21 }),
-    rawToken: Type.String({ minLength: 21, maxLength: 21 }),
+    rawToken: Type.String({ maxLength: 21, minLength: 21 }),
+    sessionId: Type.String({ maxLength: 21, minLength: 21 }),
   }),
 )

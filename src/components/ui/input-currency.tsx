@@ -2,27 +2,25 @@ import type { FormInputProps } from '@ariakit/react'
 import { FormInput } from '@ariakit/react'
 import { useMemo } from 'react'
 import type { CurrencyInputProps } from 'react-currency-input-field'
-import CurrencyInput from 'react-currency-input-field'
+import { CurrencyInput } from 'react-currency-input-field'
 
 import { createCurrencyFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
-export interface InputCurrencyProps extends Pick<
-  FormInputProps,
-  'autoComplete' | 'name'
-> {
+export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' | 'name'> {
   onValueChange: NonNullable<CurrencyInputProps['onValueChange']>
 }
 
 export function InputCurrency(props: InputCurrencyProps) {
   const { name, onValueChange, autoComplete } = props
-  const currency = useMemo(() => {
-    return (
+  const currency = useMemo(
+    () =>
       createCurrencyFormatter({ showSymbol: true })
         .formatToParts(1)
-        .find((p) => p.type === 'currency')?.value ?? 'RM'
-    )
-  }, [])
+        .find((p) => p.type === 'currency')?.value ?? 'RM',
+    [],
+  )
+
   return (
     <div className="relative">
       <div

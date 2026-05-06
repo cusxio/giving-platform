@@ -10,15 +10,13 @@ import { Success } from './-components/success'
 import { createTransactionQueryOptions } from './-transaction-receipt.queries'
 
 export const Route = createFileRoute('/transaction/receipt/$transactionId')({
+  component: RouteComponent,
+
   async loader({ params, context }) {
     const { queryClient } = context
     const { transactionId } = params
-    await queryClient.ensureQueryData(
-      createTransactionQueryOptions(transactionId),
-    )
+    await queryClient.ensureQueryData(createTransactionQueryOptions(transactionId))
   },
-
-  component: RouteComponent,
 })
 
 function RouteComponent() {
@@ -33,17 +31,13 @@ function RouteComponent() {
 
       <div className="relative flex shrink-0 grow flex-col items-center justify-center px-4">
         <div className="mx-auto max-w-3xl">
-          {transaction.status === 'success' && (
-            <Success transaction={transaction} user={user} />
-          )}
+          {transaction.status === 'success' && <Success transaction={transaction} user={user} />}
 
           {transaction.status === 'failed' && (
             <Failed payment={payment ?? undefined} transaction={transaction} />
           )}
 
-          {transaction.status === 'pending' && (
-            <Pending transaction={transaction} />
-          )}
+          {transaction.status === 'pending' && <Pending transaction={transaction} />}
         </div>
       </div>
 

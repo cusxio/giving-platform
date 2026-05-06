@@ -1,4 +1,4 @@
 export function assertExhaustive(x: never): never {
-  // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
+  // oxlint-disable-next-line typescript/restrict-template-expressions
   throw new Error(`Unhandled case: ${x}`)
 }

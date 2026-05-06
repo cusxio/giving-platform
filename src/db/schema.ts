@@ -29,15 +29,15 @@ const fundId = () => varchar({ length: 12 })
 export const funds = pgTable(
   'funds',
   {
+    createdAt: timestamptz()
+      .default(sql`now()`)
+      .notNull(),
+    description: text(),
     id: fundId()
       .primaryKey()
       .$defaultFn(() => createId(12)),
     name: varchar({ length: 254 }).notNull(),
-    description: text(),
     primary: boolean().default(false).notNull(),
-    createdAt: timestamptz()
-      .default(sql`now()`)
-      .notNull(),
     updatedAt: updatedAt(),
   },
   (table) => [
@@ -97,10 +97,10 @@ export type UserInsert = InferInsertModel<typeof users>
 
 // User settings
 export const userSettings = pgTable('user_settings', {
+  privacyMode: boolean().default(false).notNull(),
   userId: userId()
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
-  privacyMode: boolean().default(false).notNull(),
 })
 export type UserSettings = InferSelectModel<typeof userSettings>
 
@@ -113,6 +113,11 @@ const transactionId = () => varchar({ length: 21 })
 export const transactions = pgTable(
   'transactions',
   {
+    amount: integer().notNull(),
+    createdAs: text('created_as', { enum: ['user', 'guest'] }).notNull(),
+    createdAt: timestamptz()
+      .default(sql`now()`)
+      .notNull(),
     id: transactionId()
       .primaryKey()
       /**
@@ -121,18 +126,13 @@ export const transactions = pgTable(
        * @see eGHL Merchant Integration Guide v2.9w, Section 2.1, Field `PaymentID`.
        */
       .$defaultFn(() => createId(20)),
-    amount: integer().notNull(),
     status: text({ enum: ['pending', 'success', 'failed'] })
       .default('pending')
       .notNull(),
+    updatedAt: updatedAt(),
     userId: userId()
       .references(() => users.id, { onDelete: 'restrict' })
       .notNull(),
-    createdAt: timestamptz()
-      .default(sql`now()`)
-      .notNull(),
-    updatedAt: updatedAt(),
-    createdAs: text('created_as', { enum: ['user', 'guest'] }).notNull(),
   },
   (table) => [
     // WHERE userId = ? AND status = ? ORDER BY createdAt - overview, transactions list
@@ -149,15 +149,9 @@ export const transactions = pgTable(
       table.createdAt,
     ),
     // WHERE status = ? AND createdAt BETWEEN - insights, reports, cron
-    index('transactions_status_created_at_idx').on(
-      table.status,
-      table.createdAt,
-    ),
+    index('transactions_status_created_at_idx').on(table.status, table.createdAt),
     // WHERE userId = ? AND createdAs = ? - guest transaction check
-    index('transactions_user_id_created_as_idx').on(
-      table.userId,
-      table.createdAs,
-    ),
+    index('transactions_user_id_created_as_idx').on(table.userId, table.createdAs),
   ],
 )
 
@@ -166,13 +160,13 @@ export type Transaction = InferSelectModel<typeof transactions>
 export const transactionItems = pgTable(
   'transaction_items',
   {
-    id: serial().primaryKey(),
     amount: integer().notNull(),
-    transactionId: transactionId()
-      .references(() => transactions.id, { onDelete: 'cascade' })
-      .notNull(),
     fundId: fundId()
       .references(() => funds.id, { onDelete: 'restrict' })
+      .notNull(),
+    id: serial().primaryKey(),
+    transactionId: transactionId()
+      .references(() => transactions.id, { onDelete: 'cascade' })
       .notNull(),
   },
   (table) => [
@@ -190,19 +184,19 @@ export const transactionItems = pgTable(
 export const payments = pgTable(
   'payments',
   {
-    id: serial().primaryKey(),
-    transactionId: transactionId()
-      .references(() => transactions.id, { onDelete: 'cascade' })
+    createdAt: timestamptz()
+      .default(sql`now()`)
       .notNull(),
+    id: serial().primaryKey(),
     message: varchar({ length: 255 }),
+    paidAt: timestamptz(),
     paymentMethod: varchar({ length: 10 }),
     provider: text({ enum: ['eghl', 'rm'] })
       .default('eghl')
       .notNull(),
     providerTransactionId: text(),
-    paidAt: timestamptz(),
-    createdAt: timestamptz()
-      .default(sql`now()`)
+    transactionId: transactionId()
+      .references(() => transactions.id, { onDelete: 'cascade' })
       .notNull(),
     updatedAt: updatedAt(),
   },
@@ -219,7 +213,7 @@ export const savedPaymentMethods = pgTable(
   {
     id: serial().primaryKey(),
     token: varchar({ length: 50 }).notNull(),
-    tokenType: varchar({ length: 3, enum: ['OCP'] }).notNull(),
+    tokenType: varchar({ enum: ['OCP'], length: 3 }).notNull(),
     userId: userId()
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
@@ -259,18 +253,18 @@ const sessionId = () => varchar({ length: 21 })
 export const sessions = pgTable(
   'sessions',
   {
-    id: sessionId()
-      .primaryKey()
-      .$defaultFn(() => createId(21)),
-    tokenHash: varchar({ length: 255 }).notNull(),
-    userId: userId()
-      .references(() => users.id, { onDelete: 'cascade' })
-      .notNull(),
     createdAt: timestamptz()
       .default(sql`now()`)
       .notNull(),
     expiresAt: timestamptz().notNull(),
+    id: sessionId()
+      .primaryKey()
+      .$defaultFn(() => createId(21)),
+    tokenHash: varchar({ length: 255 }).notNull(),
     updatedAt: updatedAt(),
+    userId: userId()
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
   },
   (table) => [
     // WHERE tokenHash = ? - session validation
@@ -284,24 +278,21 @@ export type SessionInsert = InferInsertModel<typeof sessions>
 export const tokens = pgTable(
   'tokens',
   {
-    id: serial().primaryKey(),
-    tokenHash: varchar({ length: 255 }).notNull(),
-    userId: userId()
-      .references(() => users.id, { onDelete: 'cascade' })
-      .notNull(),
-    mode: text({ enum: ['login', 'signup'] }).notNull(),
     createdAt: timestamptz()
       .default(sql`now()`)
       .notNull(),
     expiresAt: timestamptz().notNull(),
+    id: serial().primaryKey(),
+    mode: text({ enum: ['login', 'signup'] }).notNull(),
+    tokenHash: varchar({ length: 255 }).notNull(),
     usedAt: timestamptz(),
+    userId: userId()
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
   },
   (table) => [
     // WHERE tokenHash = ? - mark token as used (unique per user for OTP collision safety)
-    uniqueIndex('tokens_token_hash_user_id_idx').on(
-      table.tokenHash,
-      table.userId,
-    ),
+    uniqueIndex('tokens_token_hash_user_id_idx').on(table.tokenHash, table.userId),
     // WHERE userId = ? AND expiresAt > ? AND usedAt IS NULL ORDER BY createdAt - OTP verification
     index('tokens_user_id_expires_at_used_at_created_at_idx').on(
       table.userId,
@@ -319,23 +310,20 @@ export type TokenInsert = InferInsertModel<typeof tokens>
 export const rateLimitAttempts = pgTable(
   'rate_limit_attempts',
   {
-    id: serial().primaryKey(),
-    identifier: varchar({ length: 255 }).notNull(),
     action: text({ enum: ['otp_request', 'otp_verify'] }).notNull(),
     attemptCount: integer().default(1).notNull(),
-    windowStartedAt: timestamptz()
+    id: serial().primaryKey(),
+    identifier: varchar({ length: 255 }).notNull(),
+    lastAttemptAt: timestamptz()
       .default(sql`now()`)
       .notNull(),
-    lastAttemptAt: timestamptz()
+    windowStartedAt: timestamptz()
       .default(sql`now()`)
       .notNull(),
   },
   (table) => [
     // WHERE identifier = ? AND action = ? - rate limit check
-    uniqueIndex('rate_limit_attempts_identifier_action_idx').on(
-      table.identifier,
-      table.action,
-    ),
+    uniqueIndex('rate_limit_attempts_identifier_action_idx').on(table.identifier, table.action),
   ],
 )
 

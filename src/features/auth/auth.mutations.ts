@@ -20,16 +20,12 @@ export function useLogoutMutation() {
 
 export function useRequestOtpMutation() {
   const $requestOtp = useServerFn(requestOtp)
-  return useMutation({
-    mutationFn: (input: RequestOtpInput) => $requestOtp({ data: input }),
-  })
+  return useMutation({ mutationFn: (input: RequestOtpInput) => $requestOtp({ data: input }) })
 }
 
 export function useVerifyOtpMutation() {
   const $verifyOtp = useServerFn(verifyOtp)
-  return useMutation({
-    mutationFn: (input: VerifyOtpInput) => $verifyOtp({ data: input }),
-  })
+  return useMutation({ mutationFn: (input: VerifyOtpInput) => $verifyOtp({ data: input }) })
 }
 
 export type { RequestOtpResponse } from './auth.request-otp.procedure'

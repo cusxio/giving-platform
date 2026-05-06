@@ -96,13 +96,13 @@ export const EghlPaymentResponseSchema = Compile(
     PaymentID: Type.String({ minLength: 1 }),
     OrderNumber: Type.String(),
     Amount: Type.String({
-      pattern: String.raw`^\d+\.\d{2}$`,
       description: 'Payment amount in major currency unit, e.g., 123.00',
+      pattern: String.raw`^\d+\.\d{2}$`,
     }),
-    CurrencyCode: Type.String({ minLength: 3, maxLength: 3 }),
+    CurrencyCode: Type.String({ maxLength: 3, minLength: 3 }),
     HashValue: Type.String({ minLength: 1 }),
     HashValue2: Type.String({ minLength: 1 }),
-    TxnID: Type.String(), // eGHL's ID, can be empty on failure/cancellation
+    TxnID: Type.String(), // EGHL's ID, can be empty on failure/cancellation
     TxnStatus: Type.Enum(EghlTxnStatus),
     TxnMessage: Type.String(),
 
@@ -112,12 +112,8 @@ export const EghlPaymentResponseSchema = Compile(
     AuthCode: Type.Optional(Type.String()),
     IssuingBank: Type.Optional(Type.String()),
     BankRefNo: Type.Optional(Type.String()),
-    RespTime: Type.Optional(
-      Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' }),
-    ),
-    RespTime2: Type.Optional(
-      Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' }),
-    ),
+    RespTime: Type.Optional(Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' })),
+    RespTime2: Type.Optional(Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' })),
 
     // OCP Fields
     Token: Type.Optional(Type.String()),
@@ -139,9 +135,9 @@ export const EghlQueryResponseSchema = Compile(
   Type.Intersect([
     EghlPaymentResponseSchema,
     Type.Object({
-      TxnExists: Type.Enum(EghlTxnExists),
       QueryDesc: Type.Optional(Type.String()),
       TotalRefundAmount: Type.Optional(Type.String()),
+      TxnExists: Type.Enum(EghlTxnExists),
     }),
   ]),
 )

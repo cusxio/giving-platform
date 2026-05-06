@@ -2,6 +2,8 @@ import { sha256 } from '@oslojs/crypto/sha2'
 import { encodeHexLowerCase } from '@oslojs/encoding'
 import { describe, expect, it, vi } from 'vitest'
 
+import type * as Envvars from '#/envvars'
+
 import type { EghlPaymentResponse } from './eghl.schema'
 import { EghlTxnStatus } from './eghl.schema'
 
@@ -12,7 +14,7 @@ const mockedEnv = vi.hoisted(() => ({
   EGHL_URL: 'https://eghl.test/pay',
 }))
 
-vi.mock('#/envvars', () => mockedEnv)
+vi.mock<typeof Envvars>(import('#/envvars'), () => mockedEnv)
 
 const { EghlService } = await import('./eghl.service')
 
@@ -24,25 +26,23 @@ const hashValue = (value: string) => {
 
 const createService = () => new EghlService()
 
-const buildResponse = (
-  overrides: Partial<EghlPaymentResponse> = {},
-): EghlPaymentResponse => {
+const buildResponse = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymentResponse => {
   const base: EghlPaymentResponse = {
-    TransactionType: 'SALE',
-    PymtMethod: 'ANY',
-    ServiceID: mockedEnv.EGHL_SERVICE_ID,
-    PaymentID: 'txn_abc123',
-    OrderNumber: 'txn_abc123',
     Amount: '50.00',
+    AuthCode: 'AUTH123',
     CurrencyCode: 'MYR',
     HashValue: 'unused',
     HashValue2: '',
-    TxnID: 'CIVtxn_abc123',
-    TxnStatus: EghlTxnStatus.Success,
-    TxnMessage: 'Transaction Successful',
-    AuthCode: 'AUTH123',
+    OrderNumber: 'txn_abc123',
     Param6: '',
     Param7: '',
+    PaymentID: 'txn_abc123',
+    PymtMethod: 'ANY',
+    ServiceID: mockedEnv.EGHL_SERVICE_ID,
+    TransactionType: 'SALE',
+    TxnID: 'CIVtxn_abc123',
+    TxnMessage: 'Transaction Successful',
+    TxnStatus: EghlTxnStatus.Success,
   }
 
   const response = { ...base, ...overrides }
@@ -68,9 +68,10 @@ const buildResponse = (
   return { ...response, HashValue2: signature }
 }
 
-describe('EghlService', () => {
+describe('eghlService', () => {
   describe('createPaymentRequestURL', () => {
     it('builds a signed payment request that eGHL accepts', () => {
+      expect.hasAssertions()
       const service = createService()
 
       const url = service.createPaymentRequestURL({
@@ -88,15 +89,17 @@ describe('EghlService', () => {
       const expectedReturnURL = `${mockedEnv.BASE_URL}/api/eghl/return`
       const expectedCallbackURL = `${mockedEnv.BASE_URL}/api/eghl/callback`
 
-      expect(params.get('ServiceID')).toBe(mockedEnv.EGHL_SERVICE_ID)
-      expect(params.get('PaymentID')).toBe('txn_001')
-      expect(params.get('OrderNumber')).toBe('txn_001')
-      expect(params.get('Amount')).toBe('99.50')
-      expect(params.get('CurrencyCode')).toBe('MYR')
-      expect(params.get('CustName')).toBe('Jane Doe')
-      expect(params.get('CustEmail')).toBe('jane@example.com')
-      expect(params.get('MerchantReturnURL')).toBe(expectedReturnURL)
-      expect(params.get('MerchantCallBackURL')).toBe(expectedCallbackURL)
+      expect(Object.fromEntries(params)).toMatchObject({
+        Amount: '99.50',
+        CurrencyCode: 'MYR',
+        CustEmail: 'jane@example.com',
+        CustName: 'Jane Doe',
+        MerchantCallBackURL: expectedCallbackURL,
+        MerchantReturnURL: expectedReturnURL,
+        OrderNumber: 'txn_001',
+        PaymentID: 'txn_001',
+        ServiceID: mockedEnv.EGHL_SERVICE_ID,
+      })
 
       const expectedHash = hashValue(
         [
@@ -123,6 +126,7 @@ describe('EghlService', () => {
 
   describe('verifyPaymentResponse', () => {
     it('returns true when the response is signed by eGHL', () => {
+      expect.hasAssertions()
       const service = createService()
       const response = buildResponse()
 
@@ -130,6 +134,7 @@ describe('EghlService', () => {
     })
 
     it('returns false when the signature is missing', () => {
+      expect.hasAssertions()
       const service = createService()
       const response = buildResponse({ HashValue2: '' })
 
@@ -137,6 +142,7 @@ describe('EghlService', () => {
     })
 
     it('returns false when the signature does not match', () => {
+      expect.hasAssertions()
       const service = createService()
       const response = buildResponse({ HashValue2: 'not-valid' })
 

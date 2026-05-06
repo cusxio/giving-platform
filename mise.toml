@@ -1,2 +1,6 @@
 [tools]
-bun = "latest"
+node = '24'
+
+[env]
+MOON_TOOLCHAIN_FORCE_GLOBALS = true
+_.path = ['{{config_root}}/node_modules/.bin']

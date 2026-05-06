@@ -11,18 +11,17 @@ import { cx } from '#/styles/cx'
 import { useWelcomeForm } from './use-welcome-form'
 import { useWelcomeViewStore } from './use-welcome-view-store'
 
-type WelcomeFormProps = Parameters<typeof useWelcomeForm>[0] & {}
+type WelcomeFormProps = Parameters<typeof useWelcomeForm>[0]
 
 export function WelcomeForm(props: WelcomeFormProps) {
   const { user, guestTransactionExists } = props
-  const { store, submitting, status } = useWelcomeForm({
-    user,
-    guestTransactionExists,
-  })
+  const { store, submitting, status } = useWelcomeForm({ guestTransactionExists, user })
 
   const setView = useWelcomeViewStore((state) => state.setView)
   useEffect(() => {
-    if (status === 'idle') return
+    if (status === 'idle') {
+      return
+    }
 
     setView(status)
   }, [setView, status])
@@ -31,10 +30,7 @@ export function WelcomeForm(props: WelcomeFormProps) {
     <>
       <h1 className="text-center text-3xl">Confirm your details</h1>
 
-      <Separator
-        className="h-px w-3/4 border-border"
-        orientation="horizontal"
-      />
+      <Separator className="h-px w-3/4 border-border" orientation="horizontal" />
 
       <Form
         className="grid w-full max-w-sm gap-y-4"
@@ -42,10 +38,7 @@ export function WelcomeForm(props: WelcomeFormProps) {
         store={store}
         validateOnBlur={false}
       >
-        <FormError
-          name={store.names.__error}
-          render={<Alert className="empty:hidden" />}
-        />
+        <FormError name={store.names.__error} render={<Alert className="empty:hidden" />} />
 
         <UserFormFields emailReadOnly store={store} />
 

@@ -5,17 +5,14 @@ import { Area, AreaChart as RechartAreaChart, Tooltip } from 'recharts'
 import type { CartesianChartProps } from 'recharts/types/util/types'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'
-import { clientTz, TZDate } from '#/core/date'
+import { TZDate, clientTz } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 
 import { CartesianGrid } from './cartesian-grid'
 import { XAxis } from './x-axis'
 import { YAXis } from './y-axis'
 
-interface AreaChartProps extends Omit<
-  CartesianChartProps,
-  'data' | 'margin' | 'responsive'
-> {
+interface AreaChartProps extends Omit<CartesianChartProps, 'data' | 'margin' | 'responsive'> {
   data: Data[]
   privacyMode: boolean
 }
@@ -25,24 +22,20 @@ interface Data {
   day: string
 }
 
-type TooltipPayload = { payload: Data }[]
+type AreaTooltipPayload = readonly { payload: Data }[]
 
 export function AreaChart(props: AreaChartProps) {
   const { privacyMode, data, ...rest } = props
   const yTickFormatter = useCallback(
-    (value: number) =>
-      createCurrencyFormatter({ notation: 'compact' }).format(
-        value,
-        privacyMode,
-      ),
+    (value: number) => createCurrencyFormatter({ notation: 'compact' }).format(value, privacyMode),
     [privacyMode],
   )
 
-  const xTickFormatter = useCallback((value: string) => {
-    return createDateFormatter({ month: 'short', year: '2-digit' }).format(
-      new TZDate(value, clientTz),
-    )
-  }, [])
+  const xTickFormatter = useCallback(
+    (value: string) =>
+      createDateFormatter({ month: 'short', year: '2-digit' }).format(new TZDate(value, clientTz)),
+    [],
+  )
 
   return (
     <ChartContainer>
@@ -50,7 +43,7 @@ export function AreaChart(props: AreaChartProps) {
       {data.length >= 2 ? (
         <RechartAreaChart
           data={data}
-          margin={{ left: 0, top: 0, bottom: 0, right: 0 }}
+          margin={{ bottom: 0, left: 0, right: 0, top: 0 }}
           responsive
           {...rest}
         >
@@ -72,11 +65,7 @@ export function AreaChart(props: AreaChartProps) {
             </linearGradient>
           </defs>
 
-          <XAxis
-            dataKey="day"
-            interval="equidistantPreserveStart"
-            tickFormatter={xTickFormatter}
-          />
+          <XAxis dataKey="day" interval="equidistantPreserveStart" tickFormatter={xTickFormatter} />
 
           <YAXis tickFormatter={yTickFormatter} />
 
@@ -95,8 +84,8 @@ export function AreaChart(props: AreaChartProps) {
         <div className="flex grow flex-col items-center justify-center gap-y-4 p-4">
           <ChartLineUpIcon className="text-fg-subtle" size={24} />
           <p className="text-center text-sm text-balance text-fg-muted md:text-base">
-            Your cumulative trend will appear once you have contributions on at
-            least two different days.
+            Your cumulative trend will appear once you have contributions on at least two different
+            days.
           </p>
         </div>
       )}
@@ -104,8 +93,8 @@ export function AreaChart(props: AreaChartProps) {
   )
 }
 
-function TooltipContent(props: TooltipContentProps<number, string>) {
-  const payload = props.payload as TooltipPayload
+function TooltipContent(props: TooltipContentProps) {
+  const payload = props.payload as AreaTooltipPayload
 
   const current = payload[0]?.payload
 
@@ -114,17 +103,13 @@ function TooltipContent(props: TooltipContentProps<number, string>) {
       {current && (
         <div className="flex items-center justify-between gap-x-4">
           <span className="text-sm text-fg-muted">
-            {createDateFormatter({
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            }).format(new TZDate(current.day, clientTz))}
+            {createDateFormatter({ day: 'numeric', month: 'long', year: 'numeric' }).format(
+              new TZDate(current.day, clientTz),
+            )}
           </span>
 
           <span className="font-mono text-sm">
-            {createCurrencyFormatter({ showSymbol: true }).format(
-              current.cumulativeAmount,
-            )}
+            {createCurrencyFormatter({ showSymbol: true }).format(current.cumulativeAmount)}
           </span>
         </div>
       )}

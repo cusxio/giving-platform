@@ -3,10 +3,7 @@ import { Menu as AriakitMenu } from '@ariakit/react'
 
 import { cx } from '#/styles/cx'
 
-interface MenuProps extends Omit<
-  AriakitMenuProps,
-  'portal' | 'unmountOnHide'
-> {}
+interface MenuProps extends Omit<AriakitMenuProps, 'portal' | 'unmountOnHide'> {}
 
 export function Menu(props: MenuProps) {
   const { className, ...rest } = props

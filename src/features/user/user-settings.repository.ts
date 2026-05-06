@@ -7,30 +7,23 @@ import type { UserSettings } from '#/db/schema'
 import { userSettings } from '#/db/schema'
 
 export class UserSettingsRepository {
-  #db: DB
+  readonly #db: DB
   constructor(db: DB) {
     this.#db = db
   }
 
-  async findByUserId(
-    userId: UserSettings['userId'],
-    db: DB | DBTransaction = this.#db,
-  ) {
-    const result = await tryAsync(
-      () => this.findByUserIdQuery(userId, db),
-      createDBError,
-    )
+  async findByUserId(userId: UserSettings['userId'], db: DB | DBTransaction = this.#db) {
+    const result = await tryAsync(() => this.findByUserIdQuery(userId, db), createDBError)
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const settings = result.value[0]
+    const [settings] = result.value
     return ok(settings ?? null)
   }
 
-  findByUserIdQuery(
-    userId: UserSettings['userId'],
-    db: DB | DBTransaction = this.#db,
-  ) {
+  findByUserIdQuery(userId: UserSettings['userId'], db: DB | DBTransaction = this.#db) {
     return db.select().from(userSettings).where(eq(userSettings.userId, userId))
   }
 }

@@ -25,16 +25,15 @@ interface GivingFormProps {
 
 export function GivingForm(props: GivingFormProps) {
   const { user, initialFunds, initialView, onContinue, onBack } = props
-  const authenticated = user ? true : false
+  const authenticated = user !== undefined
 
   const { data: savedPaymentMethods } = useSuspenseQueryDeferred(
     createSavedPaymentMethodsQueryOptions(authenticated),
   )
-  const { store, view, submitPayment } = useGivingForm(
-    user,
-    savedPaymentMethods[0]?.token,
-    { initialFunds, initialView },
-  )
+  const { store, view, submitPayment } = useGivingForm(user, savedPaymentMethods[0]?.token, {
+    initialFunds,
+    initialView,
+  })
 
   store.useSubmit(async () => {
     if (view === 'amounts') {
@@ -94,9 +93,7 @@ export function GivingForm(props: GivingFormProps) {
 function GivingFormHero() {
   return (
     <h1 className="mb-4 text-center font-serif text-3xl tracking-wide text-balance sm:text-4xl md:text-5xl">
-      I would{' '}
-      <span className="text-[#ff9592] underline underline-offset-8">love</span>{' '}
-      to give,
+      I would <span className="text-[#ff9592] underline underline-offset-8">love</span> to give,
     </h1>
   )
 }

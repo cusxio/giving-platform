@@ -5,10 +5,7 @@ import * as v from 'valibot'
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
 import { funds } from '#/core/brand'
-import {
-  createUserQueryOptions,
-  useOptionalAuthUser,
-} from '#/features/session/session.queries'
+import { createUserQueryOptions, useOptionalAuthUser } from '#/features/session/session.queries'
 import { Nav } from '#/routes/-components/nav'
 import { cx } from '#/styles/cx'
 
@@ -17,18 +14,10 @@ import { useGivingUrl } from './-hooks/use-giving-url'
 import { createSavedPaymentMethodsQueryOptions } from './-index.queries'
 
 const searchSchema = v.object({
-  offering: v.optional(
-    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
-  ),
-  tithe: v.optional(
-    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
-  ),
-  mission: v.optional(
-    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
-  ),
-  future: v.optional(
-    v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0)),
-  ),
+  future: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
+  mission: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
+  offering: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
+  tithe: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
 })
 
 function hasFundParams(search: v.InferOutput<typeof searchSchema>) {
@@ -39,56 +28,53 @@ function hasFundParams(search: v.InferOutput<typeof searchSchema>) {
 }
 
 export const Route = createFileRoute('/')({
-  validateSearch(search) {
-    const result = v.safeParse(searchSchema, search)
-    if (!result.success) return {}
-    return result.output
-  },
-
   async beforeLoad({ context, search }) {
     if (process.env.MAINTENANCE_MODE === 'true') {
-      return { isMaintenanceMode: true, isAuthenticated: false }
+      return { isAuthenticated: false, isMaintenanceMode: true }
     }
 
-    const result = await context.queryClient.ensureQueryData(
-      createUserQueryOptions(),
-    )
+    const result = await context.queryClient.ensureQueryData(createUserQueryOptions())
 
     if (result.type === 'SUCCESS' && result.value.user.journey === null) {
-      throw redirect({ to: '/welcome', replace: true })
+      throw redirect({ replace: true, to: '/welcome' })
     }
 
     const isAuthenticated = result.type === 'SUCCESS'
 
     return {
-      isMaintenanceMode: false,
       isAuthenticated,
+      isMaintenanceMode: false,
       shouldPreloadPaymentMethods: isAuthenticated && hasFundParams(search),
     }
   },
 
+  component: RouteComponent,
+
   async loader({ context }) {
     if (context.shouldPreloadPaymentMethods === true) {
-      await context.queryClient.ensureQueryData(
-        createSavedPaymentMethodsQueryOptions(true),
-      )
+      await context.queryClient.ensureQueryData(createSavedPaymentMethodsQueryOptions(true))
     }
   },
 
-  component: RouteComponent,
+  validateSearch(search) {
+    const result = v.safeParse(searchSchema, search)
+    if (!result.success) {
+      return {}
+    }
+    return result.output
+  },
 })
 
 function IndexContent() {
   const authUser = useOptionalAuthUser()
   const user = authUser?.user
-  const { initialFunds, hasFundParams, setFundsInUrl, clearUrl } =
-    useGivingUrl()
+  const { initialFunds, hasFundParams, setFundsInUrl, clearUrl } = useGivingUrl()
 
   return (
     <>
       <header className="sticky top-0 z-10 flex h-14 items-center justify-center bg-base-1/60 px-4 backdrop-blur-sm">
         <div className="w-full max-w-5xl">
-          <Nav isAuthenticated={user ? true : false} />
+          <Nav isAuthenticated={user !== undefined} />
         </div>
       </header>
 
@@ -125,13 +111,11 @@ function RouteComponent() {
           >
             <BarricadeIcon size={32} />
           </span>
-          <h1 className="mt-4 text-center text-4xl font-bold text-balance">
-            We’ll Be Right Back
-          </h1>
+          <h1 className="mt-4 text-center text-4xl font-bold text-balance">We’ll Be Right Back</h1>
 
           <p className="text-center text-balance text-fg-muted">
-            We’re performing scheduled maintenance to improve performance and
-            reliability. Thanks for your patience.
+            We’re performing scheduled maintenance to improve performance and reliability. Thanks
+            for your patience.
           </p>
         </main>
       </>

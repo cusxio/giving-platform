@@ -6,7 +6,7 @@ import { TransactionIconStatus } from '#/components/transaction-icon-status'
 import { Alert } from '#/components/ui/alert'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Spinner } from '#/components/ui/spinner'
-import { User } from '#/db/schema'
+import type { User } from '#/db/schema'
 import { useUpdateUserMutation } from '#/features/user/user.mutations'
 import { cx } from '#/styles/cx'
 
@@ -14,14 +14,14 @@ import { useWelcomeViewStore } from './use-welcome-view-store'
 
 export function WelcomeMigrate() {
   const { mutateAsync } = useUpdateUserMutation()
-  const [status, setStatus] = useState<
-    'error' | 'idle' | NonNullable<User['journey']>
-  >('idle')
+  const [status, setStatus] = useState<'error' | 'idle' | NonNullable<User['journey']>>('idle')
 
   const setView = useWelcomeViewStore((state) => state.setView)
   const updateJourney = useCallback(
     (journey: NonNullable<User['journey']>) => {
-      if (['migrate', 'start_fresh'].includes(status)) return
+      if (['migrate', 'start_fresh'].includes(status)) {
+        return
+      }
 
       setStatus(journey)
       Promise.all([
@@ -59,36 +59,26 @@ export function WelcomeMigrate() {
       <h1 className="text-center text-3xl">Onwards</h1>
       <div className="flex flex-col items-center gap-y-4 text-center text-balance text-fg-muted">
         <p>
-          We found past transactions tied to your email from times you explored
-          the platform as a guest and completed gifts without creating an
-          account.
+          We found past transactions tied to your email from times you explored the platform as a
+          guest and completed gifts without creating an account.
         </p>
 
-        <Separator
-          className="my-4 h-px w-3/4 border-border"
-          orientation="horizontal"
-        />
+        <Separator className="my-4 h-px w-3/4 border-border" orientation="horizontal" />
 
         <p>
           As we step into this next chapter, you can{' '}
           <em className="font-medium not-italic">
-            transfer your existing giving history or begin anew with a clean
-            slate.
+            transfer your existing giving history or begin anew with a clean slate.
           </em>
         </p>
 
         <p>
           Opting to transfer your giving history will allow you to{' '}
-          <strong className="font-medium text-fg-1">
-            maintain the continuity of your story
-          </strong>
+          <strong className="font-medium text-fg-1">maintain the continuity of your story</strong>
           {', '} while gaining insights into those gifts.
         </p>
 
-        <Separator
-          className="my-4 h-px w-3/4 border-border"
-          orientation="horizontal"
-        />
+        <Separator className="my-4 h-px w-3/4 border-border" orientation="horizontal" />
 
         <p>The decision is entirely yours.</p>
 
@@ -115,9 +105,7 @@ export function WelcomeMigrate() {
         </div>
 
         {status === 'error' && (
-          <Alert>
-            Something went wrong on our end. Please try again later.
-          </Alert>
+          <Alert>Something went wrong on our end. Please try again later.</Alert>
         )}
       </div>
     </>

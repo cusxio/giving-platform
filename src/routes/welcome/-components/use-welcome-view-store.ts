@@ -8,8 +8,8 @@ interface WelcomeViewState {
 }
 
 export const useWelcomeViewStore = create<WelcomeViewState>((set) => ({
-  view: 'intro',
   setView: (view) => {
     set({ view })
   },
+  view: 'intro',
 }))

@@ -22,41 +22,35 @@ export const getInsightsData = createServerFn()
       insightsRepository.weeklyCumulativeTotalsByYearQuery(),
     ])
 
-    const stats = summaryResult[0]
+    const [stats] = summaryResult
     const noOfContributions = stats?.noOfContributions ?? 0
 
     const toPercent = (count: number) =>
-      noOfContributions > 0
-        ? ((count / noOfContributions) * 100).toFixed(2)
-        : '0.00'
+      noOfContributions > 0 ? ((count / noOfContributions) * 100).toFixed(2) : '0.00'
 
     const summary = {
-      totalAmount: centsToRinggit(stats?.totalAmount ?? 0),
-      noOfContributions,
       averageAmount: centsToRinggit(stats?.averageAmount ?? 0),
       medianAmount: centsToRinggit(stats?.medianAmount ?? 0),
+      noOfContributions,
+      totalAmount: centsToRinggit(stats?.totalAmount ?? 0),
     }
 
     const weekendWeekday = [
-      { period: 'weekend', percent: toPercent(stats?.weekendCount ?? 0) },
-      { period: 'weekday', percent: toPercent(stats?.weekdayCount ?? 0) },
+      { percent: toPercent(stats?.weekendCount ?? 0), period: 'weekend' },
+      { percent: toPercent(stats?.weekdayCount ?? 0), period: 'weekday' },
     ]
 
     const userGuest = [
       { createdAs: 'user' as const, percent: toPercent(stats?.userCount ?? 0) },
-      {
-        createdAs: 'guest' as const,
-        percent: toPercent(stats?.guestCount ?? 0),
-      },
+      { createdAs: 'guest' as const, percent: toPercent(stats?.guestCount ?? 0) },
     ]
 
-    const weeklyCumulativeTotalsByYear = weeklyCumulativeTotalsByYearResult.map(
-      (row) => ({
-        ...row,
-        weeklyAmount: centsToRinggit(row.weeklyAmount),
-        cumulativeAmount: centsToRinggit(row.cumulativeAmount),
-      }),
-    )
+    const weeklyCumulativeTotalsByYear = weeklyCumulativeTotalsByYearResult.map((row) => ({
+      cumulativeAmount: centsToRinggit(row.cumulativeAmount),
+      week: row.week,
+      weeklyAmount: centsToRinggit(row.weeklyAmount),
+      year: row.year,
+    }))
 
-    return { summary, weeklyCumulativeTotalsByYear, weekendWeekday, userGuest }
+    return { summary, userGuest, weekendWeekday, weeklyCumulativeTotalsByYear }
   })

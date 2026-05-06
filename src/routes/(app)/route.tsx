@@ -1,16 +1,11 @@
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
-import {
-  createUserQueryOptions,
-  useAuthUser,
-} from '#/features/session/session.queries'
+import { createUserQueryOptions, useAuthUser } from '#/features/session/session.queries'
 
 import { AsideNav } from './-components/aside-nav'
 import { Header } from './-components/header'
 
 export const Route = createFileRoute('/(app)')({
-  component: RouteComponent,
-
   async beforeLoad({ context }) {
     const { queryClient } = context
 
@@ -26,6 +21,8 @@ export const Route = createFileRoute('/(app)')({
 
     return result.value
   },
+
+  component: RouteComponent,
 })
 
 function RouteComponent() {

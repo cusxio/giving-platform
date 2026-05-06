@@ -1,10 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import type { TooltipContentProps } from 'recharts'
 import { Line, LineChart, Tooltip } from 'recharts'
-import type {
-  NameType,
-  ValueType,
-} from 'recharts/types/component/DefaultTooltipContent'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'
 import { createCurrencyFormatter } from '#/core/formatters'
@@ -26,7 +22,7 @@ interface MultiLineChartProps {
   metric: 'cumulative' | 'weekly'
 }
 
-type TooltipPayload = { payload: WeeklyData }[]
+type WeeklyTooltipPayload = readonly { payload: WeeklyData }[]
 
 interface WeeklyData {
   [year: string]: number
@@ -37,27 +33,18 @@ export function MultiLineChart(props: MultiLineChartProps) {
   const { data, metric } = props
   const metricKey: 'cumulativeAmount' | 'weeklyAmount' =
     metric === 'weekly' ? 'weeklyAmount' : 'cumulativeAmount'
-  const chartTitle =
-    metric === 'weekly'
-      ? 'Weekly Transactions'
-      : 'Cumulative Weekly Transactions'
+  const chartTitle = metric === 'weekly' ? 'Weekly Transactions' : 'Cumulative Weekly Transactions'
 
   const years = useMemo(() => [...new Set(data.map((d) => d.year))], [data])
 
-  const chartData = useMemo(
-    () => convertToWeeklyFormat(data, metricKey),
-    [data, metricKey],
-  )
+  const chartData = useMemo(() => convertToWeeklyFormat(data, metricKey), [data, metricKey])
 
   const yTickFormatter = useCallback(
-    (value: number) =>
-      createCurrencyFormatter({ notation: 'compact' }).format(value),
+    (value: number) => createCurrencyFormatter({ notation: 'compact' }).format(value),
     [],
   )
 
-  const xTickFormatter = useCallback((value: string) => {
-    return Number(value).toString()
-  }, [])
+  const xTickFormatter = useCallback((value: string) => Number(value).toString(), [])
 
   return (
     <ChartContainer>
@@ -66,38 +53,22 @@ export function MultiLineChart(props: MultiLineChartProps) {
       <div className="mt-4 flex items-center justify-center gap-4">
         {years.map((year) => (
           <div className="flex items-center gap-x-2" key={year}>
-            <span
-              className={cx(
-                'h-3 w-3',
-                'bg-current',
-                getColorForYear(year, years),
-              )}
-            />
+            <span className={cx('h-3 w-3', 'bg-current', getColorForYear(year, years))} />
             <span className="text-sm text-fg-subtle">{year}</span>
           </div>
         ))}
       </div>
 
-      <LineChart
-        data={chartData}
-        margin={{ left: 0, top: 0, bottom: 0, right: 0 }}
-        responsive
-      >
+      <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 0 }} responsive>
         <CartesianGrid />
 
         <Tooltip
-          content={(tooltipProps) => (
-            <TooltipContent {...tooltipProps} years={years} />
-          )}
+          content={(tooltipProps) => <TooltipContent {...tooltipProps} years={years} />}
           cursor={false}
           useTranslate3d
         />
 
-        <XAxis
-          dataKey="week"
-          interval="equidistantPreserveStart"
-          tickFormatter={xTickFormatter}
-        />
+        <XAxis dataKey="week" interval="equidistantPreserveStart" tickFormatter={xTickFormatter} />
         <YAXis tickFormatter={yTickFormatter} />
 
         {years.map((year) => {
@@ -142,11 +113,15 @@ function convertToWeeklyFormat(
     for (const [year, amount] of yearData.entries()) {
       weekEntry[year] = amount
     }
-    result.push(weekEntry)
+    const insertIndex = result.findIndex((entry) => entry.week > week)
+    if (insertIndex === -1) {
+      result.push(weekEntry)
+    } else {
+      result.splice(insertIndex, 0, weekEntry)
+    }
   }
 
-  // Sort by week number
-  return [...result].sort((a, b) => a.week - b.week)
+  return result
 }
 
 function getColorForYear(year: number | string, years: (number | string)[]) {
@@ -161,17 +136,14 @@ function getColorForYear(year: number | string, years: (number | string)[]) {
   return chartColors[index % chartColors.length]
 }
 
-function TooltipContent(
-  props: TooltipContentProps<ValueType, NameType> & { years: number[] },
-) {
-  const payload = props.payload as TooltipPayload
+function TooltipContent(props: TooltipContentProps & { years: number[] }) {
+  const payload = props.payload as WeeklyTooltipPayload
 
   const current = payload[0]?.payload
   const years = Object.keys(current ?? {}).filter((key) => key !== 'week')
 
   const currentcyFormatter = useCallback(
-    (value: number) =>
-      createCurrencyFormatter({ showSymbol: true }).format(value),
+    (value: number) => createCurrencyFormatter({ showSymbol: true }).format(value),
     [],
   )
 
@@ -183,27 +155,23 @@ function TooltipContent(
             <span className="text-sm">Week {current.week}</span>
           </div>
           <div className="grid-y-1 grid px-4 py-2">
-            {years.map((year) => {
-              return (
-                <div className="flex items-center gap-x-2" key={year}>
-                  <span
-                    className={cx(
-                      'h-3 w-3',
-                      'bg-current',
-                      getColorForYear(Number(year), props.years),
-                    )}
-                  />
-                  <div className="flex min-w-0 flex-1 gap-x-2">
-                    <span className="text-sm text-fg-muted tabular-nums">
-                      {year}
-                    </span>
-                    <span className="font-mono text-sm">
-                      {currentcyFormatter(Number(current[year]))}
-                    </span>
-                  </div>
+            {years.map((year) => (
+              <div className="flex items-center gap-x-2" key={year}>
+                <span
+                  className={cx(
+                    'h-3 w-3',
+                    'bg-current',
+                    getColorForYear(Number(year), props.years),
+                  )}
+                />
+                <div className="flex min-w-0 flex-1 gap-x-2">
+                  <span className="text-sm text-fg-muted tabular-nums">{year}</span>
+                  <span className="font-mono text-sm">
+                    {currentcyFormatter(Number(current[year]))}
+                  </span>
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
         </>
       )}

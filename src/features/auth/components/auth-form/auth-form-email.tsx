@@ -33,22 +33,16 @@ export default function AuthFormEmail(props: AuthFormEmailProps) {
             placeholder="Enter your email..."
             required
           />
-          <FormError
-            name={store.names.email}
-            render={<Alert className="empty:hidden" />}
-          />
+          <FormError name={store.names.email} render={<Alert className="empty:hidden" />} />
         </div>
-        <FormSubmitButton
-          className={cx(buttonVariants.white, 'h-9')}
-          submitting={submitting}
-        >
+        <FormSubmitButton className={cx(buttonVariants.white, 'h-9')} submitting={submitting}>
           Continue with email
         </FormSubmitButton>
       </div>
       <hr className="mb-4 border-border" />
       <p className="text-center text-xs leading-5 text-balance text-fg-subtle">
         {mode === 'login' ? (
-          <>We'll email you a one-time code to log in securely.</>
+          <>We’ll email you a one-time code to log in securely.</>
         ) : (
           <>
             By signing up, you agree to our <br />
@@ -56,22 +50,15 @@ export default function AuthFormEmail(props: AuthFormEmailProps) {
               Terms of Use
             </a>
             {', '}
-            <a
-              className="text-fg-muted hover:underline"
-              href={config.privacyURL}
-            >
+            <a className="text-fg-muted hover:underline" href={config.privacyURL}>
               Privacy Policy
             </a>
             {' and '}
-            <a
-              className="text-fg-muted hover:underline"
-              href={config.refundURL}
-            >
+            <a className="text-fg-muted hover:underline" href={config.refundURL}>
               Refund Policy
             </a>
             {/*
-             */}
-            .
+             */}.
           </>
         )}
       </p>

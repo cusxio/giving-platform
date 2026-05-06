@@ -1,5 +1,5 @@
 import { HandHeartIcon, ReceiptIcon } from '@phosphor-icons/react/dist/ssr'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import * as v from 'valibot'
 
 import { Button, buttonVariants } from '#/components/ui/button'
@@ -25,10 +25,13 @@ export const Route = createFileRoute('/(app)/transactions')({
 
     return { page: parseResult.output.page }
   },
-
   beforeLoad({ search }) {
     return { page: search.page ?? 1 }
   },
+
+  component: RouteComponent,
+
+  head: () => ({ meta: [{ title: `Transactions · ${config.entity}` }] }),
 
   async loader({ context }) {
     const {
@@ -37,14 +40,8 @@ export const Route = createFileRoute('/(app)/transactions')({
       queryClient,
     } = context
 
-    await queryClient.ensureQueryData(
-      createTransactionsQueryOptions(userId, journey, page),
-    )
+    await queryClient.ensureQueryData(createTransactionsQueryOptions(userId, journey, page))
   },
-
-  component: RouteComponent,
-
-  head: () => ({ meta: [{ title: `Transactions · ${config.entity}` }] }),
 })
 
 function RouteComponent() {
@@ -56,9 +53,7 @@ function RouteComponent() {
 
   const {
     data: { totalCount, transactions, pageSize },
-  } = useSuspenseQueryDeferred(
-    createTransactionsQueryOptions(userId, journey, page),
-  )
+  } = useSuspenseQueryDeferred(createTransactionsQueryOptions(userId, journey, page))
 
   const pageCount = Math.ceil(totalCount / pageSize)
 
@@ -79,10 +74,7 @@ function RouteComponent() {
           </p>
         </div>
 
-        <Button
-          className={cx(buttonVariants.lime, 'h-10 gap-x-2')}
-          render={<Link to="/" />}
-        >
+        <Button className={cx(buttonVariants.lime, 'h-10 gap-x-2')} render={<Link to="/" />}>
           Make your first contribution
           <HandHeartIcon size={20} weight="duotone" />
         </Button>
@@ -96,10 +88,7 @@ function RouteComponent() {
         Transactions
       </h2>
       <div className="no-scrollbar overflow-auto">
-        <TransactionsTable
-          privacyMode={privacyMode}
-          transactions={transactions}
-        />
+        <TransactionsTable privacyMode={privacyMode} transactions={transactions} />
       </div>
 
       <div className="my-4">

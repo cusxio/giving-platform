@@ -18,15 +18,9 @@ interface ReportBreakdownProps {
 export function ReportBreakdown(props: ReportBreakdownProps) {
   const { data } = props
 
-  const currencyFormatter = useMemo(() => {
-    return createCurrencyFormatter({ showSymbol: true })
-  }, [])
+  const currencyFormatter = useMemo(() => createCurrencyFormatter({ showSymbol: true }), [])
 
-  const grandTotal = useMemo(() => {
-    return data.reduce((acc, curr) => {
-      return acc + curr.totalAmount
-    }, 0)
-  }, [data])
+  const grandTotal = useMemo(() => data.reduce((acc, curr) => acc + curr.totalAmount, 0), [data])
 
   return (
     <Table>
@@ -37,24 +31,19 @@ export function ReportBreakdown(props: ReportBreakdownProps) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.map((group) => {
-          return (
-            <TableRow
-              className="text-fg-muted"
-              key={`${group.fundName}-${group.createdAs}`}
-            >
-              <TableCell className="flex items-center gap-x-1">
-                {group.fundName}
-                {group.createdAs === 'guest' && (
-                  <span className="text-xs text-fg-subtle">(guest)</span>
-                )}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {currencyFormatter.format(group.totalAmount)}
-              </TableCell>
-            </TableRow>
-          )
-        })}
+        {data.map((group) => (
+          <TableRow className="text-fg-muted" key={`${group.fundName}-${group.createdAs}`}>
+            <TableCell className="flex items-center gap-x-1">
+              {group.fundName}
+              {group.createdAs === 'guest' && (
+                <span className="text-xs text-fg-subtle">(guest)</span>
+              )}
+            </TableCell>
+            <TableCell className="text-right tabular-nums">
+              {currencyFormatter.format(group.totalAmount)}
+            </TableCell>
+          </TableRow>
+        ))}
       </TableBody>
       <TableFooter className="bg-base-0">
         <TableRow>

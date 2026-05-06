@@ -17,13 +17,10 @@ interface DateRangePickerButtonProps {
 export function DateRangePickerButton(props: DateRangePickerButtonProps) {
   const { store, value } = props
 
-  const dateFormatter = useMemo(() => {
-    return createDateFormatter({
-      day: 'numeric',
-      year: 'numeric',
-      month: 'long',
-    })
-  }, [])
+  const dateFormatter = useMemo(
+    () => createDateFormatter({ day: 'numeric', month: 'long', year: 'numeric' }),
+    [],
+  )
 
   return (
     <PopoverDisclosure

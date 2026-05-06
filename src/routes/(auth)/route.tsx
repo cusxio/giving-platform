@@ -1,10 +1,4 @@
-import {
-  createFileRoute,
-  Link,
-  Outlet,
-  redirect,
-  useMatch,
-} from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, redirect, useMatch } from '@tanstack/react-router'
 
 import { HeaderLogo } from '#/components/header-logo'
 import { getSession } from '#/server/functions'
@@ -15,7 +9,7 @@ export const Route = createFileRoute('/(auth)')({
     const session = await getSession()
 
     if (session !== null) {
-      throw redirect({ to: '/', replace: true })
+      throw redirect({ replace: true, to: '/' })
     }
   },
 
@@ -45,9 +39,7 @@ function RouteComponent() {
             </>
           ) : (
             <>
-              <span className="text-fg-subtle">
-                Don‘t have an account yet?{' '}
-              </span>
+              <span className="text-fg-subtle">Don‘t have an account yet? </span>
               <Link className="hover:underline" to="/welcome/signup">
                 Sign up
               </Link>

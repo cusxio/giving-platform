@@ -23,25 +23,23 @@ export function SelectYear(props: SelectYearProps) {
     <>
       <SelectPopover store={store}>
         {values.map((v) => {
-          const year = v === 'all' ? 'all' : Number.parseInt(v)
+          const year = v === 'all' ? 'all' : Number.parseInt(v, 10)
           return (
             <SelectItem
               key={v}
-              render={(p) => {
-                return (
-                  <Link
-                    search={{
-                      // The current year has no query string
-                      year: year === currentCalendarYear ? undefined : year,
-                    }}
-                    to="/overview"
-                    {...p}
-                  >
-                    {mapValue(v)}
-                    {currentValue === v && <CheckIcon weight="bold" />}
-                  </Link>
-                )
-              }}
+              render={(p) => (
+                <Link
+                  search={{
+                    // The current year has no query string
+                    year: year === currentCalendarYear ? undefined : year,
+                  }}
+                  to="/overview"
+                  {...p}
+                >
+                  {mapValue(v)}
+                  {currentValue === v && <CheckIcon weight="bold" />}
+                </Link>
+              )}
               store={store}
               value={v}
             />
@@ -57,6 +55,8 @@ export function SelectYear(props: SelectYearProps) {
 }
 
 function mapValue(v: string) {
-  if (v === 'all') return 'All time'
+  if (v === 'all') {
+    return 'All time'
+  }
   return v
 }

@@ -8,24 +8,17 @@ export interface TransactionItemsTableProps {
   transactionItems: { amountInCents: number; fundName: string }[]
 }
 
-const itemRow = cx(
-  'px-2 py-1',
-  'flex items-center justify-between gap-x-2',
-  'text-sm',
-)
+const itemRow = cx('px-2 py-1', 'flex items-center justify-between gap-x-2', 'text-sm')
 
 export function TransactionItemsTable(props: TransactionItemsTableProps) {
   const { transactionItems } = props
 
-  const currencyFormatter = useMemo(() => {
-    return createCurrencyFormatter({ showSymbol: true })
-  }, [])
+  const currencyFormatter = useMemo(() => createCurrencyFormatter({ showSymbol: true }), [])
 
-  const totalAmountInCents = useMemo(() => {
-    return transactionItems.reduce((acc, curr) => {
-      return acc + curr.amountInCents
-    }, 0)
-  }, [transactionItems])
+  const totalAmountInCents = useMemo(
+    () => transactionItems.reduce((acc, curr) => acc + curr.amountInCents, 0),
+    [transactionItems],
+  )
 
   return (
     <div>

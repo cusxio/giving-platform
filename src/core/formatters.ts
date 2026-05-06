@@ -8,11 +8,7 @@ export function createCurrencyFormatter(
     showSymbol?: boolean
   },
 ) {
-  const { decimal, showSymbol, ...rest } = {
-    decimal: 'if-needed',
-    showSymbol: false,
-    ...options,
-  }
+  const { decimal, showSymbol, ...rest } = { decimal: 'if-needed', showSymbol: false, ...options }
 
   const formatter = new Intl.NumberFormat('en-MY', {
     ...(showSymbol && { currency: 'MYR', style: 'currency' }),
@@ -22,12 +18,9 @@ export function createCurrencyFormatter(
   })
 
   return {
-    formatToParts: formatter.formatToParts.bind(formatter),
     format(value: number, privacyMode = false) {
       if (privacyMode) {
-        const parts = formatter
-          .formatToParts(value)
-          .find((p) => p.type === 'currency')
+        const parts = formatter.formatToParts(value).find((p) => p.type === 'currency')
 
         const placeholder = REDACTED_VALUE
 
@@ -40,6 +33,7 @@ export function createCurrencyFormatter(
 
       return formatter.format(value)
     },
+    formatToParts: formatter.formatToParts.bind(formatter),
   }
 }
 

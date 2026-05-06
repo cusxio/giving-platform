@@ -1,7 +1,8 @@
-import { FormRadio, FormRadioGroup, FormStore } from '@ariakit/react'
+import type { FormStore } from '@ariakit/react'
+import { FormLabel, FormRadio, FormRadioGroup } from '@ariakit/react'
 import { createElement } from 'react'
 
-import { SavedPaymentMethod } from '#/db/schema'
+import type { SavedPaymentMethod } from '#/db/schema'
 import { cx } from '#/styles/cx'
 
 import { CARD_COMPONENTS } from './payment-methods-cards'
@@ -28,21 +29,12 @@ export function PaymentMethods(props: PaymentMethodsProps) {
         const month = x.cardExp.slice(4, 6)
 
         return (
-          <label
-            className="flex items-center gap-x-4 py-2 select-none"
-            key={x.cardNoMask}
-          >
-            <FormRadio
-              className="peer sr-only"
-              name={store.names.token}
-              value={x.token}
-            />
+          <label className="flex items-center gap-x-4 py-2 select-none" key={x.cardNoMask}>
+            <FormRadio className="peer sr-only" name={store.names.token} value={x.token} />
             <span className={pseudoRadio} />
             <span className="inline-flex overflow-hidden rounded-sm">
               {createElement(
-                isCardType(x.cardType)
-                  ? CARD_COMPONENTS[x.cardType]
-                  : CARD_COMPONENTS.GENERIC,
+                isCardType(x.cardType) ? CARD_COMPONENTS[x.cardType] : CARD_COMPONENTS.GENERIC,
               )}
             </span>
             <span className="inline-flex flex-col">
@@ -58,17 +50,11 @@ export function PaymentMethods(props: PaymentMethodsProps) {
         )
       })}
 
-      <label className="flex items-center gap-x-4 py-4 select-none">
-        <FormRadio
-          className="peer sr-only"
-          name={store.names.token}
-          value={__NORMAL_CHECKOUT__}
-        />
+      <FormLabel name={store.names.token} className="flex items-center gap-x-4 py-4 select-none">
+        <FormRadio className="peer sr-only" name={store.names.token} value={__NORMAL_CHECKOUT__} />
         <span className={pseudoRadio} />
-        <span className="text-sm text-fg-1/80">
-          Online Banking / E-wallet / New Card
-        </span>
-      </label>
+        <span className="text-sm text-fg-1/80">Online Banking / E-wallet / New Card</span>
+      </FormLabel>
     </FormRadioGroup>
   )
 }
@@ -77,4 +63,5 @@ function isCardType(type: string): type is CardType {
   return type in CARD_COMPONENTS
 }
 
+// oxlint-disable-next-line no-underscore-dangle
 export const __NORMAL_CHECKOUT__ = '__NORMAL_CHECKOUT__' as const

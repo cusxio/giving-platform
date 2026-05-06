@@ -18,16 +18,15 @@ interface GivingFormFundProps {
 export function GivingFormFund(props: GivingFormFundProps) {
   const { fund, store } = props
 
-  const handleCurrencyValueChange: InputCurrencyProps['onValueChange'] =
-    useCallback(
-      (value, name) => {
-        if (name === undefined) {
-          return
-        }
-        store.setValue(name, value ?? '')
-      },
-      [store],
-    )
+  const handleCurrencyValueChange: InputCurrencyProps['onValueChange'] = useCallback(
+    (value, name) => {
+      if (name === undefined) {
+        return
+      }
+      store.setValue(name, value ?? '')
+    },
+    [store],
+  )
 
   const currentValue = store.useValue<string>(store.names[fund])
 
@@ -53,11 +52,7 @@ export function GivingFormFund(props: GivingFormFundProps) {
         <span className="text-fg-1/80 capitalize">{fund}</span>
       </div>
 
-      <GivingFormFundQuickFill
-        currentValue={currentValue}
-        fund={fund}
-        onSelect={handleSelect}
-      />
+      <GivingFormFundQuickFill currentValue={currentValue} fund={fund} onSelect={handleSelect} />
 
       <InputCurrency
         autoComplete="off"

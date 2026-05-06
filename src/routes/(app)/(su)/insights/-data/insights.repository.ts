@@ -2,11 +2,11 @@ import { and, asc, count, eq, gte, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
 import { roundedAvg, safeSum } from '#/db/aggregates'
-import { DB } from '#/db/client'
+import type { DB } from '#/db/client'
 import { transactions } from '#/db/schema'
 
 export class InsightsRepository {
-  #db: DB
+  readonly #db: DB
   constructor(db: DB) {
     this.#db = db
   }
@@ -42,9 +42,9 @@ export class InsightsRepository {
     const weeklyTotals = this.#db.$with('weekly_totals').as(
       this.#db
         .select({
-          year: year.as('year'),
           week: week.as('week'),
           weeklyAmount: safeSum(transactions.amount).as('weeklyAmount'),
+          year: year.as('year'),
         })
         .from(transactions)
         .where(and(eq(transactions.status, 'success'), gte(year, cutoffYear)))
@@ -54,10 +54,10 @@ export class InsightsRepository {
     return this.#db
       .with(weeklyTotals)
       .select({
-        year: weeklyTotals.year,
+        cumulativeAmount: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})::integer`,
         week: weeklyTotals.week,
         weeklyAmount: weeklyTotals.weeklyAmount,
-        cumulativeAmount: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})::integer`,
+        year: weeklyTotals.year,
       })
       .from(weeklyTotals)
       .orderBy(asc(weeklyTotals.year), asc(weeklyTotals.week))

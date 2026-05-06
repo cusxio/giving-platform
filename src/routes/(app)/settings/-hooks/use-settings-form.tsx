@@ -3,12 +3,10 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { toast } from '#/components/ui/toaster'
 import type { User } from '#/db/schema'
-import { GetUserResponse } from '#/features/auth/auth.get-user.procedure'
+import type { GetUserResponse } from '#/features/auth/auth.get-user.procedure'
 import { useUpdateUserMutation } from '#/features/user/user.mutations'
 
-export function useSettingsForm(
-  user: Pick<User, 'email' | 'firstName' | 'lastName'>,
-) {
+export function useSettingsForm(user: Pick<User, 'email' | 'firstName' | 'lastName'>) {
   const store = useFormStore({
     defaultValues: {
       email: user.email,
@@ -25,34 +23,37 @@ export function useSettingsForm(
         { firstName: state.values.firstName, lastName: state.values.lastName },
         {
           onSuccess(data) {
-            queryClient.setQueryData<
-              Extract<GetUserResponse, { type: 'SUCCESS' }>
-            >(['auth-user'], (prev) => {
-              if (!prev) return
-              if (data?.type === 'SUCCESS') {
-                return {
-                  value: {
-                    ...prev.value,
-                    user: { ...prev.value.user, ...data.value.user },
-                  },
-                  type: prev.type,
+            queryClient.setQueryData<Extract<GetUserResponse, { type: 'SUCCESS' }>>(
+              ['auth-user'],
+              (prev) => {
+                if (!prev) {
+                  return prev
                 }
-              }
-              return prev
-            })
+                if (data?.type === 'SUCCESS') {
+                  return {
+                    type: prev.type,
+                    value: { ...prev.value, user: { ...prev.value.user, ...data.value.user } },
+                  }
+                }
+                return prev
+              },
+            )
           },
         },
       )
 
-      switch (res?.type) {
+      if (!res) {
+        toast.unexpected()
+        return
+      }
+
+      switch (res.type) {
         case 'SERVER_ERROR': {
           toast.unexpected()
           break
         }
         case 'SUCCESS': {
-          toast.success('Saved!', {
-            description: 'Your profile information has been updated.',
-          })
+          toast.success('Saved!', { description: 'Your profile information has been updated.' })
           break
         }
         case 'VALIDATION_ERROR': {

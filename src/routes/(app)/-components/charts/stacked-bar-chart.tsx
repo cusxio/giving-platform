@@ -7,7 +7,7 @@ import { ChartContainer, ChartTitle } from '#/components/ui/chart'
 import { funds } from '#/core/brand'
 import { FUND_CHART_COLOR_MAP } from '#/core/brand/funds'
 import { clientTz, now } from '#/core/date'
-import { createDateFormatter, REDACTED_VALUE } from '#/core/formatters'
+import { REDACTED_VALUE, createDateFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
 import { CartesianGrid } from './cartesian-grid'
@@ -19,24 +19,21 @@ interface Data {
   month: number
 }
 
-interface StackedBarChartProps extends Omit<
-  CartesianChartProps,
-  'data' | 'margin' | 'responsive'
-> {
+interface StackedBarChartProps extends Omit<CartesianChartProps, 'data' | 'margin' | 'responsive'> {
   data: Data[]
   privacyMode: boolean
 }
 
-type TooltipPayload = { payload: Data }[]
+type StackedBarTooltipPayload = readonly { payload: Data }[]
 
 export function StackedBarChart(props: StackedBarChartProps) {
   const { privacyMode, ...rest } = props
 
-  const xTickFormatter = useCallback((value: number) => {
-    return createDateFormatter({ month: 'short' }).format(
-      now(clientTz).setMonth(value - 1),
-    )
-  }, [])
+  const xTickFormatter = useCallback(
+    (value: number) =>
+      createDateFormatter({ month: 'short' }).format(now(clientTz).setMonth(value - 1)),
+    [],
+  )
 
   const yTickFormatter = useCallback(
     (value: number) => {
@@ -51,11 +48,7 @@ export function StackedBarChart(props: StackedBarChartProps) {
   return (
     <ChartContainer>
       <ChartTitle>Contribution Activity</ChartTitle>
-      <BarChart
-        margin={{ left: 0, top: 0, bottom: 0, right: 0 }}
-        responsive
-        {...rest}
-      >
+      <BarChart margin={{ bottom: 0, left: 0, right: 0, top: 0 }} responsive {...rest}>
         <CartesianGrid />
 
         <XAxis dataKey="month" tickFormatter={xTickFormatter} />
@@ -78,8 +71,8 @@ export function StackedBarChart(props: StackedBarChartProps) {
   )
 }
 
-function TooltipContent(props: TooltipContentProps<number, string>) {
-  const payload = props.payload as TooltipPayload
+function TooltipContent(props: TooltipContentProps) {
+  const payload = props.payload as StackedBarTooltipPayload
   const current = payload[0]?.payload
 
   const funds = Object.keys(current ?? {}).filter((key) => key !== 'month')
@@ -96,25 +89,21 @@ function TooltipContent(props: TooltipContentProps<number, string>) {
             </span>
           </div>
           <div className="grid-y-1 grid px-4 py-2">
-            {funds.map((fund) => {
-              return (
-                <div className="flex items-center gap-x-2" key={fund}>
-                  <span
-                    className={cx(
-                      'h-3 w-3',
-                      FUND_CHART_COLOR_MAP[
-                        fund.toLowerCase() as keyof typeof FUND_CHART_COLOR_MAP
-                      ],
-                      'bg-current',
-                    )}
-                  />
-                  <div className="flex min-w-0 flex-1 justify-between">
-                    <span className="text-sm text-fg-muted">{fund}</span>
-                    <span className="font-mono text-sm">{current[fund]}</span>
-                  </div>
+            {funds.map((fund) => (
+              <div className="flex items-center gap-x-2" key={fund}>
+                <span
+                  className={cx(
+                    'h-3 w-3',
+                    FUND_CHART_COLOR_MAP[fund.toLowerCase() as keyof typeof FUND_CHART_COLOR_MAP],
+                    'bg-current',
+                  )}
+                />
+                <div className="flex min-w-0 flex-1 justify-between">
+                  <span className="text-sm text-fg-muted">{fund}</span>
+                  <span className="font-mono text-sm">{current[fund]}</span>
                 </div>
-              )
-            })}
+              </div>
+            ))}
           </div>
         </>
       )}

@@ -1,53 +1,33 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 
-import {
-  addDays,
-  addMinutes,
-  differenceInMinutes,
-  isBefore,
-  now,
-} from '#/core/date'
+import { addDays, addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import { transactions } from '#/db/schema'
 import { CRON_SECRET } from '#/envvars'
-import {
-  EghlTxnExists,
-  EghlTxnStatus,
-} from '#/features/payment-gateway/eghl.schema'
-import {
-  dbMiddleware,
-  eghlServiceMiddleware,
-  paymentServiceMiddleware,
-} from '#/server/middleware'
+import { EghlTxnExists, EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
+import { dbMiddleware, eghlServiceMiddleware, paymentServiceMiddleware } from '#/server/middleware'
 
 const LOG_EVENTS = {
-  JOB_START: 'eghl.cron.job_start',
-  UNAUTHORIZED: 'eghl.cron.unauthorized',
-  QUERY_FAILED: 'eghl.cron.query_failed',
-  NOT_EXISTS: 'eghl.cron.not_exists',
-  STILL_PENDING: 'eghl.cron.still_pending',
-  SYNCING_STATUS: 'eghl.cron.syncing_status',
-  FINALIZATION_FAILED: 'eghl.cron.finalization_failed',
   BATCH_UPDATE_FAILED: 'eghl.cron.batch_update_failed',
   COMPLETE: 'eghl.cron.complete',
+  FINALIZATION_FAILED: 'eghl.cron.finalization_failed',
+  JOB_START: 'eghl.cron.job_start',
+  NOT_EXISTS: 'eghl.cron.not_exists',
+  QUERY_FAILED: 'eghl.cron.query_failed',
+  STILL_PENDING: 'eghl.cron.still_pending',
+  SYNCING_STATUS: 'eghl.cron.syncing_status',
+  UNAUTHORIZED: 'eghl.cron.unauthorized',
 }
 
 export const Route = createFileRoute('/api/eghl/cron')({
   server: {
-    middleware: [eghlServiceMiddleware, dbMiddleware, paymentServiceMiddleware],
     handlers: {
       GET: async ({ request, context }) => {
         const { eghlService, paymentService, logger, db } = context
         const authHeader = request.headers.get('authorization')
 
-        if (
-          CRON_SECRET === undefined ||
-          authHeader !== `Bearer ${CRON_SECRET}`
-        ) {
-          logger.warn(
-            { event: LOG_EVENTS.UNAUTHORIZED },
-            'Unauthorized cron job attempt',
-          )
+        if (CRON_SECRET === undefined || authHeader !== `Bearer ${CRON_SECRET}`) {
+          logger.warn({ event: LOG_EVENTS.UNAUTHORIZED }, 'Unauthorized cron job attempt')
           return new Response('Unauthorized', { status: 401 })
         }
 
@@ -57,15 +37,15 @@ export const Route = createFileRoute('/api/eghl/cron')({
         try {
           pendingTransactions = await db
             .select({
-              transactionId: transactions.id,
               amountInCents: transactions.amount,
               createdAt: transactions.createdAt,
+              transactionId: transactions.id,
             })
             .from(transactions)
             .where(
               and(
                 eq(transactions.status, 'pending'),
-                // between 15 minutes ago and 2 days ago
+                // Between 15 minutes ago and 2 days ago
                 lt(transactions.createdAt, addMinutes(now(), -15)),
                 gt(transactions.createdAt, addDays(now(), -2)),
               ),
@@ -74,7 +54,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
             .limit(25)
         } catch (error: unknown) {
           logger.error(
-            { event: LOG_EVENTS.QUERY_FAILED, err: error },
+            { err: error, event: LOG_EVENTS.QUERY_FAILED },
             'Failed to fetch pending transactions',
           )
           return new Response('Internal Server Error', { status: 500 })
@@ -88,17 +68,19 @@ export const Route = createFileRoute('/api/eghl/cron')({
         const transactionsToMarkFailed: string[] = []
 
         for (const pendingTransaction of pendingTransactions) {
+          // Sequential by design: avoid concurrent requests to eGHL/payment finalization side effects.
+          // oxlint-disable-next-line no-await-in-loop
           const result = await eghlService.queryTransactionStatus({
-            transactionId: pendingTransaction.transactionId,
             amountInCents: pendingTransaction.amountInCents,
+            transactionId: pendingTransaction.transactionId,
           })
 
           if (!result.ok) {
             logger.error(
               {
-                event: LOG_EVENTS.QUERY_FAILED,
-                error_type: result.error.type,
                 err: 'error' in result.error ? result.error.error : undefined,
+                error_type: result.error.type,
+                event: LOG_EVENTS.QUERY_FAILED,
                 transaction_id: pendingTransaction.transactionId,
               },
               'Failed to query eGHL status',
@@ -109,14 +91,14 @@ export const Route = createFileRoute('/api/eghl/cron')({
 
           const eghlResponse = result.value
 
-          // eGHL internal error - skip and retry on next cron run
+          // EGHL internal error - skip and retry on next cron run
           if (eghlResponse.TxnExists === EghlTxnExists.InternalError) {
             logger.warn(
               {
                 event: LOG_EVENTS.QUERY_FAILED,
+                query_desc: eghlResponse.QueryDesc,
                 transaction_id: pendingTransaction.transactionId,
                 txn_exists: eghlResponse.TxnExists,
-                query_desc: eghlResponse.QueryDesc,
               },
               'eGHL returned internal error. Will retry on next run',
             )
@@ -128,19 +110,14 @@ export const Route = createFileRoute('/api/eghl/cron')({
           if (eghlResponse.TxnExists === EghlTxnExists.NotFound) {
             // SAFEGUARD: Only mark as failed if it's older than 30 minutes.
             // This accounts for the 10-minute gateway timeout + buffers.
-            if (
-              isBefore(pendingTransaction.createdAt, addMinutes(now(), -30))
-            ) {
-              const ageMinutes = differenceInMinutes(
-                now(),
-                pendingTransaction.createdAt,
-              )
+            if (isBefore(pendingTransaction.createdAt, addMinutes(now(), -30))) {
+              const ageMinutes = differenceInMinutes(now(), pendingTransaction.createdAt)
 
               logger.info(
                 {
+                  age_minutes: ageMinutes,
                   event: LOG_EVENTS.NOT_EXISTS,
                   transaction_id: pendingTransaction.transactionId,
-                  age_minutes: ageMinutes,
                 },
                 'Transaction not found in eGHL. Marking as failed locally',
               )
@@ -153,10 +130,7 @@ export const Route = createFileRoute('/api/eghl/cron')({
           // Still pending at eGHL
           if (eghlResponse.TxnStatus === EghlTxnStatus.Pending) {
             logger.info(
-              {
-                event: LOG_EVENTS.STILL_PENDING,
-                transaction_id: eghlResponse.PaymentID,
-              },
+              { event: LOG_EVENTS.STILL_PENDING, transaction_id: eghlResponse.PaymentID },
               'Transaction is still pending at payment gateway. Skipping',
             )
             continue
@@ -172,16 +146,17 @@ export const Route = createFileRoute('/api/eghl/cron')({
             'Final status found at gateway. Finalizing',
           )
 
-          const finalizationResult =
-            await paymentService.finalizePaymentFromCallback(eghlResponse)
+          // Sequential by design: payment finalization has DB side effects and should be throttled.
+          // oxlint-disable-next-line no-await-in-loop
+          const finalizationResult = await paymentService.finalizePaymentFromCallback(eghlResponse)
 
           if (!finalizationResult.ok) {
             logger.error(
               {
-                event: LOG_EVENTS.FINALIZATION_FAILED,
-                transaction_id: eghlResponse.PaymentID,
                 err: finalizationResult.error.error,
                 error_type: finalizationResult.error.type,
+                event: LOG_EVENTS.FINALIZATION_FAILED,
+                transaction_id: eghlResponse.PaymentID,
               },
               'Failed to record payment outcome in database',
             )
@@ -210,9 +185,9 @@ export const Route = createFileRoute('/api/eghl/cron')({
           } catch (error: unknown) {
             logger.error(
               {
-                event: LOG_EVENTS.BATCH_UPDATE_FAILED,
-                err: error,
                 count: transactionsToMarkFailed.length,
+                err: error,
+                event: LOG_EVENTS.BATCH_UPDATE_FAILED,
                 sampleIds: transactionsToMarkFailed.slice(0, 10),
               },
               'Failed to mark transactions as failed',
@@ -226,20 +201,18 @@ export const Route = createFileRoute('/api/eghl/cron')({
           {
             event: LOG_EVENTS.COMPLETE,
             stats: {
-              found: pendingTransactions.length,
-              finalized: finalizedCount,
-              marked_failed: failCount,
               errors: errorCount,
+              finalized: finalizedCount,
+              found: pendingTransactions.length,
+              marked_failed: failCount,
             },
           },
           'eGHL cron job complete',
         )
 
-        return new Response('ok', {
-          status: 200,
-          headers: { 'Content-Type': 'text/plain' },
-        })
+        return new Response('ok', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
       },
     },
+    middleware: [eghlServiceMiddleware, dbMiddleware, paymentServiceMiddleware],
   },
 })

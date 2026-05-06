@@ -30,16 +30,16 @@ export function AsideNav(props: AsideNavProps) {
 
   const navItems: AsideNavItemProps[] = useMemo(() => {
     const baseNavItems: AsideNavItemProps[] = [
-      { to: '/overview', name: 'Overview', icon: ChartLineIcon },
-      { to: '/transactions', name: 'Transactions', icon: ReceiptIcon },
-      { to: '/', name: 'Give', icon: HandHeartIcon },
-      { to: '/settings', name: 'Settings', icon: GearIcon },
+      { icon: ChartLineIcon, name: 'Overview', to: '/overview' },
+      { icon: ReceiptIcon, name: 'Transactions', to: '/transactions' },
+      { icon: HandHeartIcon, name: 'Give', to: '/' },
+      { icon: GearIcon, name: 'Settings', to: '/settings' },
     ]
 
     if (user.role === 'su') {
       baseNavItems.push(
-        { name: 'Insights', to: '/insights', icon: ChartLineUpIcon },
-        { name: 'Reports', to: '/reports', icon: InvoiceIcon },
+        { icon: ChartLineUpIcon, name: 'Insights', to: '/insights' },
+        { icon: InvoiceIcon, name: 'Reports', to: '/reports' },
       )
     }
 

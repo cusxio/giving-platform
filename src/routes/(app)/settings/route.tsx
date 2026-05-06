@@ -9,9 +9,7 @@ import { cx } from '#/styles/cx'
 
 import { useSettingsForm } from './-hooks/use-settings-form'
 
-export const Route = createFileRoute('/(app)/settings')({
-  component: RouteComponent,
-})
+export const Route = createFileRoute('/(app)/settings')({ component: RouteComponent })
 
 function RouteComponent() {
   const { user } = useAuthUser()
@@ -29,10 +27,7 @@ function RouteComponent() {
       <Form className="grid gap-y-6" resetOnSubmit={false} store={store}>
         <UserFormFields emailReadOnly store={store} />
         <div className="flex justify-end">
-          <FormSubmitButton
-            className={cx(buttonVariants.white, 'h-9')}
-            submitting={submitting}
-          >
+          <FormSubmitButton className={cx(buttonVariants.white, 'h-9')} submitting={submitting}>
             Update
           </FormSubmitButton>
         </div>

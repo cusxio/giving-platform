@@ -1,17 +1,9 @@
 import { cx } from '#/styles/cx'
 
 import type { GetOverviewDataResponse } from '../-data/overview.get-data.procedure'
-import {
-  AreaChart,
-  BarChart,
-  ChartSummary,
-  StackedBarChart,
-} from '../../-components/charts'
+import { AreaChart, BarChart, ChartSummary, StackedBarChart } from '../../-components/charts'
 
-interface OverviewChartsProps extends Omit<
-  GetOverviewDataResponse,
-  'transactions'
-> {
+interface OverviewChartsProps extends Omit<GetOverviewDataResponse, 'transactions'> {
   privacyMode: boolean
 }
 
@@ -37,13 +29,9 @@ export function OverviewCharts(props: OverviewChartsProps) {
         <BarChart data={monthlyContributions} privacyMode={privacyMode} />
       )}
       {monthlyContributionsFrequency.length > 0 && (
-        <StackedBarChart
-          data={monthlyContributionsFrequency}
-          privacyMode={privacyMode}
-        />
+        <StackedBarChart data={monthlyContributionsFrequency} privacyMode={privacyMode} />
       )}
-      {(monthlyContributions.length > 0 ||
-        monthlyContributionsFrequency.length > 0) && (
+      {(monthlyContributions.length > 0 || monthlyContributionsFrequency.length > 0) && (
         <AreaChart data={cumulativeContributions} privacyMode={privacyMode} />
       )}
     </div>

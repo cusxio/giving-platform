@@ -1,9 +1,5 @@
 import { EmailParams, MailerSend, Recipient, Sender } from 'mailersend'
-import {
-  createTestAccount,
-  createTransport,
-  getTestMessageUrl,
-} from 'nodemailer'
+import { createTestAccount, createTransport, getTestMessageUrl } from 'nodemailer'
 
 import { config } from '#/core/brand'
 import { logger } from '#/core/logger'
@@ -25,13 +21,11 @@ interface SendEmailInput {
 export class EmailService {
   async sendEmail(input: SendEmailInput) {
     const client =
-      MAILERSEND_API_KEY === undefined
-        ? await this.#createTestClient()
-        : this.#createClient()
+      MAILERSEND_API_KEY === undefined ? await this.#createTestClient() : this.#createClient()
 
     const result = await tryAsync(
       () => client.sendEmail(input),
-      (error: unknown): SendEmailError => ({ type: 'SendEmailError', error }),
+      (error: unknown): SendEmailError => ({ error, type: 'SendEmailError' }),
     )
 
     return result
@@ -71,24 +65,24 @@ export class EmailService {
     const testAccount = await createTestAccount()
 
     const transporter = createTransport({
+      auth: { pass: testAccount.pass, user: testAccount.user },
       host: testAccount.smtp.host,
       port: testAccount.smtp.port,
       secure: testAccount.smtp.secure,
-      auth: { user: testAccount.user, pass: testAccount.pass },
     })
 
     return {
       sendEmail: async ({ to, subject, html, text }: SendEmailInput) => {
         const info = await transporter.sendMail({
           from: `${config.name} <${config.email.system}>`,
-          to,
-          subject,
           html,
+          subject,
           text,
+          to,
         })
 
         logger.info(
-          { event: 'email.sent.test_mode', url: getTestMessageUrl(info), to },
+          { event: 'email.sent.test_mode', to, url: getTestMessageUrl(info) },
           'Test email sent (View URL in attributes)',
         )
       },

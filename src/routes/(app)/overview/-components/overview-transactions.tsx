@@ -3,10 +3,7 @@ import { Link } from '@tanstack/react-router'
 import type { GetOverviewDataResponse } from '../-data/overview.get-data.procedure'
 import { TransactionsTable } from '../../-components/transactions-table'
 
-interface OverviewTransactionsProps extends Pick<
-  GetOverviewDataResponse,
-  'transactions'
-> {
+interface OverviewTransactionsProps extends Pick<GetOverviewDataResponse, 'transactions'> {
   privacyMode: boolean
   year: 'all' | number
 }
@@ -21,10 +18,7 @@ export function OverviewTransactions(props: OverviewTransactionsProps) {
       </h2>
 
       <div className="no-scrollbar overflow-auto">
-        <TransactionsTable
-          privacyMode={privacyMode}
-          transactions={transactions}
-        />
+        <TransactionsTable privacyMode={privacyMode} transactions={transactions} />
       </div>
 
       <div className="mt-2">

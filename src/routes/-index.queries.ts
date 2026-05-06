@@ -4,7 +4,7 @@ import { getSavedPaymentMethods } from './-data/index.get-saved-payment-methods.
 
 export function createSavedPaymentMethodsQueryOptions(authenticated: boolean) {
   return queryOptions({
-    queryKey: ['saved-payment-methods', { authenticated }],
     queryFn: () => (authenticated ? getSavedPaymentMethods() : []),
+    queryKey: ['saved-payment-methods', { authenticated }],
   })
 }

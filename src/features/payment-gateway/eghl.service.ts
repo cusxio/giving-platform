@@ -7,7 +7,7 @@ import { createParseError } from '#/core/errors'
 import { centsToRinggit } from '#/core/money'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync, trySync } from '#/core/result'
-import { Transaction } from '#/db/schema'
+import type { Transaction } from '#/db/schema'
 import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/envvars'
 
 import type { EghlQueryError } from './eghl.errors'
@@ -30,29 +30,22 @@ interface QueryTransactionStatusParams {
 
 export class EghlService {
   createPaymentRequestURL(params: CreatePaymentRequestParams) {
-    const {
-      transactionId,
-      amountInCents,
-      description,
-      customerEmail,
-      customerName,
-      token,
-    } = params
+    const { transactionId, amountInCents, description, customerEmail, customerName, token } = params
     const amount = centsToRinggit(amountInCents)
 
     const requestParams = {
-      TransactionType: 'SALE',
-      PymtMethod: 'ANY',
-      ServiceID: EGHL_SERVICE_ID,
-      PaymentID: transactionId,
-      OrderNumber: transactionId,
-      PaymentDesc: description,
-      MerchantReturnURL: `${BASE_URL}/api/eghl/return`,
-      MerchantCallBackURL: `${BASE_URL}/api/eghl/callback`,
       Amount: amount.toFixed(2),
       CurrencyCode: 'MYR',
-      CustName: customerName,
       CustEmail: customerEmail,
+      CustName: customerName,
+      MerchantCallBackURL: `${BASE_URL}/api/eghl/callback`,
+      MerchantReturnURL: `${BASE_URL}/api/eghl/return`,
+      OrderNumber: transactionId,
+      PaymentDesc: description,
+      PaymentID: transactionId,
+      PymtMethod: 'ANY',
+      ServiceID: EGHL_SERVICE_ID,
+      TransactionType: 'SALE',
       ...(token !== undefined && { Token: token, TokenType: 'OCP' }),
     }
 
@@ -75,10 +68,7 @@ export class EghlService {
 
     const HashValue = this.#generateHashValue(hashKeyFields)
 
-    return queryString.stringifyUrl({
-      url: EGHL_URL,
-      query: { ...requestParams, HashValue },
-    })
+    return queryString.stringifyUrl({ query: { ...requestParams, HashValue }, url: EGHL_URL })
   }
 
   async queryTransactionStatus(
@@ -88,12 +78,12 @@ export class EghlService {
     const amount = centsToRinggit(amountInCents)
 
     const requestParams = {
-      TransactionType: 'QUERY',
-      PymtMethod: 'ANY',
-      ServiceID: EGHL_SERVICE_ID,
-      PaymentID: transactionId,
       Amount: amount.toFixed(2),
       CurrencyCode: 'MYR',
+      PaymentID: transactionId,
+      PymtMethod: 'ANY',
+      ServiceID: EGHL_SERVICE_ID,
+      TransactionType: 'QUERY',
     }
 
     const hashKeyFields = [
@@ -109,36 +99,39 @@ export class EghlService {
     const queryResult = await tryAsync(
       () =>
         fetch(EGHL_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ ...requestParams, HashValue }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          method: 'POST',
         }),
-      (error: unknown) => ({
-        type: 'EghlFetchError',
-        error: error as TypeError,
-      }),
+      (error: unknown) => ({ error: error as TypeError, type: 'EghlFetchError' }),
     )
 
-    if (!queryResult.ok) return queryResult
+    if (!queryResult.ok) {
+      return queryResult
+    }
 
     const response = queryResult.value
 
     const responseText = await response.text()
     if (!response.ok) {
-      return err({ type: 'EghlQueryResponseError', message: responseText })
+      return err({ message: responseText, type: 'EghlQueryResponseError' })
     }
 
     const qsResult = trySync(
       () => queryString.parse(responseText),
       () => ({ type: 'EghlServerError' }),
     )
-    if (!qsResult.ok) return qsResult
+    if (!qsResult.ok) {
+      return qsResult
+    }
 
     const parseResult = trySync(
       () => EghlQueryResponseSchema.Parse(qsResult.value),
       createParseError,
     )
-    if (!parseResult.ok) return parseResult
+    if (!parseResult.ok) {
+      return parseResult
+    }
 
     const eghlResponse = parseResult.value
 
@@ -164,7 +157,9 @@ export class EghlService {
       HashValue2,
     } = response
 
-    if (!HashValue2) return false
+    if (!HashValue2) {
+      return false
+    }
 
     const hashKeyFields = [
       EGHL_PASSWORD,
@@ -184,10 +179,7 @@ export class EghlService {
 
     const encoder = new TextEncoder()
 
-    return constantTimeEqual(
-      encoder.encode(calculatedHash),
-      encoder.encode(HashValue2),
-    )
+    return constantTimeEqual(encoder.encode(calculatedHash), encoder.encode(HashValue2))
   }
 
   #generateHashValue(value: string): string {

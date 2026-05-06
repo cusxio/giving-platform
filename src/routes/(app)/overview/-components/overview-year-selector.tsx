@@ -16,10 +16,7 @@ export function OverviewYearSelector(props: OverviewYearSelectorProps) {
 
   return (
     <div className="flex justify-end">
-      <SelectYear
-        defaultValue={year.toString()}
-        values={mapYearsToStrings(years)}
-      />
+      <SelectYear defaultValue={year.toString()} values={mapYearsToStrings(years)} />
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, gte, inArray, lt } from 'drizzle-orm'
 
-import { clientTz, TZDate } from '#/core/date'
+import { TZDate, clientTz } from '#/core/date'
 import { centsToRinggit } from '#/core/money'
 import type { User } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
@@ -10,9 +10,7 @@ import { dbMiddleware } from '#/server/middleware'
 
 import { getYearDateRange } from './overview.helpers'
 
-export type GetOverviewDataResponse = Awaited<
-  ReturnType<typeof getOverviewData>
->
+export type GetOverviewDataResponse = Awaited<ReturnType<typeof getOverviewData>>
 
 interface Input {
   journey: User['journey']
@@ -38,18 +36,11 @@ export const getOverviewData = createServerFn()
     const conditions = [
       eq(transactions.userId, userId),
       startDateUTC ? gte(transactions.createdAt, startDateUTC) : undefined,
-      endDateUTCExclusive
-        ? lt(transactions.createdAt, endDateUTCExclusive)
-        : undefined,
-      journey === 'start_fresh'
-        ? eq(transactions.createdAs, 'user')
-        : undefined,
+      endDateUTCExclusive ? lt(transactions.createdAt, endDateUTCExclusive) : undefined,
+      journey === 'start_fresh' ? eq(transactions.createdAs, 'user') : undefined,
     ].filter(Boolean)
 
-    const successWhereClause = and(
-      ...conditions,
-      eq(transactions.status, 'success'),
-    )
+    const successWhereClause = and(...conditions, eq(transactions.status, 'success'))
 
     // We only need failed/success for the Recent Transactions list
     const allStatusWhereClause = and(
@@ -61,10 +52,10 @@ export const getOverviewData = createServerFn()
       // Query 1: Recent Transactions (Optimized: Sort & Limit in DB)
       db
         .select({
-          id: transactions.id,
           amount: transactions.amount,
-          status: transactions.status,
           createdAt: transactions.createdAt,
+          id: transactions.id,
+          status: transactions.status,
         })
         .from(transactions)
         .where(allStatusWhereClause)
@@ -73,25 +64,19 @@ export const getOverviewData = createServerFn()
 
       // Query 2: Timeline Data (Lightweight fetch for Summary & Line Charts)
       db
-        .select({
-          amount: transactions.amount,
-          createdAt: transactions.createdAt,
-        })
+        .select({ amount: transactions.amount, createdAt: transactions.createdAt })
         .from(transactions)
         .where(successWhereClause),
 
       // Query 3: Fund Frequency Data (Lightweight fetch for Stacked Bar & Fund Count)
       db
         .select({
+          createdAt: transactions.createdAt,
           fundId: transactionItems.fundId,
           fundName: funds.name,
-          createdAt: transactions.createdAt,
         })
         .from(transactionItems)
-        .innerJoin(
-          transactions,
-          eq(transactionItems.transactionId, transactions.id),
-        )
+        .innerJoin(transactions, eq(transactionItems.transactionId, transactions.id))
         .innerJoin(funds, eq(transactionItems.fundId, funds.id))
         .where(successWhereClause),
     ])
@@ -124,20 +109,19 @@ export const getOverviewData = createServerFn()
     }
 
     const noOfContributions = timelineData.length
-    const averageAmount =
-      noOfContributions > 0 ? Math.round(totalAmount / noOfContributions) : 0
+    const averageAmount = noOfContributions > 0 ? Math.round(totalAmount / noOfContributions) : 0
 
     const monthlyContributions = Array.from({ length: 12 }, (_, i) => ({
       month: i + 1,
       totalAmount: centsToRinggit(monthlyMap.get(i + 1) ?? 0),
     }))
 
-    const sortedDays = [...dailyMap.keys()].sort()
+    // oxlint-disable-next-line unicorn/no-array-sort -- Avoid toSorted until the runtime lib supports it.
+    const sortedDays = [...dailyMap.keys()].sort((a, b) => a.localeCompare(b))
     let cumulative = 0
     const cumulativeContributions = sortedDays.map((day) => {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      cumulative += dailyMap.get(day)!
-      return { day, cumulativeAmount: centsToRinggit(cumulative) }
+      cumulative += dailyMap.get(day) ?? 0
+      return { cumulativeAmount: centsToRinggit(cumulative), day }
     })
 
     // --- Processing: Fund Frequency (Single Pass) ---
@@ -168,17 +152,17 @@ export const getOverviewData = createServerFn()
           })
 
     return {
+      cumulativeContributions,
+      monthlyContributions,
+      monthlyContributionsFrequency,
       summary: {
-        totalAmount: centsToRinggit(totalAmount),
-        noOfContributions,
         averageAmount: centsToRinggit(averageAmount),
         largestAmount: centsToRinggit(largestAmount),
         largestAmountDate,
+        noOfContributions,
+        totalAmount: centsToRinggit(totalAmount),
         totalFundsSupported: uniqueFundIds.size,
       },
-      monthlyContributions,
-      monthlyContributionsFrequency,
-      cumulativeContributions,
       transactions: recentTransactions,
     }
   })

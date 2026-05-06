@@ -5,10 +5,7 @@ import type { User } from '#/db/schema'
 import { getAvailableTransactionYears } from './-data/overview.get-available-transaction-years.procedure'
 import { getOverviewData } from './-data/overview.get-data.procedure'
 
-export function createAvailableTransactionYearsQuery(
-  userId: User['id'],
-  journey: User['journey'],
-) {
+export function createAvailableTransactionYearsQuery(userId: User['id'], journey: User['journey']) {
   return queryOptions({
     queryKey: ['overview-years', journey, userId],
     queryFn: () => getAvailableTransactionYears({ data: { journey } }),
@@ -23,7 +20,7 @@ export function createOverviewQueryOptions(
   year: 'all' | number,
 ) {
   return queryOptions({
-    queryKey: ['overview', { userId, year, journey }],
-    queryFn: () => getOverviewData({ data: { year, journey } }),
+    queryFn: () => getOverviewData({ data: { journey, year } }),
+    queryKey: ['overview', { journey, userId, year }],
   })
 }

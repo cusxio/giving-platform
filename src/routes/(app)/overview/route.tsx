@@ -13,18 +13,13 @@ import { OverviewCharts } from './-components/overview-charts'
 import { OverviewEmpty } from './-components/overview-empty'
 import { OverviewTransactions } from './-components/overview-transactions'
 import { OverviewWelcome } from './-components/overview-welcome'
-import {
-  hasMultipleYears,
-  OverviewYearSelector,
-} from './-components/overview-year-selector'
+import { OverviewYearSelector, hasMultipleYears } from './-components/overview-year-selector'
 import {
   createAvailableTransactionYearsQuery,
   createOverviewQueryOptions,
 } from './-overview.queries'
 
-const searchSchema = v.object({
-  year: v.optional(v.union([v.number(), v.literal('all')])),
-})
+const searchSchema = v.object({ year: v.optional(v.union([v.number(), v.literal('all')])) })
 
 export const Route = createFileRoute('/(app)/overview')({
   validateSearch(search): v.InferOutput<typeof searchSchema> {
@@ -47,34 +42,28 @@ export const Route = createFileRoute('/(app)/overview')({
       createAvailableTransactionYearsQuery(userId, journey),
     )
 
-    const availableYears: ('all' | number)[] = [
-      ...new Set([currentCalendarYear, ...dataYears]),
-    ].sort((a, b) => b - a)
+    const sortedYears = [...new Set([currentCalendarYear, ...dataYears])]
+    sortedYears.sort((a, b) => b - a)
 
     const requestedYear = search.year
     const effectiveYear = requestedYear ?? currentCalendarYear
+    const availableYears: ('all' | number)[] =
+      dataYears.length > 1 ? ['all', ...sortedYears] : sortedYears
 
-    if (dataYears.length > 1) {
-      availableYears.unshift('all')
-    }
-
-    if (
-      !availableYears.includes(effectiveYear) ||
-      requestedYear === currentCalendarYear
-    ) {
-      throw redirect({
-        to: '/overview',
-        search: { year: undefined },
-        replace: true,
-      })
+    if (!availableYears.includes(effectiveYear) || requestedYear === currentCalendarYear) {
+      throw redirect({ replace: true, search: { year: undefined }, to: '/overview' })
     }
 
     return {
+      hasZeroTransactions: dataYears.length === 0,
       year: effectiveYear,
       years: availableYears,
-      hasZeroTransactions: dataYears.length === 0,
     }
   },
+
+  component: RouteComponent,
+
+  head: () => ({ meta: [{ title: `Overview · ${config.entity}` }] }),
 
   async loader({ context }) {
     const {
@@ -83,14 +72,8 @@ export const Route = createFileRoute('/(app)/overview')({
       queryClient,
     } = context
 
-    await queryClient.ensureQueryData(
-      createOverviewQueryOptions(userId, journey, year),
-    )
+    await queryClient.ensureQueryData(createOverviewQueryOptions(userId, journey, year))
   },
-
-  component: RouteComponent,
-
-  head: () => ({ meta: [{ title: `Overview · ${config.entity}` }] }),
 })
 
 function RouteComponent() {
@@ -108,9 +91,7 @@ function RouteComponent() {
       cumulativeContributions,
       transactions,
     },
-  } = useSuspenseQueryDeferred(
-    createOverviewQueryOptions(user.id, user.journey, year),
-  )
+  } = useSuspenseQueryDeferred(createOverviewQueryOptions(user.id, user.journey, year))
 
   const showYearSelector = hasMultipleYears(years)
 
@@ -129,21 +110,10 @@ function RouteComponent() {
   }
 
   return (
-    <div
-      className={cx(
-        'mx-auto w-full shrink-0 grow p-4',
-        'max-w-120 bp-overview-2col:max-w-5xl',
-      )}
-    >
+    <div className={cx('mx-auto w-full shrink-0 grow p-4', 'max-w-120 bp-overview-2col:max-w-5xl')}>
       <GreetUser user={user} />
 
-      <div
-        className={cx(
-          'flex flex-col',
-          'gap-y-4 lg:gap-y-8',
-          !showYearSelector && 'mt-4',
-        )}
-      >
+      <div className={cx('flex flex-col', 'gap-y-4 lg:gap-y-8', !showYearSelector && 'mt-4')}>
         {showYearSelector && <OverviewYearSelector year={year} years={years} />}
 
         {transactions.length > 0 ? (
@@ -163,11 +133,7 @@ function RouteComponent() {
       </div>
 
       {transactions.length > 0 && (
-        <OverviewTransactions
-          privacyMode={privacyMode}
-          transactions={transactions}
-          year={year}
-        />
+        <OverviewTransactions privacyMode={privacyMode} transactions={transactions} year={year} />
       )}
     </div>
   )

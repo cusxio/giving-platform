@@ -8,11 +8,5 @@ export const startInstance = createStart(async () => {
   const { loggingMiddleware, maintenanceMiddleware, sessionMiddleware } =
     await import('./server/middleware')
 
-  return {
-    requestMiddleware: [
-      maintenanceMiddleware,
-      sessionMiddleware,
-      loggingMiddleware,
-    ],
-  }
+  return { requestMiddleware: [maintenanceMiddleware, sessionMiddleware, loggingMiddleware] }
 })

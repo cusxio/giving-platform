@@ -1,8 +1,6 @@
 import type { KnipConfig } from 'knip'
 
 export default {
-  ignore: ['./dist/**/*'],
-  ignoreDependencies: ['@react-email/preview-server', '@types/eslint'],
   entry: [
     './src/router.tsx',
     './src/entry-server.tsx',

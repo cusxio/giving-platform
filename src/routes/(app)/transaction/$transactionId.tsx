@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 
 import { TransactionItemsTable } from '#/components/transaction-items-table'
 import { TransactionStatus } from '#/components/transaction-status'
-import { clientTz, formatDistanceToNow, TZDate } from '#/core/date'
+import { TZDate, clientTz, formatDistanceToNow } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 import { centsToRinggit } from '#/core/money'
 import { useSuspenseQueryDeferred } from '#/hooks'
@@ -18,42 +18,26 @@ export const Route = createFileRoute('/(app)/transaction/$transactionId')({
     const { queryClient } = context
     const { transactionId } = params
 
-    await queryClient.ensureQueryData(
-      createTransactionQueryOptions(transactionId),
-    )
+    await queryClient.ensureQueryData(createTransactionQueryOptions(transactionId))
   },
 })
 
 function RouteComponent() {
   const { transactionId } = Route.useParams()
-  const { data } = useSuspenseQueryDeferred(
-    createTransactionQueryOptions(transactionId),
-  )
+  const { data } = useSuspenseQueryDeferred(createTransactionQueryOptions(transactionId))
   const [transaction, transactionItems] = data
-  const {
-    id,
-    createdAt: createdAtProp,
-    amount: amountInCents,
-    status,
-  } = transaction
-  const createdAt = useMemo(
-    () => new TZDate(createdAtProp, clientTz),
-    [createdAtProp],
-  )
+  const { id, createdAt: createdAtProp, amount: amountInCents, status } = transaction
+  const createdAt = useMemo(() => new TZDate(createdAtProp, clientTz), [createdAtProp])
 
   const displayDate = useMemo(
     () =>
-      createDateFormatter({
-        dateStyle: 'full',
-        hourCycle: 'h12',
-        timeStyle: 'short',
-      })
+      createDateFormatter({ dateStyle: 'full', hourCycle: 'h12', timeStyle: 'short' })
         .formatToParts(createdAt)
         .map((part) =>
-          (part.type === 'dayPeriod'
-            ? part.value.toUpperCase()
-            : part.value
-          ).replaceAll(/\s+/g, ' '),
+          (part.type === 'dayPeriod' ? part.value.toUpperCase() : part.value).replaceAll(
+            /\s+/gu,
+            ' ',
+          ),
         )
         .join(''),
     [createdAt],
@@ -74,9 +58,7 @@ function RouteComponent() {
         <div>
           <SubHeading>Total</SubHeading>
           <div className="font-mono">
-            {createCurrencyFormatter({ showSymbol: true }).format(
-              centsToRinggit(amountInCents),
-            )}
+            {createCurrencyFormatter({ showSymbol: true }).format(centsToRinggit(amountInCents))}
           </div>
         </div>
 
@@ -84,9 +66,7 @@ function RouteComponent() {
           <SubHeading>Date</SubHeading>
           <div>
             <span>{displayDate} </span>
-            <span className="text-sm text-fg-subtle">
-              ({formatDistanceToNow(createdAt)} ago)
-            </span>
+            <span className="text-sm text-fg-subtle">({formatDistanceToNow(createdAt)} ago)</span>
           </div>
         </div>
 
@@ -100,7 +80,5 @@ function RouteComponent() {
 }
 
 function SubHeading(props: { children: ReactNode }) {
-  return (
-    <div className="mb-2 text-xs text-fg-muted uppercase">{props.children}</div>
-  )
+  return <div className="mb-2 text-xs text-fg-muted uppercase">{props.children}</div>
 }

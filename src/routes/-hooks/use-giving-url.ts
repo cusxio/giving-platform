@@ -2,12 +2,14 @@ import { useNavigate } from '@tanstack/react-router'
 import { useCallback, useMemo } from 'react'
 
 import { funds } from '#/core/brand'
-import { Fund } from '#/core/brand/funds'
+import type { Fund } from '#/core/brand/funds'
 
 import { Route } from '../index'
 
+type FundAmountSearchParams = Partial<Record<Fund, number>>
+
 export function useGivingUrl() {
-  const search = Route.useSearch()
+  const search = Route.useSearch() as FundAmountSearchParams
   const navigate = useNavigate()
 
   const initialFunds = useMemo(() => {
@@ -25,19 +27,21 @@ export function useGivingUrl() {
 
   const setFundsInUrl = useCallback(
     (fundAmounts: Record<Fund, string>) => {
-      const params: Partial<Record<Fund, number>> = {}
+      const params: FundAmountSearchParams = {}
       for (const fund of funds) {
         const num = Number.parseFloat(fundAmounts[fund])
-        if (num > 0) params[fund] = num
+        if (num > 0) {
+          params[fund] = num
+        }
       }
-      void navigate({ to: '/', search: params })
+      void navigate({ search: params, to: '/' })
     },
     [navigate],
   )
 
   const clearUrl = useCallback(() => {
-    void navigate({ to: '/', search: {} })
+    void navigate({ search: {}, to: '/' })
   }, [navigate])
 
-  return { initialFunds, hasFundParams, setFundsInUrl, clearUrl }
+  return { clearUrl, hasFundParams, initialFunds, setFundsInUrl }
 }

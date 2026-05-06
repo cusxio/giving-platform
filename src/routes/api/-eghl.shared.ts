@@ -6,7 +6,7 @@ import { err, ok, tryAsync, trySync } from '#/core/result'
 import type { EghlCallbackError } from '#/features/payment-gateway/eghl.errors'
 import type { EghlPaymentResponse } from '#/features/payment-gateway/eghl.schema'
 import { EghlPaymentResponseSchema } from '#/features/payment-gateway/eghl.schema'
-import { EghlService } from '#/features/payment-gateway/eghl.service'
+import type { EghlService } from '#/features/payment-gateway/eghl.service'
 
 export async function parseAndVerifyEghlResponse(
   request: Request,
@@ -34,13 +34,17 @@ export async function parseAndVerifyEghlResponse(
     () => queryString.parse(raw),
     () => ({ type: 'EghlServerError' }),
   )
-  if (!qsResult.ok) return qsResult
+  if (!qsResult.ok) {
+    return qsResult
+  }
 
   const parseResult = trySync(
     () => EghlPaymentResponseSchema.Parse(qsResult.value),
     createParseError,
   )
-  if (!parseResult.ok) return parseResult
+  if (!parseResult.ok) {
+    return parseResult
+  }
 
   const eghlResponse = parseResult.value
 

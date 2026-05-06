@@ -1,8 +1,8 @@
-import { addYears, clientTz, serverTz, startOfYear, TZDate } from '#/core/date'
+import { TZDate, addYears, clientTz, serverTz, startOfYear } from '#/core/date'
 
 export function getYearDateRange(year: 'all' | number) {
   if (year === 'all') {
-    return { startDateUTC: undefined, endDateUTCExclusive: undefined }
+    return { endDateUTCExclusive: undefined, startDateUTC: undefined }
   }
 
   const referenceDate = new TZDate(year, 0, 1, clientTz)
@@ -10,7 +10,7 @@ export function getYearDateRange(year: 'all' | number) {
   const endDate = startOfYear(addYears<TZDate>(startDate, 1))
 
   return {
-    startDateUTC: new Date(startDate.withTimeZone(serverTz)),
     endDateUTCExclusive: new Date(endDate.withTimeZone(serverTz)),
+    startDateUTC: new Date(startDate.withTimeZone(serverTz)),
   }
 }

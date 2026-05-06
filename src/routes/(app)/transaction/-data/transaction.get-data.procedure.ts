@@ -2,10 +2,7 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import type { Transaction } from '#/db/schema'
-import {
-  dbMiddleware,
-  transactionRepositoryMiddleware,
-} from '#/server/middleware'
+import { dbMiddleware, transactionRepositoryMiddleware } from '#/server/middleware'
 
 interface Input {
   transactionId: Transaction['id']
@@ -19,10 +16,7 @@ export const getTransactionData = createServerFn()
     const { db, transactionRepository, user } = context
     const result = await db.batch([
       transactionRepository.findTransactionByIdQuery(transactionId, db),
-      transactionRepository.findTransactionItemsByTransactionIdQuery(
-        transactionId,
-        db,
-      ),
+      transactionRepository.findTransactionItemsByTransactionIdQuery(transactionId, db),
     ])
 
     const [[transaction], transactionItems] = result

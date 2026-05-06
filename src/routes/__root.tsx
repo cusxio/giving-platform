@@ -3,11 +3,7 @@ import loraFont from '@fontsource-variable/lora/files/lora-latin-wght-normal.wof
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import type { QueryClient } from '@tanstack/react-query'
 import { ReactQueryDevtoolsPanel } from '@tanstack/react-query-devtools'
-import {
-  createRootRouteWithContext,
-  HeadContent,
-  Scripts,
-} from '@tanstack/react-router'
+import { HeadContent, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { lazy } from 'react'
 
@@ -18,37 +14,23 @@ import css from '#/styles/globals.css?url'
 
 const Toaster = lazy(() => import('../components/ui/toaster/toaster'))
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
-  {
-    head: () => ({
-      meta: [
-        // eslint-disable-next-line unicorn/text-encoding-identifier-case
-        { charSet: 'utf-8' },
-        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { title: config.entity },
-      ],
-      links: [
-        {
-          rel: 'preload',
-          as: 'font',
-          type: 'font/woff2',
-          href: geistFont,
-          crossOrigin: 'anonymous',
-        },
-        {
-          rel: 'preload',
-          as: 'font',
-          type: 'font/woff2',
-          href: loraFont,
-          crossOrigin: 'anonymous',
-        },
-        { rel: 'stylesheet', href: css },
-      ],
-    }),
-    shellComponent: RootDocument,
-    errorComponent: Error,
-  },
-)
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  errorComponent: Error,
+  head: () => ({
+    links: [
+      { rel: 'preload', as: 'font', type: 'font/woff2', href: geistFont, crossOrigin: 'anonymous' },
+      { rel: 'preload', as: 'font', type: 'font/woff2', href: loraFont, crossOrigin: 'anonymous' },
+      { rel: 'stylesheet', href: css },
+    ],
+    meta: [
+      // oxlint-disable-next-line unicorn/text-encoding-identifier-case
+      { charSet: 'utf-8' },
+      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      { title: config.entity },
+    ],
+  }),
+  shellComponent: RootDocument,
+})
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
@@ -56,7 +38,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <head>
         <HeadContent />
         <style
-          // eslint-disable-next-line @eslint-react/dom/no-dangerously-set-innerhtml
           dangerouslySetInnerHTML={{
             __html: `
 @font-face {
@@ -86,10 +67,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             config={{ position: 'bottom-left', triggerHidden: true }}
             plugins={[
               { name: 'TanStack Query', render: <ReactQueryDevtoolsPanel /> },
-              {
-                name: 'Tanstack Router',
-                render: <TanStackRouterDevtoolsPanel />,
-              },
+              { name: 'Tanstack Router', render: <TanStackRouterDevtoolsPanel /> },
             ]}
           />
         )}

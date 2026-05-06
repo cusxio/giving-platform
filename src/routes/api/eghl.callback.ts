@@ -1,37 +1,21 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import {
-  eghlServiceMiddleware,
-  paymentServiceMiddleware,
-} from '#/server/middleware'
+import { eghlServiceMiddleware, paymentServiceMiddleware } from '#/server/middleware'
 
 import { parseAndVerifyEghlResponse } from './-eghl.shared'
 
 export const Route = createFileRoute('/api/eghl/callback')({
   server: {
-    middleware: [eghlServiceMiddleware, paymentServiceMiddleware],
     handlers: {
       POST: async ({ request, context }) => {
         const { eghlService, paymentService, logger } = context
-        const internalError = Response.json(
-          { message: 'Internal Server Error' },
-          { status: 500 },
-        )
-        const badRequest = Response.json(
-          { message: 'Bad Request' },
-          { status: 400 },
-        )
+        const internalError = Response.json({ message: 'Internal Server Error' }, { status: 500 })
+        const badRequest = Response.json({ message: 'Bad Request' }, { status: 400 })
 
-        logger.info(
-          { event: 'eghl.callback.received' },
-          'Received eGHL callback',
-        )
+        logger.info({ event: 'eghl.callback.received' }, 'Received eGHL callback')
 
-        const responseResult = await parseAndVerifyEghlResponse(
-          request,
-          eghlService,
-        )
+        const responseResult = await parseAndVerifyEghlResponse(request, eghlService)
 
         if (!responseResult.ok) {
           const { type } = responseResult.error
@@ -39,9 +23,9 @@ export const Route = createFileRoute('/api/eghl/callback')({
             case 'ParseError': {
               logger.warn(
                 {
-                  event: 'eghl.callback.validation_failed',
                   err: responseResult.error.error,
                   error_type: responseResult.error.type,
+                  event: 'eghl.callback.validation_failed',
                 },
                 'Callback payload validation failed',
               )
@@ -55,17 +39,11 @@ export const Route = createFileRoute('/api/eghl/callback')({
               return badRequest
             }
             case 'EghlInvalidMethodError': {
-              logger.warn(
-                { event: 'eghl.callback.method_invalid' },
-                'Invalid HTTP method received',
-              )
+              logger.warn({ event: 'eghl.callback.method_invalid' }, 'Invalid HTTP method received')
               return badRequest
             }
             case 'EghlServerError': {
-              logger.error(
-                { event: 'eghl.callback.read_failed' },
-                'Failed to read request body',
-              )
+              logger.error({ event: 'eghl.callback.read_failed' }, 'Failed to read request body')
               return internalError
             }
             default: {
@@ -78,25 +56,24 @@ export const Route = createFileRoute('/api/eghl/callback')({
 
         logger.info(
           {
-            event: 'eghl.callback.processing',
-            transaction_id: eghlResponse.PaymentID,
-            provider_txn_id: eghlResponse.TxnID,
             amount: eghlResponse.Amount,
+            event: 'eghl.callback.processing',
+            provider_txn_id: eghlResponse.TxnID,
             status: eghlResponse.TxnStatus,
+            transaction_id: eghlResponse.PaymentID,
           },
           'Signature verified, processing payment finalization',
         )
 
-        const finalizationResult =
-          await paymentService.finalizePaymentFromCallback(eghlResponse)
+        const finalizationResult = await paymentService.finalizePaymentFromCallback(eghlResponse)
 
         if (!finalizationResult.ok) {
           logger.error(
             {
-              event: 'eghl.callback.finalization_failed',
-              transaction_id: eghlResponse.PaymentID,
               err: finalizationResult.error.error,
               error_type: finalizationResult.error.type,
+              event: 'eghl.callback.finalization_failed',
+              transaction_id: eghlResponse.PaymentID,
             },
             'Failed to record payment outcome in database',
           )
@@ -104,18 +81,13 @@ export const Route = createFileRoute('/api/eghl/callback')({
         }
 
         logger.info(
-          {
-            event: 'eghl.callback.success',
-            transaction_id: eghlResponse.PaymentID,
-          },
+          { event: 'eghl.callback.success', transaction_id: eghlResponse.PaymentID },
           'Callback processed and saved successfully',
         )
 
-        return new Response('ok', {
-          status: 200,
-          headers: { 'Content-Type': 'text/plain' },
-        })
+        return new Response('ok', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
       },
     },
+    middleware: [eghlServiceMiddleware, paymentServiceMiddleware],
   },
 })

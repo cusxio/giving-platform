@@ -1,8 +1,4 @@
-import type {
-  SelectItemProps,
-  SelectPopoverProps,
-  SelectProps,
-} from '@ariakit/react'
+import type { SelectItemProps, SelectPopoverProps, SelectProps } from '@ariakit/react'
 import {
   Select as AriakitSelect,
   SelectItem as AriakitSelectItem,

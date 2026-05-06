@@ -32,16 +32,11 @@ export function Success(props: SuccessProps) {
           <>
             <p className="flex items-center gap-x-2 bg-base-info p-2 text-sm text-fg-info">
               <InfoIcon size={18} />
-              <span>
-                You can now create an account to give faster and view your
-                history
-              </span>
+              <span>You can now create an account to give faster and view your history</span>
             </p>
             <Button
               className={cx('h-8 gap-x-2', buttonVariants.subtle)}
-              render={
-                <Link search={{ email: user.email }} to="/welcome/signup" />
-              }
+              render={<Link search={{ email: user.email }} to="/welcome/signup" />}
             >
               Create an account
               <ArrowRightIcon size={16} weight="bold" />

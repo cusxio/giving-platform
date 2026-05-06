@@ -33,9 +33,7 @@ export function DateRangePickerPresets(props: DateRangePickerPresetsProps) {
   const { onChange } = props
   const { selected, goToMonth } = useDayPicker<{ mode: 'range' }>()
 
-  const presets = useMemo(() => {
-    return createPresets()
-  }, [])
+  const presets = useMemo(() => createPresets(), [])
 
   const handleSelect: DateRangePickerPresetsProps['onChange'] = useCallback(
     (nextRange) => {
@@ -65,10 +63,7 @@ export function DateRangePickerPresets(props: DateRangePickerPresetsProps) {
 
   return (
     <div>
-      <Separator
-        className="mt-2 mb-3 h-px border-border"
-        orientation="horizontal"
-      />
+      <Separator className="mt-2 mb-3 h-px border-border" orientation="horizontal" />
       <div className="px-1 text-xs font-semibold text-fg-muted uppercase select-none">
         Date Range
       </div>
@@ -93,24 +88,12 @@ export function DateRangePickerPresets(props: DateRangePickerPresetsProps) {
 function createPresets() {
   const today = now(clientTz)
   const presets: { dateRange: DateRange; label: string }[] = [
+    { dateRange: { from: addDays(today, -6), to: today }, label: 'Last 7 days' },
+    { dateRange: { from: startOfMonth(today), to: endOfMonth(today) }, label: 'This month' },
+    { dateRange: { from: startOfYear(today), to: endOfYear(today) }, label: 'This year' },
     {
-      label: 'Last 7 days',
-      dateRange: { from: addDays(today, -6), to: today },
-    },
-    {
-      label: 'This month',
-      dateRange: { from: startOfMonth(today), to: endOfMonth(today) },
-    },
-    {
-      label: 'This year',
-      dateRange: { from: startOfYear(today), to: endOfYear(today) },
-    },
-    {
+      dateRange: { from: startOfYear(addYears(today, -1)), to: endOfYear(addYears(today, -1)) },
       label: 'Last year',
-      dateRange: {
-        from: startOfYear(addYears(today, -1)),
-        to: endOfYear(addYears(today, -1)),
-      },
     },
   ]
 

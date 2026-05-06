@@ -10,12 +10,7 @@ export function AsideNavButton() {
 
   return (
     <Button
-      className={cx(
-        'h-10 w-10',
-        'text-fg-subtle',
-        'transition-colors',
-        'hover:text-fg-default',
-      )}
+      className={cx('h-10 w-10', 'text-fg-subtle', 'transition-colors', 'hover:text-fg-default')}
       onClick={() => {
         toggle()
       }}

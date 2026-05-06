@@ -4,11 +4,13 @@ import * as v from 'valibot'
 import { config } from '#/core/brand/config'
 import { AuthForm } from '#/features/auth/components/auth-form'
 
-const searchSchema = v.object({
-  email: v.optional(v.pipe(v.string(), v.toLowerCase(), v.email())),
-})
+const searchSchema = v.object({ email: v.optional(v.pipe(v.string(), v.toLowerCase(), v.email())) })
 
 export const Route = createFileRoute('/(auth)/welcome/signup')({
+  component: RouteComponent,
+
+  head: () => ({ meta: [{ title: `Sign up · ${config.entity}` }] }),
+
   validateSearch(search) {
     const parseResult = v.safeParse(searchSchema, search)
 
@@ -18,10 +20,6 @@ export const Route = createFileRoute('/(auth)/welcome/signup')({
 
     return parseResult.output
   },
-
-  head: () => ({ meta: [{ title: `Sign up · ${config.entity}` }] }),
-
-  component: RouteComponent,
 })
 
 function RouteComponent() {

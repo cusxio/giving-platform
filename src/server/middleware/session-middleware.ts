@@ -33,9 +33,9 @@ export const sessionMiddleware = createMiddleware().server<{
       case 'DBQueryError': {
         logger.error(
           {
-            event: 'session.verify.db_error',
             err: verifyResult.error.error,
             error_type: verifyResult.error.type,
+            event: 'session.verify.db_error',
           },
           'Database error during session verification',
         )
@@ -45,9 +45,9 @@ export const sessionMiddleware = createMiddleware().server<{
       case 'ParseError': {
         logger.warn(
           {
-            event: 'session.verify.validation_failed',
             err: verifyResult.error.error,
             error_type: verifyResult.error.type,
+            event: 'session.verify.validation_failed',
           },
           'Cookie format is invalid',
         )

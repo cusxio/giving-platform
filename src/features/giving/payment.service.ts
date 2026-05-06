@@ -1,23 +1,18 @@
 import { and, eq, sql } from 'drizzle-orm'
 
-import { now, TZDate } from '#/core/date'
+import { TZDate, now } from '#/core/date'
 import { createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
 import { tryAsync } from '#/core/result'
 import type { DBPool } from '#/db/client'
-import {
-  PaymentInsert,
-  payments,
-  savedPaymentMethods,
-  Transaction,
-  transactions,
-} from '#/db/schema'
+import type { PaymentInsert, Transaction } from '#/db/schema'
+import { payments, savedPaymentMethods, transactions } from '#/db/schema'
 
 import type { EghlPaymentResponse } from '../payment-gateway/eghl.schema'
 import { EghlTxnStatus } from '../payment-gateway/eghl.schema'
 
 export class PaymentService {
-  #dbPool: DBPool
+  readonly #dbPool: DBPool
 
   constructor(db: DBPool) {
     this.#dbPool = db
@@ -40,26 +35,24 @@ export class PaymentService {
       CardHolder,
     } = response
     const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
-    const newStatus: Transaction['status'] = isTransactionSuccess
-      ? 'success'
-      : 'failed'
+    const newStatus: Transaction['status'] = isTransactionSuccess ? 'success' : 'failed'
 
     let paidAt = now()
     const rawTime = RespTime ?? RespTime2
     if (rawTime !== undefined) {
-      const isoTime = rawTime.replace(' ', 'T') + '+08:00'
+      const isoTime = `${rawTime.replace(' ', 'T')}+08:00`
       const parsedDate = new TZDate(isoTime)
       if (!Number.isNaN(parsedDate.getTime())) {
         paidAt = parsedDate
       }
     }
     const paymentData: PaymentInsert = {
-      transactionId: PaymentID,
-      providerTransactionId: TxnID,
-      provider: 'eghl',
-      paymentMethod: PymtMethod,
-      paidAt,
       message: TxnMessage,
+      paidAt,
+      paymentMethod: PymtMethod,
+      provider: 'eghl',
+      providerTransactionId: TxnID,
+      transactionId: PaymentID,
     }
 
     return tryAsync(
@@ -68,23 +61,12 @@ export class PaymentService {
           const [transaction] = await tx
             .update(transactions)
             .set({ status: newStatus })
-            .where(
-              and(
-                eq(transactions.id, PaymentID),
-                eq(transactions.status, 'pending'),
-              ),
-            )
-            .returning({
-              userId: transactions.userId,
-              createdAs: transactions.createdAs,
-            })
+            .where(and(eq(transactions.id, PaymentID), eq(transactions.status, 'pending')))
+            .returning({ createdAs: transactions.createdAs, userId: transactions.userId })
 
           if (transaction === undefined) {
             logger.info(
-              {
-                event: 'payment.finalize.idempotent',
-                transaction_id: PaymentID,
-              },
+              { event: 'payment.finalize.idempotent', transaction_id: PaymentID },
               'Transaction already processed or not found',
             )
             return { finalized: false }
@@ -92,8 +74,7 @@ export class PaymentService {
 
           await tx.insert(payments).values(paymentData)
 
-          const shouldSaveCard =
-            isTransactionSuccess && transaction.createdAs === 'user'
+          const shouldSaveCard = isTransactionSuccess && transaction.createdAs === 'user'
 
           if (
             shouldSaveCard &&
@@ -106,31 +87,27 @@ export class PaymentService {
             await tx
               .insert(savedPaymentMethods)
               .values({
-                userId: transaction.userId,
+                cardExp: CardExp,
+                cardHolder: CardHolder,
+                cardNoMask: CardNoMask,
+                cardType: CardType,
+                lastUsedAt: now(),
                 token: Token,
                 tokenType: 'OCP',
-                cardNoMask: CardNoMask,
-                cardExp: CardExp,
-                cardType: CardType,
-                cardHolder: CardHolder,
-                lastUsedAt: now(),
+                userId: transaction.userId,
               })
               .onConflictDoUpdate({
+                set: {
+                  token: sql`excluded.token`, // Token might rotate
+                  lastUsedAt: now(),
+                },
                 target: [
                   savedPaymentMethods.userId,
                   savedPaymentMethods.cardNoMask,
                   savedPaymentMethods.cardExp,
                 ],
-                set: {
-                  token: sql`excluded.token`, // Token might rotate
-                  lastUsedAt: now(),
-                },
               })
-          } else if (
-            shouldSaveCard &&
-            TokenType === 'OCP' &&
-            Token !== undefined
-          ) {
+          } else if (shouldSaveCard && TokenType === 'OCP' && Token !== undefined) {
             // Update last used time if existing token was used
             await tx
               .update(savedPaymentMethods)

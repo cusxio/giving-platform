@@ -10,23 +10,18 @@ import { MultiLineChart } from './-components/multi-line-chart'
 import { createInsightsQueryOptions } from './-insights.queries'
 
 export const Route = createFileRoute('/(app)/(su)/insights')({
+  component: RouteComponent,
+  head: () => ({ meta: [{ title: `Insights · ${config.entity}` }] }),
   async loader({ context }) {
     await context.queryClient.ensureQueryData(createInsightsQueryOptions())
   },
-  head: () => ({ meta: [{ title: `Insights · ${config.entity}` }] }),
-  component: RouteComponent,
 })
 
 function RouteComponent() {
   const { data } = useSuspenseQueryDeferred(createInsightsQueryOptions())
 
   return (
-    <div
-      className={cx(
-        'srhink-0 mx-auto w-full grow p-4',
-        'max-w-120 bp-overview-2col:max-w-5xl',
-      )}
-    >
+    <div className={cx('srhink-0 mx-auto w-full grow p-4', 'max-w-120 bp-overview-2col:max-w-5xl')}>
       <div
         className={cx(
           'grid grid-cols-1 bp-overview-2col:grid-cols-2',
@@ -36,19 +31,10 @@ function RouteComponent() {
       >
         <InsightsSummary {...data.summary} />
 
-        <InsightsGivingBreakdown
-          userGuest={data.userGuest}
-          weekendWeekday={data.weekendWeekday}
-        />
+        <InsightsGivingBreakdown userGuest={data.userGuest} weekendWeekday={data.weekendWeekday} />
 
-        <MultiLineChart
-          data={data.weeklyCumulativeTotalsByYear}
-          metric="weekly"
-        />
-        <MultiLineChart
-          data={data.weeklyCumulativeTotalsByYear}
-          metric="cumulative"
-        />
+        <MultiLineChart data={data.weeklyCumulativeTotalsByYear} metric="weekly" />
+        <MultiLineChart data={data.weeklyCumulativeTotalsByYear} metric="cumulative" />
       </div>
     </div>
   )

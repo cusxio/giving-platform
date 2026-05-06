@@ -9,7 +9,7 @@ import { cx } from '#/styles/cx'
 export function WelcomeDone() {
   const navigate = useNavigate()
   const goToOverview = useCallback(() => {
-    void navigate({ to: '/overview', replace: true })
+    void navigate({ replace: true, to: '/overview' })
   }, [navigate])
 
   return (
@@ -18,14 +18,11 @@ export function WelcomeDone() {
       <div className="flex flex-col gap-y-4">
         <h1 className="text-center text-4xl font-bold">You’re all set!</h1>
         <p className="text-center text-balance text-fg-muted">
-          Your setup is complete and everything’s ready for you. Take a moment
-          to look around and make yourself at home.
+          Your setup is complete and everything’s ready for you. Take a moment to look around and
+          make yourself at home.
         </p>
       </div>
-      <Button
-        className={cx(buttonVariants.subtle, 'h-10 gap-x-2')}
-        onClick={goToOverview}
-      >
+      <Button className={cx(buttonVariants.subtle, 'h-10 gap-x-2')} onClick={goToOverview}>
         Continue to home
         <ArrowRightIcon size={16} weight="bold" />
       </Button>

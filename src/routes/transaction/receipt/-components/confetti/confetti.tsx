@@ -25,13 +25,11 @@ export default function Confetti() {
         for (const p of emitters) {
           void confetti({ ...theme.style, ...p })
         }
-      } else {
-        if (timestamp - lastBurst > BURST_INTERVAL) {
-          lastBurst = timestamp
-          const patterns = theme.emit({ remaining, totalDuration })
-          for (const p of patterns) {
-            void confetti({ ...theme.style, ...p })
-          }
+      } else if (timestamp - lastBurst > BURST_INTERVAL) {
+        lastBurst = timestamp
+        const patterns = theme.emit({ remaining, totalDuration })
+        for (const p of patterns) {
+          void confetti({ ...theme.style, ...p })
         }
       }
 

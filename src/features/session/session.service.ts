@@ -11,14 +11,10 @@ import type { Session, User } from '#/db/schema'
 import { SESSION_MAX_AGE_SECONDS } from './constants'
 import type { VerificationError } from './session.errors'
 import type { SessionRepository } from './session.repository'
-import {
-  clearSessionCookie,
-  cookieValueSchema,
-  serializeSessionCookie,
-} from './utils'
+import { clearSessionCookie, cookieValueSchema, serializeSessionCookie } from './utils'
 
 export class SessionService {
-  #sessionRepository: SessionRepository
+  readonly #sessionRepository: SessionRepository
 
   constructor(sessionRepository: SessionRepository) {
     this.#sessionRepository = sessionRepository
@@ -39,8 +35,7 @@ export class SessionService {
     const parts = cookieValue.split('.')
 
     const parseResult = trySync(
-      () =>
-        cookieValueSchema.Parse({ sessionId: parts[0], rawToken: parts[1] }),
+      () => cookieValueSchema.Parse({ rawToken: parts[1], sessionId: parts[0] }),
       createParseError,
     )
 
@@ -49,8 +44,7 @@ export class SessionService {
     }
 
     const { rawToken, sessionId } = parseResult.value
-    const sessionWithUserResult =
-      await this.#sessionRepository.findSessionByIdWithUser(sessionId)
+    const sessionWithUserResult = await this.#sessionRepository.findSessionByIdWithUser(sessionId)
 
     if (!sessionWithUserResult.ok) {
       return sessionWithUserResult
@@ -59,10 +53,7 @@ export class SessionService {
     const sessionWithUser = sessionWithUserResult.value
 
     if (sessionWithUser === null) {
-      return err({
-        type: 'SessionNotFoundError',
-        serializedCookie: clearSessionCookie(),
-      })
+      return err({ serializedCookie: clearSessionCookie(), type: 'SessionNotFoundError' })
     }
 
     const { session, user } = sessionWithUser
@@ -75,19 +66,13 @@ export class SessionService {
     )
 
     if (!isValid) {
-      return err({
-        type: 'SessionInvalidError',
-        serializedCookie: clearSessionCookie(),
-      })
+      return err({ serializedCookie: clearSessionCookie(), type: 'SessionInvalidError' })
     }
 
     const daysLeft = differenceInDays(session.expiresAt, now())
 
     if (daysLeft <= 0) {
-      return err({
-        type: 'SessionExpiredError',
-        serializedCookie: clearSessionCookie(),
-      })
+      return err({ serializedCookie: clearSessionCookie(), type: 'SessionExpiredError' })
     }
 
     if (daysLeft <= 7) {
@@ -108,10 +93,10 @@ export class SessionService {
           } else {
             logger.warn(
               {
+                err: res.error.error,
+                error_type: res.error.type,
                 event: 'session.extend.background_failed',
                 session_id: session.id,
-                error_type: res.error.type,
-                err: res.error.error,
               },
               'Database rejected session extension',
             )
@@ -119,19 +104,12 @@ export class SessionService {
         })
         .catch((error: unknown) => {
           logger.error(
-            {
-              event: 'session.extend.background_crash',
-              session_id: session.id,
-              err: error,
-            },
+            { err: error, event: 'session.extend.background_crash', session_id: session.id },
             'Critical error during background session extension',
           )
         })
 
-      const newCookieValue = serializeSessionCookie({
-        cookieValue,
-        expiresAt: extendedExpiresAt,
-      })
+      const newCookieValue = serializeSessionCookie({ cookieValue, expiresAt: extendedExpiresAt })
 
       return ok({
         serializedCookie: newCookieValue,

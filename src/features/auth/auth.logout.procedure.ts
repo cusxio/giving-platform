@@ -20,11 +20,7 @@ export const logout = createServerFn({ method: 'POST' })
 
       if (!result.ok) {
         logger.error(
-          {
-            event: 'auth.logout.failed',
-            err: result.error.error,
-            error_type: result.error.type,
-          },
+          { err: result.error.error, error_type: result.error.type, event: 'auth.logout.failed' },
           'Failed to delete session from DB',
         )
       }
@@ -32,5 +28,5 @@ export const logout = createServerFn({ method: 'POST' })
 
     setResponseHeader('Set-Cookie', clearSessionCookie())
 
-    throw redirect({ to: '/auth/login', replace: true })
+    throw redirect({ replace: true, to: '/auth/login' })
   })

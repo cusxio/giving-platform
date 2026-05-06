@@ -17,11 +17,7 @@ export function FormSubmitButton(props: FormSubmitButtonProps) {
   const { ref } = useStableButtonSize<HTMLButtonElement>(submitting)
 
   return (
-    <FormSubmit
-      disabled={submitting}
-      ref={ref}
-      render={<Button className={cx(className)} />}
-    >
+    <FormSubmit disabled={submitting} ref={ref} render={<Button className={cx(className)} />}>
       {!submitting && props.children}
 
       {submitting && <Spinner className="h-4.5 w-4.5" />}
@@ -35,32 +31,31 @@ function useStableButtonSize<T extends HTMLElement>(submitting: boolean) {
 
   useLayoutEffect(() => {
     const el = buttonRef.current
-    if (!el) return
+    let cleanup: VoidFunction | undefined
 
-    if (submitting) {
+    if (el && submitting) {
       // Ensure width is captured synchronously if it never was
       widthRef.current ??= el.offsetWidth
 
       el.style.width = `${widthRef.current}px`
-      return
-    }
+    } else if (el) {
+      // Not submitting → clear width and begin observing
+      el.style.width = ''
 
-    // Not submitting → clear width and begin observing
-    el.style.width = ''
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          widthRef.current = entry.borderBoxSize?.[0]?.inlineSize ?? el.offsetWidth
+        }
+      })
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        widthRef.current =
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          entry.borderBoxSize?.[0]?.inlineSize ?? el.offsetWidth
+      observer.observe(el)
+
+      cleanup = () => {
+        observer.disconnect()
       }
-    })
-
-    observer.observe(el)
-
-    return () => {
-      observer.disconnect()
     }
+
+    return cleanup
   }, [submitting])
 
   return { ref: buttonRef }

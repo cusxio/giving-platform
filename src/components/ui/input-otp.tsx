@@ -3,25 +3,20 @@ import { OTPInput } from 'input-otp'
 
 import { cx } from '#/styles/cx'
 
-export type InputOtpProps = Omit<
-  OTPInputProps,
-  'children' | 'maxLength' | 'render'
->
+export type InputOtpProps = Omit<OTPInputProps, 'children' | 'maxLength' | 'render'>
 
 export function InputOtp(props: InputOtpProps) {
   return (
     <OTPInput
       {...props}
       maxLength={6}
-      render={({ slots }) => {
-        return (
-          <div className="grid auto-rows-fr grid-cols-6">
-            {slots.map((slot, index) => {
-              return <Slot key={`otp-${index.toString()}`} {...slot} />
-            })}
-          </div>
-        )
-      }}
+      render={({ slots }) => (
+        <div className="grid auto-rows-fr grid-cols-6">
+          {slots.map((slot, index) => (
+            <Slot key={`otp-${index.toString()}`} {...slot} />
+          ))}
+        </div>
+      )}
     />
   )
 }

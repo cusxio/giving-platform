@@ -20,10 +20,7 @@ const verses: [Verse, ...Verse[]] = [
     text: 'Dear children, let us not love with words or speech but with actions and in truth.',
   },
   { ref: 'Acts 20:35', text: 'It is more blessed to give than to receive.' },
-  {
-    ref: 'Matthew 6:21',
-    text: 'For where your treasure is, there your heart will be also.',
-  },
+  { ref: 'Matthew 6:21', text: 'For where your treasure is, there your heart will be also.' },
   {
     ref: 'Hebrews 13:16',
     text: 'And do not forget to do good and to share with others, for with such sacrifices God is pleased.',
@@ -56,9 +53,7 @@ export function BibleVerse() {
         'grid gap-y-4 border border-border bg-base-0/50 p-4',
       )}
     >
-      <div className="text-center text-balance text-fg-muted">
-        “{verse.text}”
-      </div>
+      <div className="text-center text-balance text-fg-muted">“{verse.text}”</div>
       <div className="text-center text-sm text-fg-subtle">— {verse.ref}</div>
     </div>
   )

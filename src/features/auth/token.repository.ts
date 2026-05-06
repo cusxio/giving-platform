@@ -8,7 +8,7 @@ import type { Token, TokenInsert, User } from '#/db/schema'
 import { tokens } from '#/db/schema'
 
 export class TokenRepository {
-  #db: DB
+  readonly #db: DB
 
   constructor(db: DB) {
     this.#db = db
@@ -18,10 +18,7 @@ export class TokenRepository {
    * Atomically claim a token if it hasn't been used yet.
    * Returns true if successfully claimed, false if already used (lost race).
    */
-  async claimTokenIfUnused(
-    tokenId: Token['id'],
-    tokenHash: Token['tokenHash'],
-  ) {
+  async claimTokenIfUnused(tokenId: Token['id'], tokenHash: Token['tokenHash']) {
     const result = await tryAsync(
       () =>
         this.#db
@@ -39,7 +36,9 @@ export class TokenRepository {
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
     return ok(result.value.length === 1)
   }
@@ -51,14 +50,13 @@ export class TokenRepository {
     db: DB | DBTransaction = this.#db,
   ) {
     const tokenRes = await tryAsync(
-      () =>
-        db
-          .insert(tokens)
-          .values({ expiresAt: addMinutes(now(), 5), tokenHash, userId, mode }),
+      () => db.insert(tokens).values({ expiresAt: addMinutes(now(), 5), mode, tokenHash, userId }),
       createDBError,
     )
 
-    if (!tokenRes.ok) return tokenRes
+    if (!tokenRes.ok) {
+      return tokenRes
+    }
 
     return ok()
   }
@@ -69,21 +67,17 @@ export class TokenRepository {
         this.#db
           .select()
           .from(tokens)
-          .where(
-            and(
-              eq(tokens.userId, userId),
-              gt(tokens.expiresAt, now()),
-              isNull(tokens.usedAt),
-            ),
-          )
+          .where(and(eq(tokens.userId, userId), gt(tokens.expiresAt, now()), isNull(tokens.usedAt)))
           .orderBy(desc(tokens.createdAt))
           .limit(1),
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const token = result.value[0]
+    const [token] = result.value
     return ok(token ?? null)
   }
 }

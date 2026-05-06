@@ -39,8 +39,8 @@ class GuestEmailExistsError extends Error {
 }
 
 export class ContributionService {
-  #dbPool: DBPool
-  #userRepository: UserRepository
+  readonly #dbPool: DBPool
+  readonly #userRepository: UserRepository
 
   constructor(dbPool: DBPool, userRepository: UserRepository) {
     this.#dbPool = dbPool
@@ -52,19 +52,13 @@ export class ContributionService {
     userDetails: UserDetails,
     user: null | Pick<User, 'id'>,
   ): Promise<
-    Result<
-      { customerName: string; transactionId: string },
-      CreatePendingContributionError
-    >
+    Result<{ customerName: string; transactionId: string }, CreatePendingContributionError>
   > {
     const items = _items.map((i) => ({
       ...i,
       fund: i.fund.charAt(0).toUpperCase() + i.fund.slice(1),
     }))
-    const totalAmountInCents = items.reduce(
-      (sum, item) => sum + item.amountInCents,
-      0,
-    )
+    const totalAmountInCents = items.reduce((sum, item) => sum + item.amountInCents, 0)
     const { email, firstName, lastName } = userDetails
 
     return tryAsync(
@@ -103,15 +97,11 @@ export class ContributionService {
             )
 
             if (!createRes.ok) {
-              throw new TransactionRollbackError('Error creating user', {
-                cause: createRes.error,
-              })
+              throw new TransactionRollbackError('Error creating user', { cause: createRes.error })
             }
 
             if (!createRes.value) {
-              throw new TransactionRollbackError(
-                'User creation returned no result',
-              )
+              throw new TransactionRollbackError('User creation returned no result')
             }
 
             userId = createRes.value.id
@@ -135,16 +125,14 @@ export class ContributionService {
             .insert(transactions)
             .values({
               amount: totalAmountInCents,
+              createdAs: user ? 'user' : 'guest',
               status: 'pending',
               userId,
-              createdAs: user ? 'user' : 'guest',
             })
             .returning()
 
           if (!transaction) {
-            throw new TransactionRollbackError(
-              'Transaction creation returned no result',
-            )
+            throw new TransactionRollbackError('Transaction creation returned no result')
           }
 
           // Insert transaction items
@@ -154,25 +142,20 @@ export class ContributionService {
               if (fundId === undefined) {
                 throw new Error(`Invalid fund name: ${item.fund}`)
               }
-              return {
-                transactionId: transaction.id,
-                fundId,
-                amount: item.amountInCents,
-              }
+              return { amount: item.amountInCents, fundId, transactionId: transaction.id }
             }),
           )
 
-          return {
-            transactionId: transaction.id,
-            customerName: `${firstName} ${lastName}`,
-          }
+          return { customerName: `${firstName} ${lastName}`, transactionId: transaction.id }
         }),
       (error) => {
-        if (error instanceof GuestEmailExistsError)
-          return { type: 'GuestEmailExistsError', error }
+        if (error instanceof GuestEmailExistsError) {
+          return { error, type: 'GuestEmailExistsError' }
+        }
 
-        if (error instanceof EmailBelongsToAnotherUserError)
-          return { type: 'EmailBelongsToAnotherUserError', error }
+        if (error instanceof EmailBelongsToAnotherUserError) {
+          return { error, type: 'EmailBelongsToAnotherUserError' }
+        }
 
         return createTransactionError(error)
       },

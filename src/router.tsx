@@ -9,14 +9,14 @@ export function getRouter() {
   const queryClient = new QueryClient()
 
   const router = createTanStackRouter({
+    context: { queryClient },
+    defaultNotFoundComponent: NotFound,
+    defaultPreload: 'intent',
     routeTree,
     scrollRestoration: true,
-    defaultNotFoundComponent: NotFound,
-    context: { queryClient },
-    defaultPreload: 'intent',
   })
 
-  setupRouterSsrQueryIntegration({ router, queryClient })
+  setupRouterSsrQueryIntegration({ queryClient, router })
 
   return router
 }

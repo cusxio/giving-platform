@@ -30,134 +30,122 @@ export type RequestOtpResponse =
   | SuccessResponse
   | ValidationErrorResponse
 
-type RequestOtpBusinessErrorCode =
-  | 'ALREADY_EXISTS'
-  | 'NOT_EXISTS'
-  | 'RATE_LIMIT_EXCEEDED'
+type RequestOtpBusinessErrorCode = 'ALREADY_EXISTS' | 'NOT_EXISTS' | 'RATE_LIMIT_EXCEEDED'
 
 export const requestOtp = createServerFn({ method: 'POST' })
   .middleware([authServiceMiddleware])
   .inputValidator((v: RequestOtpInput) => v)
-  .handler(
-    async ({ data, context }): Promise<RequestOtpResponse | undefined> => {
-      const { user, authService, rateLimitService, logger } = context
+  .handler(async ({ data, context }): Promise<RequestOtpResponse | undefined> => {
+    const { user, authService, rateLimitService, logger } = context
 
-      if (user !== null) {
-        logger.info(
-          { event: 'auth.request_otp.redirected', user_id: user.id },
-          'User already logged in',
-        )
-        throw redirect({ to: '/' })
-      }
-
-      const parseResult = trySync(
-        () => schema.Parse({ ...data, email: data.email.toLowerCase().trim() }),
-        createParseError,
+    if (user !== null) {
+      logger.info(
+        { event: 'auth.request_otp.redirected', user_id: user.id },
+        'User already logged in',
       )
+      throw redirect({ to: '/' })
+    }
 
-      if (!parseResult.ok) {
+    const parseResult = trySync(
+      () => schema.Parse({ ...data, email: data.email.toLowerCase().trim() }),
+      createParseError,
+    )
+
+    if (!parseResult.ok) {
+      logger.warn(
+        {
+          err: parseResult.error.error,
+          error_type: parseResult.error.type,
+          event: 'auth.request_otp.validation_failed',
+        },
+        'Input validation failed',
+      )
+      return {
+        errors: parseResult.error.error.cause.errors.map((v) => ({
+          path: v.instancePath,
+          message: v.message,
+        })),
+        type: 'VALIDATION_ERROR',
+      }
+    }
+
+    const { email, mode } = parseResult.value
+
+    // Check rate limit before processing
+    const rateLimitResult = await rateLimitService.checkOtpRequest(email)
+    if (!rateLimitResult.ok) {
+      const { type } = rateLimitResult.error
+      if (type === 'RateLimitExceededError') {
         logger.warn(
           {
-            event: 'auth.request_otp.validation_failed',
-            err: parseResult.error.error,
-            error_type: parseResult.error.type,
+            email,
+            event: 'auth.request_otp.rate_limited',
+            retry_after_seconds: rateLimitResult.error.retryAfterSeconds,
           },
-          'Input validation failed',
+          'Rate limit exceeded for OTP request',
         )
         return {
-          type: 'VALIDATION_ERROR',
-          errors: parseResult.error.error.cause.errors.map((v) => {
-            return { path: v.instancePath, message: v.message }
-          }),
-        }
-      }
-
-      const { email, mode } = parseResult.value
-
-      // Check rate limit before processing
-      const rateLimitResult = await rateLimitService.checkOtpRequest(email)
-      if (!rateLimitResult.ok) {
-        const { type } = rateLimitResult.error
-        if (type === 'RateLimitExceededError') {
-          logger.warn(
-            {
-              event: 'auth.request_otp.rate_limited',
-              email,
-              retry_after_seconds: rateLimitResult.error.retryAfterSeconds,
-            },
-            'Rate limit exceeded for OTP request',
-          )
-          return {
-            type: 'BUSINESS_ERROR',
-            error: {
-              code: 'RATE_LIMIT_EXCEEDED',
-              message: `Too many requests. Please try again in ${Math.ceil(rateLimitResult.error.retryAfterSeconds / 60)} minutes.`,
-            },
-          }
-        }
-        // DB error
-        logger.error(
-          {
-            event: 'auth.request_otp.rate_limit_check_failed',
-            err: rateLimitResult.error.error,
-            error_type: type,
+          error: {
+            code: 'RATE_LIMIT_EXCEEDED',
+            message: `Too many requests. Please try again in ${Math.ceil(rateLimitResult.error.retryAfterSeconds / 60)} minutes.`,
           },
-          'Rate limit check failed',
-        )
-        return { type: 'SERVER_ERROR' }
-      }
-
-      logger.info(
-        { event: 'auth.request_otp.attempt', email, mode },
-        'Initiating OTP request',
-      )
-
-      const userResult =
-        mode === 'signup'
-          ? await authService.signup(email)
-          : await authService.login(email)
-
-      if (!userResult.ok) {
-        const { type } = userResult.error
-        switch (type) {
-          case 'AlreadyExistsError': {
-            logger.warn(
-              { event: 'auth.request_otp.blocked', email, reason: 'exists' },
-              'Signup blocked: User already exists',
-            )
-            return { type: 'BUSINESS_ERROR', error: { code: 'ALREADY_EXISTS' } }
-          }
-          case 'NotExistsError': {
-            logger.warn(
-              { event: 'auth.request_otp.blocked', email, reason: 'not_found' },
-              'Login blocked: User does not exist',
-            )
-            return { type: 'BUSINESS_ERROR', error: { code: 'NOT_EXISTS' } }
-          }
-          case 'DBEmptyReturnError':
-          case 'DBQueryError':
-          case 'SendEmailError': {
-            logger.error(
-              {
-                event: 'auth.request_otp.failed',
-                err: userResult.error.error,
-                error_type: userResult.error.type,
-              },
-              'System Error during OTP request',
-            )
-            return { type: 'SERVER_ERROR' }
-          }
-          default: {
-            assertExhaustive(userResult.error)
-          }
+          type: 'BUSINESS_ERROR',
         }
       }
-
-      logger.info(
-        { event: 'auth.request_otp.success', email, mode },
-        'OTP sent successfully',
+      // DB error
+      logger.error(
+        {
+          err: rateLimitResult.error.error,
+          error_type: type,
+          event: 'auth.request_otp.rate_limit_check_failed',
+        },
+        'Rate limit check failed',
       )
+      return { type: 'SERVER_ERROR' }
+    }
 
-      return { type: 'SUCCESS' }
-    },
-  )
+    logger.info({ email, event: 'auth.request_otp.attempt', mode }, 'Initiating OTP request')
+
+    const userResult =
+      mode === 'signup' ? await authService.signup(email) : await authService.login(email)
+
+    if (!userResult.ok) {
+      const { type } = userResult.error
+      switch (type) {
+        case 'AlreadyExistsError': {
+          logger.warn(
+            { email, event: 'auth.request_otp.blocked', reason: 'exists' },
+            'Signup blocked: User already exists',
+          )
+          return { error: { code: 'ALREADY_EXISTS' }, type: 'BUSINESS_ERROR' }
+        }
+        case 'NotExistsError': {
+          logger.warn(
+            { email, event: 'auth.request_otp.blocked', reason: 'not_found' },
+            'Login blocked: User does not exist',
+          )
+          return { error: { code: 'NOT_EXISTS' }, type: 'BUSINESS_ERROR' }
+        }
+        case 'DBEmptyReturnError':
+        case 'DBQueryError':
+        case 'SendEmailError': {
+          logger.error(
+            {
+              err: userResult.error.error,
+              error_type: userResult.error.type,
+              event: 'auth.request_otp.failed',
+            },
+            'System Error during OTP request',
+          )
+          return { type: 'SERVER_ERROR' }
+        }
+        default: {
+          assertExhaustive(userResult.error)
+        }
+      }
+    }
+
+    logger.info({ email, event: 'auth.request_otp.success', mode }, 'OTP sent successfully')
+
+    return { type: 'SUCCESS' }
+  })

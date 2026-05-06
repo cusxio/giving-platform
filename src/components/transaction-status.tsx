@@ -8,8 +8,8 @@ interface TransactionStatusProps {
 
 export const transactionStatusStyles: Record<Transaction['status'], string> = {
   failed: cx('bg-base-error text-fg-error'),
-  success: cx('bg-base-success text-fg-success'),
   pending: cx('bg-base-warning text-fg-warning'),
+  success: cx('bg-base-success text-fg-success'),
 }
 
 export function TransactionStatus(props: TransactionStatusProps) {

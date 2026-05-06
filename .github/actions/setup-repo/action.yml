@@ -1,36 +1,37 @@
 name: 'Setup Repo'
-description: 'Sets up Bun, restores caches, and installs dependencies'
+description: 'Sets up Node.js, pnpm, restores caches, and installs dependencies'
 
 inputs:
-  bun-version:
-    description: 'Version of Bun to use'
-    default: 'latest'
+  node-version:
+    description: 'Version of Node.js to use'
+    default: '24'
 
 runs:
   using: 'composite'
   steps:
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v2
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
       with:
-        bun-version: ${{ inputs.bun-version }}
+        run_install: false
 
-    - name: Cache Bun Dependencies
-      uses: actions/cache@v4
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
       with:
-        path: ~/.bun/install/cache
-        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
-        restore-keys: ${{ runner.os }}-bun-
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
 
     - name: Install Dependencies
       shell: bash
-      run: bun install --frozen-lockfile
+      run: pnpm install --frozen-lockfile --prefer-offline
 
     - name: Cache Moon Artifacts
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           .moon/cache/hashes
           .moon/cache/outputs
-        key: ${{ runner.os }}-moon-${{ github.sha }}
+          .moon/cache/states
+        key: ${{ runner.os }}-moon-${{ hashFiles('moon.yml', '.moon/**/*.yml', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}-${{ github.sha }}
         restore-keys: |
-          ${{ runner.os }}-moon-
+          ${{ runner.os }}-moon-${{ hashFiles('moon.yml', '.moon/**/*.yml', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}-

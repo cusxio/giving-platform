@@ -1,7 +1,4 @@
-import {
-  InvoiceIcon,
-  MagnifyingGlassIcon,
-} from '@phosphor-icons/react/dist/ssr'
+import { InvoiceIcon, MagnifyingGlassIcon } from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
 interface ReportEmptyProps {

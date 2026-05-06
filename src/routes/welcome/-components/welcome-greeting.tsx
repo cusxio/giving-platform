@@ -1,12 +1,6 @@
 import { useEffect, useState } from 'react'
 
-const welcomeText = [
-  'Welcome !',
-  'ようこそ !',
-  '환영합니다 !',
-  '欢迎 !',
-  'Selamat Datang !',
-]
+const welcomeText = ['Welcome !', 'ようこそ !', '환영합니다 !', '欢迎 !', 'Selamat Datang !']
 
 export function WelcomeGreeting() {
   const [text, setText] = useState(welcomeText[0])

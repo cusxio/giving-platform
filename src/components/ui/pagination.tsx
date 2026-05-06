@@ -10,10 +10,7 @@ import { Link } from '@tanstack/react-router'
 
 import { cx } from '#/styles/cx'
 
-interface PaginationLinkProps extends Pick<
-  LinkProps,
-  'disabled' | 'search' | 'to'
-> {
+interface PaginationLinkProps extends Pick<LinkProps, 'disabled' | 'search' | 'to'> {
   icon: ReturnType<Icon>
 }
 

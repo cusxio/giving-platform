@@ -18,23 +18,23 @@ export const funds = [
 export type Fund = (typeof funds)[number]
 
 export const FUND_CHART_COLOR_MAP: Record<'builder' | Fund, string> = {
+  builder: 'text-chart-2',
+  future: 'text-chart-3',
+  mission: 'text-chart-5',
   offering: 'text-chart-1',
   tithe: 'text-chart-4',
-  mission: 'text-chart-5',
-  future: 'text-chart-3',
-  builder: 'text-chart-2',
 }
 
 export const FUND_ICON_MAP: Record<Fund, Icon> = {
-  // builder: HammerIcon,
-  offering: HandHeartIcon,
+  // Builder: HammerIcon,
   future: PottedPlantIcon,
   mission: GlobeIcon,
+  offering: HandHeartIcon,
   tithe: ChurchIcon,
 }
 
 export const FUND_COLOR_MAP: Record<Fund, string> = {
-  // builder: 'bg-brown-bg text-brown-fg',
+  // Builder: 'bg-brown-bg text-brown-fg',
   future: 'bg-purple-bg text-purple-fg',
   mission: 'bg-lime-bg text-lime-fg',
   offering: 'bg-red-bg text-red-fg',

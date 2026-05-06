@@ -8,7 +8,7 @@ import type { User, UserInsert } from '#/db/schema'
 import { users } from '#/db/schema'
 
 export class UserRepository {
-  #db: DB
+  readonly #db: DB
   constructor(db: DB) {
     this.#db = db
   }
@@ -23,46 +23,46 @@ export class UserRepository {
           .insert(users)
           .values({ ...input, role: 'user', status: 'guest' })
           .onConflictDoUpdate({
-            target: users.email,
             set: {
-              role: sql`excluded.role`,
-              status: sql`excluded.status`,
               firstName: sql`excluded.first_name`,
               lastName: sql`excluded.last_name`,
+              role: sql`excluded.role`,
+              status: sql`excluded.status`,
             },
+            target: users.email,
           })
           .returning(),
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const user = result.value[0]
+    const [user] = result.value
     return ok(user ?? null)
   }
 
-  async findUserByEmail(
-    email: User['email'],
-    db: AnyDBOrTransaction = this.#db,
-  ) {
+  async findUserByEmail(email: User['email'], db: AnyDBOrTransaction = this.#db) {
     const result = await tryAsync(
       () => db.select().from(users).where(eq(users.email, email)),
       createDBError,
     )
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const user = result.value[0]
+    const [user] = result.value
     return ok(user ?? null)
   }
 
   async findUserById(userId: User['id'], db: DB | DBTransaction = this.#db) {
-    const result = await tryAsync(
-      () => this.findUserByIdQuery(userId, db),
-      createDBError,
-    )
-    if (!result.ok) return result
+    const result = await tryAsync(() => this.findUserByIdQuery(userId, db), createDBError)
+    if (!result.ok) {
+      return result
+    }
 
-    const user = result.value[0]
+    const [user] = result.value
     return ok(user ?? null)
   }
 
@@ -75,23 +75,22 @@ export class UserRepository {
       () =>
         this.#db
           .update(users)
-          .set({ status: 'active', emailVerifiedAt: now() })
+          .set({ emailVerifiedAt: now(), status: 'active' })
           .where(eq(users.id, userId)),
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
     return ok()
   }
 
-  markUserAsActiveByIdQuery(
-    userId: User['id'],
-    db: AnyDBOrTransaction = this.#db,
-  ) {
+  markUserAsActiveByIdQuery(userId: User['id'], db: AnyDBOrTransaction = this.#db) {
     return db
       .update(users)
-      .set({ status: 'active', emailVerifiedAt: now() })
+      .set({ emailVerifiedAt: now(), status: 'active' })
       .where(eq(users.id, userId))
   }
 
@@ -105,9 +104,11 @@ export class UserRepository {
       createDBError,
     )
 
-    if (!result.ok) return result
+    if (!result.ok) {
+      return result
+    }
 
-    const user = result.value[0]
+    const [user] = result.value
     return ok(user ?? null)
   }
 }

@@ -18,9 +18,9 @@ export function Header(props: HeaderProps) {
   const { user, userSettings } = props
 
   const store = useMenuStore()
-  const showPrivacyToggle = useMatches().some((match) => {
-    return ['/(app)/overview', '/(app)/transactions'].includes(match.routeId)
-  })
+  const showPrivacyToggle = useMatches().some((match) =>
+    ['/(app)/overview', '/(app)/transactions'].includes(match.routeId),
+  )
 
   return (
     <>
@@ -28,15 +28,9 @@ export function Header(props: HeaderProps) {
         <AsideNavButton />
 
         <div className="flex items-center gap-x-2">
-          {showPrivacyToggle && (
-            <HeaderPrivacyToggle userSettings={userSettings} />
-          )}
+          {showPrivacyToggle && <HeaderPrivacyToggle userSettings={userSettings} />}
 
-          <MenuButton
-            className="h-10 w-10"
-            render={(props) => <Button {...props} />}
-            store={store}
-          >
+          <MenuButton className="h-10 w-10" render={(props) => <Button {...props} />} store={store}>
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-elevated">
               {user.firstName?.charAt(0) ?? user.lastName?.charAt(0)}
             </span>

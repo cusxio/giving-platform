@@ -5,8 +5,7 @@ import { startContribution } from './giving.start-contribution.procedure'
 
 export function useStartContributionMutation() {
   return useMutation({
-    mutationFn: (input: StartContributionInput) =>
-      startContribution({ data: input }),
+    mutationFn: (input: StartContributionInput) => startContribution({ data: input }),
   })
 }
 

@@ -6,11 +6,11 @@ import { FUND_COLOR_MAP } from '#/core/brand/funds'
 import { cx } from '#/styles/cx'
 
 const quickFillSuggestions: Record<Fund, number[]> = {
-  // builder: [5, 10, 20, 50, 100, 500],
+  // Builder: [5, 10, 20, 50, 100, 500],
+  future: [10, 50, 100, 200, 500, 1000],
+  mission: [5, 10, 20, 50, 100, 500],
   offering: [5, 10, 20, 30, 50, 100],
   tithe: [50, 100, 200, 500, 1000, 2000],
-  mission: [5, 10, 20, 50, 100, 500],
-  future: [10, 50, 100, 200, 500, 1000],
 }
 
 export interface GivingFormFundQuickFillProps {
@@ -33,12 +33,7 @@ export function GivingFormFundQuickFill(props: GivingFormFundQuickFillProps) {
 
   return (
     <div className="@container/form-qf relative">
-      <div
-        className={cx(
-          'snap-x',
-          'no-scrollbar flex flex-nowrap overflow-x-auto',
-        )}
-      >
+      <div className={cx('snap-x', 'no-scrollbar flex flex-nowrap overflow-x-auto')}>
         {quickFillSuggestions[fund].map((v) => {
           const match = currentValue === v.toString()
           return (

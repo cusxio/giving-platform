@@ -14,10 +14,18 @@ export function GreetUser(props: GreetUserProps) {
     const date = now(clientTz)
     const hour = date.getHours()
 
-    if (hour >= 6 && hour < 12) return 'Good morning'
-    if (hour >= 12 && hour < 17) return 'Good afternoon'
-    if (hour >= 17 && hour < 20) return 'Good evening'
-    if (hour >= 20 || hour < 6) return 'Good night'
+    if (hour >= 6 && hour < 12) {
+      return 'Good morning'
+    }
+    if (hour >= 12 && hour < 17) {
+      return 'Good afternoon'
+    }
+    if (hour >= 17 && hour < 20) {
+      return 'Good evening'
+    }
+    if (hour >= 20 || hour < 6) {
+      return 'Good night'
+    }
 
     return 'Welcome back'
   }, [])

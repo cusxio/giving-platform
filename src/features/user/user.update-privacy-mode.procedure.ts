@@ -30,14 +30,8 @@ export const updatePrivacyMode = createServerFn({ method: 'POST' })
     const userId = user?.id
 
     if (userId === undefined) {
-      logger.warn(
-        { event: 'user.update_privacy.unauthorized' },
-        'Unauthorized privacy update',
-      )
-      return {
-        type: 'AUTH_ERROR',
-        message: 'You must be logged in to continue.',
-      }
+      logger.warn({ event: 'user.update_privacy.unauthorized' }, 'Unauthorized privacy update')
+      return { message: 'You must be logged in to continue.', type: 'AUTH_ERROR' }
     }
 
     logger.info(
@@ -49,24 +43,21 @@ export const updatePrivacyMode = createServerFn({ method: 'POST' })
       () =>
         db
           .insert(userSettingsTable)
-          .values({ userId, privacyMode })
-          .onConflictDoUpdate({
-            target: userSettingsTable.userId,
-            set: { privacyMode },
-          })
+          .values({ privacyMode, userId })
+          .onConflictDoUpdate({ set: { privacyMode }, target: userSettingsTable.userId })
           .returning(),
       createDBError,
     )
 
     if (!result.ok) {
       logger.error(
-        { event: 'user.update_privacy.failed', err: result.error },
+        { err: result.error, event: 'user.update_privacy.failed' },
         'DB failed to update privacy mode',
       )
       return { type: 'SERVER_ERROR' }
     }
 
-    const userSettings = result.value[0]
+    const [userSettings] = result.value
 
     if (!userSettings) {
       logger.error(
@@ -76,10 +67,7 @@ export const updatePrivacyMode = createServerFn({ method: 'POST' })
       return { type: 'SERVER_ERROR' }
     }
 
-    logger.info(
-      { event: 'user.update_privacy.success' },
-      'Privacy mode updated',
-    )
+    logger.info({ event: 'user.update_privacy.success' }, 'Privacy mode updated')
 
     return { type: 'SUCCESS', value: userSettings }
   })
