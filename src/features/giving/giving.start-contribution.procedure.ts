@@ -15,7 +15,8 @@ import type {
   ValidationErrorResponse,
 } from '#/core/procedure-response-types'
 import { trySync } from '#/core/result'
-import { contributionServiceMiddleware, eghlServiceMiddleware } from '#/server/middleware'
+import { contributionServiceMiddleware } from '#/server/middleware/contribution-service-middleware'
+import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 
 const schema = Compile(
   Type.Object({

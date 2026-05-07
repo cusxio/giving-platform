@@ -6,11 +6,9 @@ import { createServerFn } from '@tanstack/react-start'
 //   SuccessResponse,
 // } from '#/core/procedure-response-types'
 // Import { User } from '#/db/schema'
-import {
-  dbMiddleware,
-  transactionRepositoryMiddleware,
-  userRepositoryMiddleware,
-} from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
+import { transactionRepositoryMiddleware } from '#/server/middleware/transaction-repository-middleware'
+import { userRepositoryMiddleware } from '#/server/middleware/user-repository-middleware'
 
 // Type GetWelcomeDataResponse =
 //   | AuthErrorResponse

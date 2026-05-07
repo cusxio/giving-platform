@@ -4,7 +4,7 @@ import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
 import type { User } from '#/db/schema'
 import { transactions } from '#/db/schema'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 interface Input {
   journey: User['journey']

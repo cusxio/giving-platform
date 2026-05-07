@@ -14,7 +14,7 @@ import type {
   ValidationErrorResponse,
 } from '#/core/procedure-response-types'
 import { trySync } from '#/core/result'
-import { authServiceMiddleware } from '#/server/middleware'
+import { authServiceMiddleware } from '#/server/middleware/auth-service-middleware'
 
 const schema = Compile(
   Type.Object({

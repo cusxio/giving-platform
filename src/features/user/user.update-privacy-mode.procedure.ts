@@ -9,7 +9,7 @@ import type {
 import { tryAsync } from '#/core/result'
 import type { UserSettings } from '#/db/schema'
 import { userSettings as userSettingsTable } from '#/db/schema'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 export interface UpdatePrivacyModeInput {
   privacyMode: boolean

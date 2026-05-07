@@ -2,7 +2,7 @@ import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
 
-import { authServiceMiddleware } from '#/server/middleware'
+import { authServiceMiddleware } from '#/server/middleware/auth-service-middleware'
 
 import { clearSessionCookie } from '../session/utils'
 

@@ -5,7 +5,9 @@ import { addDays, addMinutes, differenceInMinutes, isBefore, now } from '#/core/
 import { transactions } from '#/db/schema'
 import { CRON_SECRET } from '#/envvars'
 import { EghlTxnExists, EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
-import { dbMiddleware, eghlServiceMiddleware, paymentServiceMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
+import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
+import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
 
 const LOG_EVENTS = {
   BATCH_UPDATE_FAILED: 'eghl.cron.batch_update_failed',

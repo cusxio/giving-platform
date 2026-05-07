@@ -2,7 +2,7 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import { centsToRinggit } from '#/core/money'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 import { InsightsRepository } from './insights.repository'
 

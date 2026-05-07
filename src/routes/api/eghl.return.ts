@@ -2,7 +2,8 @@ import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import { EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
-import { eghlServiceMiddleware, paymentServiceMiddleware } from '#/server/middleware'
+import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
+import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
 
 import { parseAndVerifyEghlResponse } from './-eghl.shared'
 

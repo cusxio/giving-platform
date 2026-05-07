@@ -5,7 +5,7 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { clientTz } from '#/core/date'
 import type { User } from '#/db/schema'
 import { transactions } from '#/db/schema'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 interface Input {
   journey: User['journey']

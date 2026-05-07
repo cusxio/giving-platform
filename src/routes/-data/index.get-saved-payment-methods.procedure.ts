@@ -3,7 +3,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
 import { savedPaymentMethods } from '#/db/schema'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 export const getSavedPaymentMethods = createServerFn()
   .middleware([dbMiddleware])

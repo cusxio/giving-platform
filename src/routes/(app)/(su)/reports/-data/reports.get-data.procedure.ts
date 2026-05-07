@@ -5,7 +5,7 @@ import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
 import { centsToRinggit } from '#/core/money'
 import { safeSum } from '#/db/aggregates'
 import { funds, transactionItems, transactions } from '#/db/schema'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 interface Input {
   endDateUTCExclusive: Date

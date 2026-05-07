@@ -6,7 +6,7 @@ import { TZDate, clientTz } from '#/core/date'
 import { centsToRinggit } from '#/core/money'
 import type { User } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
-import { dbMiddleware } from '#/server/middleware'
+import { dbMiddleware } from '#/server/middleware/db-middleware'
 
 import { getYearDateRange } from './overview.helpers'
 
