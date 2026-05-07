@@ -1,6 +1,6 @@
 import type { FormStore } from '@ariakit/react'
-import { FormLabel, FormRadio, FormRadioGroup } from '@ariakit/react'
-import { createElement } from 'react'
+import { FormRadio, FormRadioGroup } from '@ariakit/react'
+import { createElement, useId } from 'react'
 
 import type { SavedPaymentMethod } from '#/db/schema'
 import { cx } from '#/styles/cx'
@@ -21,16 +21,27 @@ const pseudoRadio = cx(
 
 export function PaymentMethods(props: PaymentMethodsProps) {
   const { savedPaymentMethods, store } = props
+  const radioIdBase = useId()
 
   return (
     <FormRadioGroup className="flex flex-col">
-      {savedPaymentMethods.map((x) => {
+      {savedPaymentMethods.map((x, index) => {
         const year = x.cardExp.slice(0, 4)
         const month = x.cardExp.slice(4, 6)
+        const radioId = `${radioIdBase}-saved-${index}`
 
         return (
-          <label className="flex items-center gap-x-4 py-2 select-none" key={x.cardNoMask}>
-            <FormRadio className="peer sr-only" name={store.names.token} value={x.token} />
+          <label
+            className="flex items-center gap-x-4 py-2 select-none"
+            htmlFor={radioId}
+            key={x.cardNoMask}
+          >
+            <FormRadio
+              className="peer sr-only"
+              id={radioId}
+              name={store.names.token}
+              value={x.token}
+            />
             <span className={pseudoRadio} />
             <span className="inline-flex overflow-hidden rounded-sm">
               {createElement(
@@ -50,11 +61,19 @@ export function PaymentMethods(props: PaymentMethodsProps) {
         )
       })}
 
-      <FormLabel name={store.names.token} className="flex items-center gap-x-4 py-4 select-none">
-        <FormRadio className="peer sr-only" name={store.names.token} value={__NORMAL_CHECKOUT__} />
+      <label
+        className="flex items-center gap-x-4 py-4 select-none"
+        htmlFor={`${radioIdBase}-normal`}
+      >
+        <FormRadio
+          className="peer sr-only"
+          id={`${radioIdBase}-normal`}
+          name={store.names.token}
+          value={__NORMAL_CHECKOUT__}
+        />
         <span className={pseudoRadio} />
         <span className="text-sm text-fg-1/80">Online Banking / E-wallet / New Card</span>
-      </FormLabel>
+      </label>
     </FormRadioGroup>
   )
 }
