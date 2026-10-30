@@ -12,7 +12,7 @@ import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/envvars'
 
 import type { EghlQueryError } from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
-import { EghlQueryResponseSchema } from './eghl.schema'
+import { EghlQueryResponseSchema, EghlTxnExists } from './eghl.schema'
 
 interface CreatePaymentRequestParams {
   amountInCents: number
@@ -143,20 +143,7 @@ export class EghlService {
   }
 
   verifyPaymentResponse(response: EghlPaymentResponse | EghlQueryResponse) {
-    const {
-      TxnID,
-      ServiceID,
-      PaymentID,
-      TxnStatus,
-      Amount,
-      CurrencyCode,
-      AuthCode,
-      OrderNumber,
-      Param6,
-      Param7,
-      HashValue,
-      HashValue2,
-    } = response
+    const { TxnID, ServiceID, PaymentID, TxnStatus, Amount, CurrencyCode, AuthCode } = response
 
     const hashValueFields = [
       EGHL_PASSWORD,
@@ -169,14 +156,14 @@ export class EghlService {
       AuthCode,
     ]
 
-    if (HashValue2 === undefined) {
-      return constantTimeEqual(this.#generateHashValue(hashValueFields.join('')), HashValue)
+    if ('TxnExists' in response && response.TxnExists !== EghlTxnExists.Exists) {
+      return constantTimeEqual(
+        this.#generateHashValue(hashValueFields.join('')),
+        response.HashValue,
+      )
     }
 
-    if (!HashValue2) {
-      return false
-    }
-
+    const { OrderNumber, Param6, Param7, HashValue2 } = response
     const hashKeyFields = [...hashValueFields, OrderNumber, Param6, Param7].join('')
 
     const calculatedHash = this.#generateHashValue(hashKeyFields)

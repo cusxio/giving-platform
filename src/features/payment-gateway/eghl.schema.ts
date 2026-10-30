@@ -145,16 +145,29 @@ export enum EghlTxnExists {
   NotFound = '1',
 }
 
+const eghlQueryResponseFields = {
+  ...eghlResponseFields,
+  TxnStatus: Type.Union([Type.Enum(EghlTxnStatus), Type.Enum(EghlQueryTxnStatus)]),
+  QueryDesc: Type.Optional(Type.String()),
+  TotalRefundAmount: Type.Optional(Type.String()),
+}
+
 export const EghlQueryResponseSchema = Compile(
-  Type.Object({
-    ...eghlResponseFields,
+  Type.Union([
+    Type.Object({
+      ...eghlQueryResponseFields,
+      HashValue2: Type.String({ minLength: 1 }),
+      TxnExists: Type.Literal(EghlTxnExists.Exists),
+    }),
     // Not-found and internal-error replies are signed with HashValue alone.
-    HashValue2: Type.Optional(Type.String({ minLength: 1 })),
-    TxnStatus: Type.Union([Type.Enum(EghlTxnStatus), Type.Enum(EghlQueryTxnStatus)]),
-    QueryDesc: Type.Optional(Type.String()),
-    TotalRefundAmount: Type.Optional(Type.String()),
-    TxnExists: Type.Enum(EghlTxnExists),
-  }),
+    Type.Object({
+      ...eghlQueryResponseFields,
+      TxnExists: Type.Union([
+        Type.Literal(EghlTxnExists.InternalError),
+        Type.Literal(EghlTxnExists.NotFound),
+      ]),
+    }),
+  ]),
 )
 
 export type EghlPaymentResponse = ReturnType<typeof EghlPaymentResponseSchema.Parse>
