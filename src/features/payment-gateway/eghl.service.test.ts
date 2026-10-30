@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type * as Envvars from '#/envvars'
 
@@ -62,6 +62,54 @@ const buildResponse = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymen
     )
 
   return { ...response, HashValue2: signature }
+}
+
+const notFoundReply = (signatureOverride?: string) => {
+  const fields = {
+    Amount: '50.00',
+    AuthCode: '',
+    CurrencyCode: 'MYR',
+    OrderNumber: '',
+    PaymentID: 'txn_abc123',
+    PymtMethod: 'ANY',
+    QueryDesc: 'Not found',
+    ServiceID: mockedEnv.EGHL_SERVICE_ID,
+    TransactionType: 'QUERY',
+    TxnExists: EghlTxnExists.NotFound,
+    TxnID: '',
+    TxnMessage: '',
+    TxnStatus: '-1',
+  }
+  const signature =
+    signatureOverride ??
+    hashValue(
+      [
+        mockedEnv.EGHL_PASSWORD,
+        fields.TxnID,
+        fields.ServiceID,
+        fields.PaymentID,
+        fields.TxnStatus,
+        fields.Amount,
+        fields.CurrencyCode,
+        fields.AuthCode,
+      ].join(''),
+    )
+  return new URLSearchParams({ ...fields, HashValue: signature }).toString()
+}
+
+const queryAgainstGatewayReply = async (body: string) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(() => Promise.resolve(new Response(body, { status: 200 }))),
+  )
+  try {
+    return await createService().queryTransactionStatus({
+      amountInCents: 5000,
+      transactionId: 'txn_abc123',
+    })
+  } finally {
+    vi.unstubAllGlobals()
+  }
 }
 
 describe('eghlService', () => {
@@ -147,58 +195,10 @@ describe('eghlService', () => {
   })
 
   describe('queryTransactionStatus', () => {
-    afterEach(() => {
-      vi.unstubAllGlobals()
-    })
-
-    const notFoundReply = (signatureOverride?: string) => {
-      const fields = {
-        Amount: '50.00',
-        AuthCode: '',
-        CurrencyCode: 'MYR',
-        OrderNumber: '',
-        PaymentID: 'txn_abc123',
-        PymtMethod: 'ANY',
-        QueryDesc: 'Not found',
-        ServiceID: mockedEnv.EGHL_SERVICE_ID,
-        TransactionType: 'QUERY',
-        TxnExists: EghlTxnExists.NotFound,
-        TxnID: '',
-        TxnMessage: '',
-        TxnStatus: '-1',
-      }
-      const signature =
-        signatureOverride ??
-        hashValue(
-          [
-            mockedEnv.EGHL_PASSWORD,
-            fields.TxnID,
-            fields.ServiceID,
-            fields.PaymentID,
-            fields.TxnStatus,
-            fields.Amount,
-            fields.CurrencyCode,
-            fields.AuthCode,
-          ].join(''),
-        )
-      return new URLSearchParams({ ...fields, HashValue: signature }).toString()
-    }
-
-    const stubGatewayReply = (body: string) => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn<typeof fetch>(async () => new Response(body, { status: 200 })),
-      )
-    }
-
     it('returns a verified not-found reply that carries only HashValue', async () => {
       expect.hasAssertions()
-      stubGatewayReply(notFoundReply())
 
-      const result = await createService().queryTransactionStatus({
-        amountInCents: 5000,
-        transactionId: 'txn_abc123',
-      })
+      const result = await queryAgainstGatewayReply(notFoundReply())
 
       expect(result).toMatchObject({
         ok: true,
@@ -208,12 +208,8 @@ describe('eghlService', () => {
 
     it('rejects a not-found reply whose HashValue does not match', async () => {
       expect.hasAssertions()
-      stubGatewayReply(notFoundReply('not-valid'))
 
-      const result = await createService().queryTransactionStatus({
-        amountInCents: 5000,
-        transactionId: 'txn_abc123',
-      })
+      const result = await queryAgainstGatewayReply(notFoundReply('not-valid'))
 
       expect(result).toStrictEqual({ error: { type: 'EghlVerificationError' }, ok: false })
     })

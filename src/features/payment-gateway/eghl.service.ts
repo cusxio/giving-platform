@@ -142,7 +142,7 @@ export class EghlService {
     return ok(eghlResponse)
   }
 
-  verifyPaymentResponse(response: EghlPaymentResponse) {
+  verifyPaymentResponse(response: EghlPaymentResponse | EghlQueryResponse) {
     const {
       TxnID,
       ServiceID,
@@ -154,14 +154,11 @@ export class EghlService {
       OrderNumber,
       Param6,
       Param7,
+      HashValue,
       HashValue2,
     } = response
 
-    if (!HashValue2) {
-      return false
-    }
-
-    const hashKeyFields = [
+    const hashValueFields = [
       EGHL_PASSWORD,
       TxnID,
       ServiceID,
@@ -170,10 +167,17 @@ export class EghlService {
       Amount,
       CurrencyCode,
       AuthCode,
-      OrderNumber,
-      Param6,
-      Param7,
-    ].join('')
+    ]
+
+    if (HashValue2 === undefined) {
+      return constantTimeEqual(this.#generateHashValue(hashValueFields.join('')), HashValue)
+    }
+
+    if (!HashValue2) {
+      return false
+    }
+
+    const hashKeyFields = [...hashValueFields, OrderNumber, Param6, Param7].join('')
 
     const calculatedHash = this.#generateHashValue(hashKeyFields)
 

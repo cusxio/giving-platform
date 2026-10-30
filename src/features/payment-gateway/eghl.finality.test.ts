@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { finalStatusOf } from './eghl.finality'
 import { EghlQueryTxnStatus, EghlTxnStatus } from './eghl.schema'
 
-describe('finalStatusOf', () => {
+describe('eGHL reply finality', () => {
   it('settles a successful reply as success', () => {
     expect.hasAssertions()
 

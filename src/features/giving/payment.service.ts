@@ -5,11 +5,11 @@ import { createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
 import { tryAsync } from '#/core/result'
 import type { DBPool } from '#/db/client'
-import type { PaymentInsert, Transaction } from '#/db/schema'
+import type { PaymentInsert } from '#/db/schema'
 import { payments, savedPaymentMethods, transactions } from '#/db/schema'
 
-import type { EghlPaymentResponse } from '../payment-gateway/eghl.schema'
-import { EghlTxnStatus } from '../payment-gateway/eghl.schema'
+import type { EghlFinalStatus } from '../payment-gateway/eghl.finality'
+import type { EghlPaymentResponse, EghlQueryResponse } from '../payment-gateway/eghl.schema'
 
 export class PaymentService {
   readonly #dbPool: DBPool
@@ -18,10 +18,12 @@ export class PaymentService {
     this.#dbPool = db
   }
 
-  async finalizePaymentFromCallback(response: EghlPaymentResponse) {
+  async finalizePaymentFromCallback(
+    response: EghlPaymentResponse | EghlQueryResponse,
+    status: EghlFinalStatus,
+  ) {
     const {
       PaymentID,
-      TxnStatus,
       PymtMethod,
       RespTime,
       RespTime2,
@@ -34,8 +36,7 @@ export class PaymentService {
       CardType,
       CardHolder,
     } = response
-    const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
-    const newStatus: Transaction['status'] = isTransactionSuccess ? 'success' : 'failed'
+    const isTransactionSuccess = status === 'success'
 
     let paidAt = now()
     const rawTime = RespTime ?? RespTime2
@@ -60,7 +61,7 @@ export class PaymentService {
         this.#dbPool.transaction(async (tx) => {
           const [transaction] = await tx
             .update(transactions)
-            .set({ status: newStatus })
+            .set({ status })
             .where(and(eq(transactions.id, PaymentID), eq(transactions.status, 'pending')))
             .returning({ createdAs: transactions.createdAs, userId: transactions.userId })
 

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ok } from '#/core/result'
 import type * as Envvars from '#/envvars'
+import type { PaymentService } from '#/features/giving/payment.service'
 import { EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
 
 const mockedEnv = vi.hoisted(() => ({
@@ -58,7 +59,9 @@ const signedCallbackBody = (TxnStatus: EghlTxnStatus, TxnMessage: string) => {
 }
 
 const postCallback = async (body: string) => {
-  const finalizePaymentFromCallback = vi.fn(async () => ok({ finalized: true }))
+  const finalizePaymentFromCallback = vi.fn<PaymentService['finalizePaymentFromCallback']>(() =>
+    Promise.resolve(ok({ finalized: true })),
+  )
   const handlers = Route.options.server?.handlers
   if (typeof handlers !== 'object' || handlers.POST === undefined) {
     throw new TypeError('callback route has no POST handler')
@@ -71,6 +74,9 @@ const postCallback = async (body: string) => {
     },
     request: new Request('https://app.give.test/api/eghl/callback', { body, method: 'POST' }),
   } as never)
+  if (!(response instanceof Response)) {
+    throw new TypeError('callback route did not answer with a Response')
+  }
   return { finalizePaymentFromCallback, response }
 }
 
