@@ -112,7 +112,12 @@ export class PaymentService {
             await tx
               .update(savedPaymentMethods)
               .set({ lastUsedAt: now() })
-              .where(eq(savedPaymentMethods.token, Token))
+              .where(
+                and(
+                  eq(savedPaymentMethods.userId, transaction.userId),
+                  eq(savedPaymentMethods.token, Token),
+                ),
+              )
           }
 
           return { finalized: true }

@@ -131,6 +131,13 @@ function handleBusinessError(
       break
     }
 
+    case 'PAYMENT_METHOD_UNAVAILABLE': {
+      toast.error('Saved Card Unavailable', {
+        description: 'This card can’t be used right now. Please choose another payment method.',
+      })
+      break
+    }
+
     case 'USER_MISMATCH': {
       store.setError(store.names.email, 'This email cannot be used while you’re logged in.')
       break
