@@ -5,6 +5,8 @@ import type { Transaction } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 import { transactionRepositoryMiddleware } from '#/server/middleware/transaction-repository-middleware'
 
+import { toTransactionReceipt } from './transaction-receipt.dto'
+
 interface Input {
   transactionId: Transaction['id']
 }
@@ -29,9 +31,5 @@ export const getTransactionReceiptData = createServerFn()
       throw notFound()
     }
 
-    return {
-      payment: queryResult.payment,
-      transaction: queryResult.transaction,
-      user: queryResult.user,
-    }
+    return toTransactionReceipt(queryResult)
   })
