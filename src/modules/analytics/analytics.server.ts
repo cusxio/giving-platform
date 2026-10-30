@@ -3,15 +3,33 @@ import { notFound } from '@tanstack/react-router'
 import type { Deps } from '#/server/deps.server'
 import type { RequestContext } from '#/server/request-context.server'
 
-import { insightsSummary, weeklyCumulativeTotalsByYear } from './analytics.repository.server'
+import {
+  fundTotals,
+  insightsSummary,
+  weeklyCumulativeTotalsByYear,
+} from './analytics.repository.server'
 import type { Insights } from './insights'
 import { summarizeInsights } from './insights'
+import type { ReportRow } from './reports'
+import { toReportRows } from './reports'
 
 type Ctx = Pick<RequestContext, 'deps' | 'user'>
+
+export interface ReportsInput {
+  readonly endDateUTCExclusive: Date
+  readonly startDateUTC: Date
+}
 
 async function loadInsights(deps: Pick<Deps, 'db'>): Promise<Insights> {
   const [summary, weekly] = await deps.db.batch([insightsSummary(), weeklyCumulativeTotalsByYear()])
   return summarizeInsights(summary, weekly)
+}
+
+async function loadReport(
+  deps: Pick<Deps, 'db'>,
+  input: { readonly endExclusive: Date; readonly start: Date },
+): Promise<ReportRow[]> {
+  return toReportRows(await deps.db.run(fundTotals(input)))
 }
 
 // Transport adapters. Phase 2 replaces the role guard with `requireRole('su')` middleware.
@@ -21,4 +39,12 @@ export async function getInsightsProcedure(context: Ctx): Promise<Insights> {
     throw notFound()
   }
   return loadInsights(context.deps)
+}
+
+export async function getReportsProcedure(context: Ctx, data: ReportsInput): Promise<ReportRow[]> {
+  const { startDateUTC, endDateUTCExclusive } = data
+  if (context.user?.role !== 'su') {
+    throw notFound()
+  }
+  return loadReport(context.deps, { endExclusive: endDateUTCExclusive, start: startDateUTC })
 }

@@ -8,11 +8,10 @@ import type { DateRangePickerProps } from '#/components/ui/date-range-picker'
 import { DateRangePicker } from '#/components/ui/date-range-picker'
 import { config } from '#/core/brand'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { normalizeDateRangeToServerTimezone, reportsQuery } from '#/modules/analytics'
 
 import { ReportBreakdown } from './-components/report-breakdown'
 import { ReportEmpty } from './-components/report-empty'
-import { normalizeDateRangeToServerTimezone } from './-data/reports.helpers'
-import { createReportsQueryOptions } from './-reports.queries'
 
 const searchSchema = v.object({
   end_date: v.optional(v.pipe(v.string(), v.isoDate())),
@@ -47,10 +46,7 @@ export const Route = createFileRoute('/(app)/(su)/reports')({
       deps.end_date,
     )
 
-    await context.queryClient.query({
-      ...createReportsQueryOptions(startDate, endDate),
-      staleTime: 'static',
-    })
+    await context.queryClient.query({ ...reportsQuery(startDate, endDate), staleTime: 'static' })
   },
 })
 
@@ -81,7 +77,7 @@ function RouteComponent() {
 
   const { startDate, endDate } = normalizeDateRangeToServerTimezone(start_date, end_date)
 
-  const { data } = useSuspenseQueryDeferred(createReportsQueryOptions(startDate, endDate))
+  const { data } = useSuspenseQueryDeferred(reportsQuery(startDate, endDate))
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-y-4 p-4">

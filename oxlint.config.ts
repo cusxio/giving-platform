@@ -81,8 +81,6 @@ const LEGACY_FILES: string[] = [
   'src/features/user/user.repository.ts',
   'src/features/user/user.update-privacy-mode.procedure.ts',
   'src/features/user/user.update-user.procedure.ts',
-  'src/routes/(app)/(su)/reports/-data/reports.get-data.procedure.test.ts',
-  'src/routes/(app)/(su)/reports/-data/reports.get-data.procedure.ts',
   'src/routes/(app)/-components/aside-nav/aside-nav.tsx',
   'src/routes/(app)/-components/header-privacy-toggle.tsx',
   'src/routes/(app)/-components/header.tsx',

@@ -1,14 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import type * as Envvars from '#/server/env.server'
-
-import { normalizeDateRangeToServerTimezone } from './reports.helpers'
-
-vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
-  DATABASE_URL: 'postgres://user:pass@db.give.test/db',
-}))
-
-const { toReportRows } = await import('./reports.get-data.procedure')
+import { normalizeDateRangeToServerTimezone } from './report-range'
+import { toReportRows } from './reports'
 
 describe('report rows', () => {
   it('converts each fund total to ringgit and keeps the query order', () => {

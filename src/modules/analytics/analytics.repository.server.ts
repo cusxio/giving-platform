@@ -1,8 +1,8 @@
-import { and, asc, count, eq, gte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, lt, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
 import { defineQuery, rows } from '#/server/db.server'
-import { transactions } from '#/server/schema.server'
+import { funds, transactionItems, transactions } from '#/server/schema.server'
 import { roundedAvg, safeSum } from '#/server/sql.server'
 
 /**
@@ -60,6 +60,48 @@ export const weeklyCumulativeTotalsByYear = defineQuery(
       })
       .from(weeklyTotals)
       .orderBy(asc(weeklyTotals.year), asc(weeklyTotals.week))
+  },
+  rows,
+)
+
+/** Successful transactions created in `[start, endExclusive)`. */
+export interface ReportRange {
+  readonly endExclusive: Date
+  readonly start: Date
+}
+
+/** Totals per fund and per donor kind (signed-in or guest), guests last, then by fund name. */
+export const fundTotals = defineQuery(
+  'analytics.fundTotals',
+  (db, range: ReportRange) => {
+    // Aggregate first, then join to funds for name lookup
+    const aggregated = db
+      .select({
+        createdAs: transactions.createdAs,
+        fundId: transactionItems.fundId,
+        totalAmount: safeSum(transactionItems.amount).as('totalAmount'),
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.status, 'success'),
+          gte(transactions.createdAt, range.start),
+          lt(transactions.createdAt, range.endExclusive),
+        ),
+      )
+      .innerJoin(transactionItems, eq(transactionItems.transactionId, transactions.id))
+      .groupBy(transactionItems.fundId, transactions.createdAs)
+      .as('aggregated')
+
+    return db
+      .select({
+        createdAs: aggregated.createdAs,
+        fundName: funds.name,
+        totalAmount: aggregated.totalAmount,
+      })
+      .from(aggregated)
+      .innerJoin(funds, eq(funds.id, aggregated.fundId))
+      .orderBy(desc(aggregated.createdAs), asc(funds.name))
   },
   rows,
 )
