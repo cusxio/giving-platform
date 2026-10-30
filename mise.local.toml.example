@@ -26,7 +26,5 @@ OTEL_LOG_LEVEL = "NONE"
 # https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
 OTEL_EXPORTER_OTLP_ENDPOINT = ""
 OTEL_EXPORTER_OTLP_HEADERS = ""
-OTEL_EXPORTER_OTLP_METRICS_HEADERS = ""
 OTEL_TRACES_EXPORTER = "none"
 OTEL_LOGS_EXPORTER = "none"
-OTEL_METRICS_EXPORTER = "none"

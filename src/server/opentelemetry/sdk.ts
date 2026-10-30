@@ -1,11 +1,21 @@
-import { DiagConsoleLogger, DiagLogLevel, diag, metrics } from '@opentelemetry/api'
-import { logs } from '@opentelemetry/api-logs'
-import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node'
+import {
+  DiagConsoleLogger,
+  DiagLogLevel,
+  context,
+  diag,
+  logs,
+  propagation,
+  trace,
+} from '@opentelemetry/api'
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks'
+import {
+  CompositePropagator,
+  W3CBaggagePropagator,
+  W3CTraceContextPropagator,
+} from '@opentelemetry/core'
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto'
-import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto'
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
-import { registerInstrumentations } from '@opentelemetry/instrumentation'
-import type { Resource } from '@opentelemetry/resources'
+import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici'
 import { defaultResource, resourceFromAttributes } from '@opentelemetry/resources'
 import type { LogRecordProcessor } from '@opentelemetry/sdk-logs'
 import {
@@ -14,114 +24,76 @@ import {
   LoggerProvider,
   SimpleLogRecordProcessor,
 } from '@opentelemetry/sdk-logs'
-import type { MetricReader } from '@opentelemetry/sdk-metrics'
-import {
-  ConsoleMetricExporter,
-  MeterProvider,
-  PeriodicExportingMetricReader,
-} from '@opentelemetry/sdk-metrics'
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-node'
+import type { SpanProcessor } from '@opentelemetry/sdk-trace'
 import {
   BatchSpanProcessor,
   ConsoleSpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node'
+  TracerProvider,
+} from '@opentelemetry/sdk-trace'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 
-import {
-  OTEL_LOGS_EXPORTER,
-  OTEL_LOG_LEVEL,
-  OTEL_METRICS_EXPORTER,
-  OTEL_TRACES_EXPORTER,
-} from '#/envvars'
+import { OTEL_LOGS_EXPORTER, OTEL_LOG_LEVEL, OTEL_TRACES_EXPORTER } from '#/envvars'
 
-export class Sdk {
-  #initialized = false
-  readonly #loggerProvider: LoggerProvider
-  readonly #meterProvider: MeterProvider
-  readonly #resource: Resource
-  readonly #traceProvider: NodeTracerProvider
+export interface Telemetry {
+  flush: () => Promise<void>
+}
 
-  constructor() {
-    this.#resource = defaultResource().merge(
-      resourceFromAttributes({ [ATTR_SERVICE_NAME]: 'collective-backend' }),
-    )
+export function startTelemetry(): Telemetry {
+  setDiagLogLevel(OTEL_LOG_LEVEL)
 
-    // Traces
-    const tracesExporters = processExporter(OTEL_TRACES_EXPORTER)
-    const spanProcessors: SpanProcessor[] = []
-    if (tracesExporters.includes('console')) {
-      spanProcessors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()))
-    }
-    if (tracesExporters.includes('otlp')) {
-      spanProcessors.push(new BatchSpanProcessor(new OTLPTraceExporter()))
-    }
-    this.#traceProvider = new NodeTracerProvider({ resource: this.#resource, spanProcessors })
+  const resource = defaultResource().merge(
+    resourceFromAttributes({ [ATTR_SERVICE_NAME]: 'collective-backend' }),
+  )
 
-    // Logs
-    const logsExporters = processExporter(OTEL_LOGS_EXPORTER)
-    const logRecordProcessors: LogRecordProcessor[] = []
-    if (logsExporters.includes('console')) {
-      logRecordProcessors.push(new SimpleLogRecordProcessor(new ConsoleLogRecordExporter()))
-    }
-    if (logsExporters.includes('otlp')) {
-      logRecordProcessors.push(new BatchLogRecordProcessor(new OTLPLogExporter()))
-    }
-    this.#loggerProvider = new LoggerProvider({
-      processors: logRecordProcessors,
-      resource: this.#resource,
-    })
+  const tracerProvider = new TracerProvider({
+    resource,
+    spanProcessors: exportersOf(OTEL_TRACES_EXPORTER).map((exporter): SpanProcessor =>
+      exporter === 'console'
+        ? new SimpleSpanProcessor({ exporter: new ConsoleSpanExporter() })
+        : new BatchSpanProcessor({ exporter: new OTLPTraceExporter() }),
+    ),
+  })
 
-    // Metrics
-    const metricsExporters = processExporter(OTEL_METRICS_EXPORTER)
-    const metricsReaders: MetricReader[] = []
-    if (metricsExporters.includes('console')) {
-      metricsReaders.push(
-        new PeriodicExportingMetricReader({ exporter: new ConsoleMetricExporter() }),
-      )
-    }
-    if (metricsExporters.includes('otlp')) {
-      metricsReaders.push(new PeriodicExportingMetricReader({ exporter: new OTLPMetricExporter() }))
-    }
-    this.#meterProvider = new MeterProvider({ readers: metricsReaders, resource: this.#resource })
-  }
+  const loggerProvider = new LoggerProvider({
+    processors: exportersOf(OTEL_LOGS_EXPORTER).map((exporter): LogRecordProcessor =>
+      exporter === 'console'
+        ? new SimpleLogRecordProcessor({ exporter: new ConsoleLogRecordExporter() })
+        : new BatchLogRecordProcessor({ exporter: new OTLPLogExporter() }),
+    ),
+    resource,
+  })
 
-  async shutdown() {
-    await Promise.all([
-      this.#traceProvider.shutdown(),
-      this.#loggerProvider.shutdown(),
-      this.#meterProvider.shutdown(),
-    ])
-  }
+  context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())
+  propagation.setGlobalPropagator(
+    new CompositePropagator({
+      propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
+    }),
+  )
+  trace.setGlobalTracerProvider(tracerProvider)
+  logs.setGlobalLoggerProvider(loggerProvider)
 
-  start() {
-    if (this.#initialized) {
-      return
-    }
+  // Subscribes to undici's diagnostics channels rather than patching modules, so it
+  // still sees `fetch` calls after Nitro bundles the server.
+  new UndiciInstrumentation().enable()
 
-    this.#initialized = true
-
-    this.#traceProvider.register()
-
-    logs.setGlobalLoggerProvider(this.#loggerProvider)
-
-    metrics.setGlobalMeterProvider(this.#meterProvider)
-
-    registerInstrumentations({ instrumentations: [getNodeAutoInstrumentations()] })
-
-    if (OTEL_LOG_LEVEL !== undefined) {
-      const logLevel = OTEL_LOG_LEVEL.toUpperCase()
-
-      if (Object.hasOwn(DiagLogLevel, logLevel)) {
-        diag.setLogger(new DiagConsoleLogger(), DiagLogLevel[logLevel as keyof typeof DiagLogLevel])
-      }
-    }
-
-    diag.info('otel: started')
+  return {
+    flush: async () => {
+      await Promise.all([tracerProvider.forceFlush(), loggerProvider.forceFlush()])
+    },
   }
 }
 
-function processExporter(exporter: string) {
-  return exporter.split(',').map((v) => v.trim())
+function exportersOf(value: string) {
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter((v): v is 'console' | 'otlp' => v === 'console' || v === 'otlp')
+}
+
+function setDiagLogLevel(level: string | undefined) {
+  const key = level?.toUpperCase()
+  if (key !== undefined && Object.hasOwn(DiagLogLevel, key)) {
+    diag.setLogger(new DiagConsoleLogger(), DiagLogLevel[key as keyof typeof DiagLogLevel])
+  }
 }
