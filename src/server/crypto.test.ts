@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { constantTimeEqual } from './constant-time-equal'
+import { constantTimeEqual } from './crypto.server'
+
+// hashToken shares this module and reads SESSION_SECRET at import.
+vi.mock(import('#/server/env.server'), () => ({ SESSION_SECRET: 'test-session-secret' }))
 
 describe('constant time comparison', () => {
   it('matches only identical strings', () => {

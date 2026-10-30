@@ -3,11 +3,11 @@ import { createHash } from 'node:crypto'
 import queryString from 'query-string'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { constantTimeEqual } from '#/core/constant-time-equal'
 import { createParseError } from '#/core/errors'
 import { centsToRinggit } from '#/core/money'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync, trySync } from '#/core/result'
+import { constantTimeEqual } from '#/server/crypto.server'
 import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/server/env.server'
 import type { Transaction } from '#/server/schema.server'
 

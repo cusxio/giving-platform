@@ -4,12 +4,11 @@ import { createElement } from 'react'
 import { render, toPlainText } from 'react-email'
 
 import { config } from '#/core/brand'
-import { constantTimeEqual } from '#/core/constant-time-equal'
 import { createDBError } from '#/core/errors'
-import { hashToken } from '#/core/hash-token'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync } from '#/core/result'
 import { DBEmptyReturnError } from '#/db/errors'
+import { constantTimeEqual, hashToken } from '#/server/crypto.server'
 import type { DB } from '#/server/neon.server'
 import type { Session, User } from '#/server/schema.server'
 

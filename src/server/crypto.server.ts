@@ -1,4 +1,10 @@
-import { timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+
+import { SESSION_SECRET } from '#/server/env.server'
+
+export function hashToken(token: string) {
+  return createHmac('sha256', SESSION_SECRET).update(token).digest('hex')
+}
 
 // timingSafeEqual throws on inputs of different lengths, and some inputs (such as a
 // gateway signature) are caller-controlled, so a length mismatch is just "not equal".
