@@ -28,10 +28,7 @@ const values = {
   token: undefined,
 } as unknown as Submission[0]
 
-async function submit(
-  respond: () => Promise<StartContributionResponse>,
-  authenticated = false,
-) {
+async function submit(respond: () => Promise<StartContributionResponse>, authenticated = false) {
   vi.clearAllMocks()
   const store = {
     names: { email: 'email' },

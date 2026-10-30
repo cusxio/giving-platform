@@ -72,8 +72,14 @@ export function useGivingForm(
 
   const submitPayment = useCallback(async () => {
     const { values } = store.getState()
-    await handleFormSubmission(values, startContribution, store, setIsRedirecting)
-  }, [store, startContribution])
+    await handleFormSubmission(
+      values,
+      startContribution,
+      store,
+      setIsRedirecting,
+      user !== undefined,
+    )
+  }, [store, startContribution, user])
 
   return { store, submitPayment, view }
 }
@@ -101,6 +107,9 @@ function getInitialFormValues(
   >
   return { ...fundValues, ...getFormValues(user, savedPaymentToken) }
 }
+
+// Signed-in donors see a read-only summary instead of these inputs, so no inline error can show.
+const GUEST_DETAIL_FIELDS: ReadonlySet<string> = new Set(['email', 'firstName', 'lastName'])
 
 function handleBusinessError(
   error: Extract<StartContributionResponse, { type: 'BUSINESS_ERROR' }>['error'],
@@ -154,6 +163,7 @@ export async function handleFormSubmission(
   startContribution: ReturnType<typeof useStartContributionMutation>,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
   setIsRedirecting: Dispatch<SetStateAction<boolean>>,
+  authenticated: boolean,
 ) {
   const { email, firstName, lastName, token, ...contributionAmounts } = values
 
@@ -166,7 +176,7 @@ export async function handleFormSubmission(
       token: token === __NORMAL_CHECKOUT__ ? undefined : token,
     })
 
-    if (handleSubmissionResponse(res, email, store)) {
+    if (handleSubmissionResponse(res, email, store, authenticated)) {
       setIsRedirecting(true)
     }
   } catch {
@@ -178,6 +188,7 @@ function handleSubmissionResponse(
   res: StartContributionResponse,
   email: string,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
+  authenticated: boolean,
 ): boolean {
   switch (res.type) {
     case 'BUSINESS_ERROR': {
@@ -196,7 +207,7 @@ function handleSubmissionResponse(
     }
 
     case 'VALIDATION_ERROR': {
-      handleValidationErrors(res.errors, store)
+      handleValidationErrors(res.errors, store, authenticated)
       break
     }
 
@@ -211,9 +222,21 @@ function handleSubmissionResponse(
 function handleValidationErrors(
   errors: { message: string; path: string }[],
   store: ReturnType<typeof useFormStore>,
+  authenticated: boolean,
 ) {
+  let hasUnrenderedError = false
+
   for (const error of errors) {
     const key = error.path.slice(1)
-    store.setError(key, error.message)
+
+    if (!authenticated && GUEST_DETAIL_FIELDS.has(key)) {
+      store.setError(key, error.message)
+    } else {
+      hasUnrenderedError = true
+    }
+  }
+
+  if (hasUnrenderedError) {
+    toast.error('Invalid Details', { description: 'Please check your details and try again.' })
   }
 }
