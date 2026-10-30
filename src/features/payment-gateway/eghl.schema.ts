@@ -1,4 +1,3 @@
-import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
@@ -88,42 +87,42 @@ export enum EghlTxnStatus {
   Success = '0',
 }
 
-export const EghlPaymentResponseSchema = Compile(
-  Type.Object({
-    TransactionType: Type.String(),
-    PymtMethod: Type.String(),
-    ServiceID: Type.String(),
-    PaymentID: Type.String({ minLength: 1 }),
-    OrderNumber: Type.String(),
-    Amount: Type.String({
-      description: 'Payment amount in major currency unit, e.g., 123.00',
-      pattern: String.raw`^\d+\.\d{2}$`,
-    }),
-    CurrencyCode: Type.String({ maxLength: 3, minLength: 3 }),
-    HashValue: Type.String({ minLength: 1 }),
-    HashValue2: Type.String({ minLength: 1 }),
-    TxnID: Type.String(), // EGHL's ID, can be empty on failure/cancellation
-    TxnStatus: Type.Enum(EghlTxnStatus),
-    TxnMessage: Type.String(),
-
-    Param6: Type.Optional(Type.String()),
-    Param7: Type.Optional(Type.String()),
-
-    AuthCode: Type.Optional(Type.String()),
-    IssuingBank: Type.Optional(Type.String()),
-    BankRefNo: Type.Optional(Type.String()),
-    RespTime: Type.Optional(Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' })),
-    RespTime2: Type.Optional(Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' })),
-
-    // OCP Fields
-    Token: Type.Optional(Type.String()),
-    TokenType: Type.Optional(Type.String()),
-    CardNoMask: Type.Optional(Type.String()),
-    CardExp: Type.Optional(Type.String()),
-    CardType: Type.Optional(Type.String()),
-    CardHolder: Type.Optional(Type.String()),
+const EghlPaymentResponseType = Type.Object({
+  TransactionType: Type.String(),
+  PymtMethod: Type.String(),
+  ServiceID: Type.String(),
+  PaymentID: Type.String({ minLength: 1 }),
+  OrderNumber: Type.String(),
+  Amount: Type.String({
+    description: 'Payment amount in major currency unit, e.g., 123.00',
+    pattern: String.raw`^\d+\.\d{2}$`,
   }),
-)
+  CurrencyCode: Type.String({ maxLength: 3, minLength: 3 }),
+  HashValue: Type.String({ minLength: 1 }),
+  HashValue2: Type.String({ minLength: 1 }),
+  TxnID: Type.String(), // EGHL's ID, can be empty on failure/cancellation
+  TxnStatus: Type.Enum(EghlTxnStatus),
+  TxnMessage: Type.String(),
+
+  Param6: Type.Optional(Type.String()),
+  Param7: Type.Optional(Type.String()),
+
+  AuthCode: Type.Optional(Type.String()),
+  IssuingBank: Type.Optional(Type.String()),
+  BankRefNo: Type.Optional(Type.String()),
+  RespTime: Type.Optional(Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' })),
+  RespTime2: Type.Optional(Type.String({ description: 'Format: YYYY-MM-DD HH:mm:ss' })),
+
+  // OCP Fields
+  Token: Type.Optional(Type.String()),
+  TokenType: Type.Optional(Type.String()),
+  CardNoMask: Type.Optional(Type.String()),
+  CardExp: Type.Optional(Type.String()),
+  CardType: Type.Optional(Type.String()),
+  CardHolder: Type.Optional(Type.String()),
+})
+
+export const EghlPaymentResponseSchema = Compile(EghlPaymentResponseType)
 
 export enum EghlTxnExists {
   Exists = '0',
@@ -133,7 +132,7 @@ export enum EghlTxnExists {
 
 export const EghlQueryResponseSchema = Compile(
   Type.Intersect([
-    EghlPaymentResponseSchema,
+    EghlPaymentResponseType,
     Type.Object({
       QueryDesc: Type.Optional(Type.String()),
       TotalRefundAmount: Type.Optional(Type.String()),
@@ -142,5 +141,5 @@ export const EghlQueryResponseSchema = Compile(
   ]),
 )
 
-export type EghlPaymentResponse = Static<typeof EghlPaymentResponseSchema>
-export type EghlQueryResponse = Static<typeof EghlQueryResponseSchema>
+export type EghlPaymentResponse = ReturnType<typeof EghlPaymentResponseSchema.Parse>
+export type EghlQueryResponse = ReturnType<typeof EghlQueryResponseSchema.Parse>

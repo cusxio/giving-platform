@@ -1,6 +1,5 @@
 import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
@@ -22,7 +21,7 @@ const schema = Compile(
   }),
 )
 
-export type RequestOtpInput = Static<typeof schema>
+export type RequestOtpInput = ReturnType<typeof schema.Parse>
 
 export type RequestOtpResponse =
   | BusinessErrorResponse<RequestOtpBusinessErrorCode>
