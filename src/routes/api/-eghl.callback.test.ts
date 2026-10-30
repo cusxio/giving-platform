@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 
 import { pino } from 'pino'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ok } from '#/core/result'
 import type * as Envvars from '#/envvars'
 import type { PaymentService } from '#/features/giving/payment.service'
-import { EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
+import { EghlTxnExists, EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
 
 const mockedEnv = vi.hoisted(() => ({
   BASE_URL: 'https://app.give.test',
@@ -19,65 +19,137 @@ const mockedEnv = vi.hoisted(() => ({
 vi.mock<typeof Envvars>(import('#/envvars'), () => mockedEnv)
 
 const { Route } = await import('./eghl.callback')
+const { Route: ReturnRoute } = await import('./eghl.return')
 const { EghlService } = await import('#/features/payment-gateway/eghl.service')
 
-const signedCallbackBody = (TxnStatus: EghlTxnStatus, TxnMessage: string) => {
-  const fields = {
-    Amount: '50.00',
-    AuthCode: '',
-    CurrencyCode: 'MYR',
-    HashValue: 'unused',
-    OrderNumber: 'txn_abc123',
-    Param6: '',
-    Param7: '',
-    PaymentID: 'txn_abc123',
-    PymtMethod: 'ANY',
-    ServiceID: mockedEnv.EGHL_SERVICE_ID,
-    TransactionType: 'SALE',
-    TxnID: 'CIVtxn_abc123',
-    TxnMessage,
-    TxnStatus,
-  }
-  const HashValue2 = createHash('sha256')
-    .update(
-      [
-        mockedEnv.EGHL_PASSWORD,
-        fields.TxnID,
-        fields.ServiceID,
-        fields.PaymentID,
-        fields.TxnStatus,
-        fields.Amount,
-        fields.CurrencyCode,
-        fields.AuthCode,
-        fields.OrderNumber,
-        fields.Param6,
-        fields.Param7,
-      ].join(''),
-    )
+const TRANSACTION_ID = 'txn_abc123'
+const AMOUNT_IN_CENTS = 5000
+
+const sha256 = (fields: readonly string[]) =>
+  createHash('sha256')
+    .update([mockedEnv.EGHL_PASSWORD, ...fields].join(''))
     .digest('hex')
-  return new URLSearchParams({ ...fields, HashValue2 }).toString()
+
+const signedReply = (fields: Record<string, string>) => {
+  const signedPart = [
+    fields.TxnID,
+    fields.ServiceID,
+    fields.PaymentID,
+    fields.TxnStatus,
+    fields.Amount,
+    fields.CurrencyCode,
+    fields.AuthCode,
+  ].map((value) => value ?? '')
+  const HashValue = sha256(signedPart)
+  const HashValue2 = sha256([
+    ...signedPart,
+    ...[fields.OrderNumber, fields.Param6, fields.Param7].map((value) => value ?? ''),
+  ])
+  return new URLSearchParams({ ...fields, HashValue, HashValue2 }).toString()
 }
 
-const postCallback = async (body: string) => {
-  const finalizePaymentFromCallback = vi.fn<PaymentService['finalizePaymentFromCallback']>(() =>
-    Promise.resolve(ok({ finalized: true })),
+const paymentFields = (TxnStatus: string, TxnMessage: string) => ({
+  Amount: '50.00',
+  AuthCode: '',
+  CurrencyCode: 'MYR',
+  OrderNumber: TRANSACTION_ID,
+  Param6: '',
+  Param7: '',
+  PaymentID: TRANSACTION_ID,
+  PymtMethod: 'ANY',
+  ServiceID: mockedEnv.EGHL_SERVICE_ID,
+  TransactionType: 'SALE',
+  TxnID: `CIV${TRANSACTION_ID}`,
+  TxnMessage,
+  TxnStatus,
+})
+
+const signedCallbackBody = (TxnStatus: EghlTxnStatus, TxnMessage: string) =>
+  signedReply(paymentFields(TxnStatus, TxnMessage))
+
+// A signed duplicate-payment-id rejection whose unsigned TxnMessage was rewritten in transit.
+const replayedDuplicateBody = () =>
+  signedCallbackBody(EghlTxnStatus.Failed, 'Duplicate Payment ID').replace(
+    /TxnMessage=[^&]*/u,
+    'TxnMessage=Transaction+Failed',
   )
+
+/** Stands in for eGHL: answers a status query for the stored transaction with `TxnStatus`. */
+const stubGatewayQuery = (TxnStatus: EghlTxnStatus, TxnMessage: string) => {
+  const gateway = vi.fn<typeof fetch>((_input, init) => {
+    const query = new URLSearchParams(init?.body as URLSearchParams)
+    const matches =
+      query.get('TransactionType') === 'QUERY' &&
+      query.get('PaymentID') === TRANSACTION_ID &&
+      query.get('Amount') === '50.00'
+    const reply = matches
+      ? signedReply({
+          ...paymentFields(TxnStatus, TxnMessage),
+          QueryDesc: 'Exists',
+          TransactionType: 'QUERY',
+          TxnExists: EghlTxnExists.Exists,
+        })
+      : signedReply({
+          ...paymentFields('-1', ''),
+          QueryDesc: 'Not found',
+          TransactionType: 'QUERY',
+          TxnExists: EghlTxnExists.NotFound,
+          TxnID: '',
+        })
+    return Promise.resolve(new Response(reply, { status: 200 }))
+  })
+  vi.stubGlobal('fetch', gateway)
+  return gateway
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+const stubPaymentService = () => ({
+  finalizePaymentFromCallback: vi.fn<PaymentService['finalizePaymentFromCallback']>(() =>
+    Promise.resolve(ok({ finalized: true })),
+  ),
+  findPendingAmountInCents: vi.fn<PaymentService['findPendingAmountInCents']>(() =>
+    Promise.resolve(ok(AMOUNT_IN_CENTS)),
+  ),
+})
+
+const handlerContext = (paymentService: ReturnType<typeof stubPaymentService>) => ({
+  eghlService: new EghlService(),
+  logger: pino({ level: 'silent' }),
+  paymentService,
+})
+
+const postCallback = async (body: string) => {
+  const paymentService = stubPaymentService()
   const handlers = Route.options.server?.handlers
   if (typeof handlers !== 'object' || handlers.POST === undefined) {
     throw new TypeError('callback route has no POST handler')
   }
   const response = await handlers.POST({
-    context: {
-      eghlService: new EghlService(),
-      logger: pino({ level: 'silent' }),
-      paymentService: { finalizePaymentFromCallback },
-    },
+    context: handlerContext(paymentService),
     request: new Request('https://app.give.test/api/eghl/callback', { body, method: 'POST' }),
   } as never)
   if (!(response instanceof Response)) {
     throw new TypeError('callback route did not answer with a Response')
   }
-  return { finalizePaymentFromCallback, response }
+  return { finalizePaymentFromCallback: paymentService.finalizePaymentFromCallback, response }
+}
+
+const getReturn = async (query: string) => {
+  const paymentService = stubPaymentService()
+  const handlers = ReturnRoute.options.server?.handlers
+  if (typeof handlers !== 'object' || handlers.GET === undefined) {
+    throw new TypeError('return route has no GET handler')
+  }
+  await handlers
+    .GET({
+      context: handlerContext(paymentService),
+      request: new Request(`https://app.give.test/api/eghl/return?${query}`),
+    } as never)
+    .catch((redirect: unknown) => redirect)
+  return { finalizePaymentFromCallback: paymentService.finalizePaymentFromCallback }
 }
 
 describe('eGHL callback route', () => {
@@ -91,7 +163,7 @@ describe('eGHL callback route', () => {
     expect(response.status).toBe(200)
     await expect(response.text()).resolves.toBe('OK')
     expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
-      expect.objectContaining({ PaymentID: 'txn_abc123' }),
+      expect.objectContaining({ PaymentID: TRANSACTION_ID }),
       'success',
     )
   })
@@ -106,5 +178,73 @@ describe('eGHL callback route', () => {
     expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
     expect(response.status).toBe(200)
     await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('leaves a replayed duplicate reply pending while the gateway still processes the payment', async () => {
+    expect.hasAssertions()
+
+    stubGatewayQuery(EghlTxnStatus.Pending, 'Transaction Pending')
+
+    const { finalizePaymentFromCallback, response } = await postCallback(replayedDuplicateBody())
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('leaves a failed reply pending when the gateway cannot be queried', async () => {
+    expect.hasAssertions()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>(() => Promise.reject(new TypeError('network down'))),
+    )
+
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+    )
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('settles a failed reply as failed once the gateway confirms the failure', async () => {
+    expect.hasAssertions()
+
+    stubGatewayQuery(EghlTxnStatus.Failed, 'Transaction Failed')
+
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+    )
+
+    expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
+      expect.objectContaining({ PaymentID: TRANSACTION_ID, TransactionType: 'QUERY' }),
+      'failed',
+    )
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('settles a failed reply as success when the gateway reports the payment succeeded', async () => {
+    expect.hasAssertions()
+
+    stubGatewayQuery(EghlTxnStatus.Success, 'Transaction Successful')
+
+    const { finalizePaymentFromCallback } = await postCallback(replayedDuplicateBody())
+
+    expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
+      expect.objectContaining({ PaymentID: TRANSACTION_ID }),
+      'success',
+    )
+  })
+})
+
+describe('eGHL return route', () => {
+  it('leaves a replayed duplicate reply pending while the gateway still processes the payment', async () => {
+    expect.hasAssertions()
+
+    stubGatewayQuery(EghlTxnStatus.Pending, 'Transaction Pending')
+
+    const { finalizePaymentFromCallback } = await getReturn(replayedDuplicateBody())
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
   })
 })

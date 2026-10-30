@@ -64,7 +64,11 @@ const buildResponse = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymen
   return { ...response, HashValue2: signature }
 }
 
-const notFoundReply = (signatureOverride?: string) => {
+const hashValueOnlyReply = ({
+  TxnExists = EghlTxnExists.NotFound,
+  TxnStatus = '-1',
+  signatureOverride,
+}: { TxnExists?: EghlTxnExists; TxnStatus?: string; signatureOverride?: string } = {}) => {
   const fields = {
     Amount: '50.00',
     AuthCode: '',
@@ -75,10 +79,10 @@ const notFoundReply = (signatureOverride?: string) => {
     QueryDesc: 'Not found',
     ServiceID: mockedEnv.EGHL_SERVICE_ID,
     TransactionType: 'QUERY',
-    TxnExists: EghlTxnExists.NotFound,
+    TxnExists,
     TxnID: '',
     TxnMessage: '',
-    TxnStatus: '-1',
+    TxnStatus,
   }
   const signature =
     signatureOverride ??
@@ -198,7 +202,7 @@ describe('eghlService', () => {
     it('returns a verified not-found reply that carries only HashValue', async () => {
       expect.hasAssertions()
 
-      const result = await queryAgainstGatewayReply(notFoundReply())
+      const result = await queryAgainstGatewayReply(hashValueOnlyReply())
 
       expect(result).toMatchObject({
         ok: true,
@@ -209,9 +213,21 @@ describe('eghlService', () => {
     it('rejects a not-found reply whose HashValue does not match', async () => {
       expect.hasAssertions()
 
-      const result = await queryAgainstGatewayReply(notFoundReply('not-valid'))
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({ signatureOverride: 'not-valid' }),
+      )
 
       expect(result).toStrictEqual({ error: { type: 'EghlVerificationError' }, ok: false })
+    })
+
+    it('rejects an existing transaction reply that carries only HashValue', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({ TxnExists: EghlTxnExists.Exists, TxnStatus: EghlTxnStatus.Failed }),
+      )
+
+      expect(result.ok).toBe(false)
     })
   })
 })
