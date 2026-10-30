@@ -1,5 +1,128 @@
 import { defineConfig } from 'oxlint'
 
+interface ImportPattern {
+  readonly group?: string[]
+  readonly message: string
+  readonly regex?: string
+}
+
+// Import boundaries. An override replaces the rule's whole pattern list, so each zone below
+// composes these constants instead of repeating them.
+
+// Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
+// entry allow the import past every other pattern too, and its regex has no lookahead.
+const MODULE_ENTRY_ONLY: ImportPattern = {
+  message:
+    'Import another module only through #/modules/<name> (client) or #/modules/<name>/server (server).',
+  regex: String.raw`^#/modules/[^/]+/([^s]|s([^e]|$)|se([^r]|$)|ser([^v]|$)|serv([^e]|$)|serve([^r]|$)|server.)`,
+}
+const NO_RELATIVE_INTO_MODULES: ImportPattern = {
+  message: 'Reach a module through its #/modules/<name> entry, not a relative path.',
+  regex: String.raw`(^|/)\.\./(.*/)?modules/`,
+}
+const FLAT_MODULES: ImportPattern = {
+  message:
+    'Modules are flat: import siblings with ./ and other modules through #/modules/<name>/server.',
+  regex: String.raw`^\.\./`,
+}
+const SQL_IN_REPOSITORIES: ImportPattern = {
+  group: ['drizzle-orm', 'drizzle-orm/*', '#/server/schema.server', '#/server/sql.server'],
+  message:
+    'SQL lives in *.repository.server.ts. Export a defineQuery factory there and run it with deps.db.',
+}
+const PLATFORM_INTERNALS: ImportPattern = {
+  group: ['#/server/env.server', '#/server/logger.server', '#/server/neon.server'],
+  message:
+    'Env, the root logger and the neon clients stay in src/server/. Take them from deps (Pick<Deps, ...>).',
+}
+const SERVER_CODE_IN_CLIENT: ImportPattern = {
+  group: ['#/server/**', '#/modules/*/server'],
+  message:
+    'Client code never imports server code, even types. Import client-safe types from #/modules/<name>.',
+}
+const NO_REPOSITORY_IN_FUNCTIONS: ImportPattern = {
+  message: 'A server function calls a *.server.ts workflow, never a repository.',
+  regex: String.raw`\.repository\.server$`,
+}
+
+const restrictImports = (
+  ...patterns: ImportPattern[]
+): { 'eslint/no-restricted-imports': ['error', { patterns: ImportPattern[] }] } => ({
+  'eslint/no-restricted-imports': ['error', { patterns }],
+})
+const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
+const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS]
+
+// Files that break a boundary today because their code has not moved into src/modules yet.
+// They keep only the module-entry rules. Each Phase 1 step deletes the entries it fixes, and
+// the list must end empty.
+const LEGACY_FILES: string[] = [
+  'src/components/transaction-icon-status.tsx',
+  'src/components/transaction-status.tsx',
+  'src/components/ui/payment-methods/index.tsx',
+  'src/core/errors.ts',
+  'src/features/auth/auth.get-user.procedure.ts',
+  'src/features/auth/auth.service.test.ts',
+  'src/features/auth/auth.service.ts',
+  'src/features/auth/rate-limit.repository.ts',
+  'src/features/auth/rate-limit.service.ts',
+  'src/features/auth/token.repository.ts',
+  'src/features/email/email.service.ts',
+  'src/features/giving/contribution.service.ts',
+  'src/features/giving/payment.service.ts',
+  'src/features/giving/saved-payment-method.repository.ts',
+  'src/features/payment-gateway/eghl.service.test.ts',
+  'src/features/payment-gateway/eghl.service.ts',
+  'src/features/session/session.repository.ts',
+  'src/features/session/session.service.test.ts',
+  'src/features/session/session.service.ts',
+  'src/features/transaction/transaction.repository.ts',
+  'src/features/user/user-settings.repository.ts',
+  'src/features/user/user.repository.ts',
+  'src/features/user/user.update-privacy-mode.procedure.ts',
+  'src/features/user/user.update-user.procedure.ts',
+  'src/routes/(app)/(su)/insights/-data/insights.get-data.procedure.ts',
+  'src/routes/(app)/(su)/insights/-data/insights.repository.ts',
+  'src/routes/(app)/(su)/reports/-data/reports.get-data.procedure.test.ts',
+  'src/routes/(app)/(su)/reports/-data/reports.get-data.procedure.ts',
+  'src/routes/(app)/-components/aside-nav/aside-nav.tsx',
+  'src/routes/(app)/-components/header-privacy-toggle.tsx',
+  'src/routes/(app)/-components/header.tsx',
+  'src/routes/(app)/-components/transactions-table.tsx',
+  'src/routes/(app)/-components/user-menu.tsx',
+  'src/routes/(app)/overview/-components/greet-user.tsx',
+  'src/routes/(app)/overview/-components/overview-welcome.tsx',
+  'src/routes/(app)/overview/-data/overview.get-available-transaction-years.procedure.ts',
+  'src/routes/(app)/overview/-data/overview.get-data.procedure.test.ts',
+  'src/routes/(app)/overview/-data/overview.get-data.procedure.ts',
+  'src/routes/(app)/overview/-overview.queries.ts',
+  'src/routes/(app)/settings/-hooks/use-settings-form.tsx',
+  'src/routes/(app)/transaction/-data/transaction.get-data.procedure.ts',
+  'src/routes/(app)/transaction/-transaction.queries.ts',
+  'src/routes/(app)/transactions/-data/transactions.get-data.procedure.test.ts',
+  'src/routes/(app)/transactions/-data/transactions.get-data.procedure.ts',
+  'src/routes/(app)/transactions/-transactions.queries.ts',
+  'src/routes/(auth)/route.tsx',
+  'src/routes/-components/giving-form/giving-form-details.tsx',
+  'src/routes/-components/giving-form/giving-form.tsx',
+  'src/routes/-components/giving-form/use-giving-form.tsx',
+  'src/routes/-data/index.get-saved-payment-methods.procedure.ts',
+  'src/routes/api/-eghl.callback.test.ts',
+  'src/routes/api/-eghl.cron.test.ts',
+  'src/routes/api/eghl.cron.ts',
+  'src/routes/transaction/receipt/-components/failed.tsx',
+  'src/routes/transaction/receipt/-components/pending.tsx',
+  'src/routes/transaction/receipt/-components/success.tsx',
+  'src/routes/transaction/receipt/-components/transaction-status-layout.tsx',
+  'src/routes/transaction/receipt/-data/transaction-receipt.dto.test.ts',
+  'src/routes/transaction/receipt/-data/transaction-receipt.dto.ts',
+  'src/routes/transaction/receipt/-data/transaction-receipt.get-data.procedure.ts',
+  'src/routes/transaction/receipt/-transaction-receipt.queries.ts',
+  'src/routes/welcome/-components/use-welcome-form.tsx',
+  'src/routes/welcome/-components/welcome-migrate.tsx',
+  'src/routes/welcome/-data/welcome.get-data.procedure.ts',
+]
+
 export default defineConfig({
   categories: {
     correctness: 'error',
@@ -89,6 +212,8 @@ export default defineConfig({
     // Its fix swaps parseInt/parseFloat for Number, which parses user-entered amounts differently.
     'unicorn/prefer-number-coercion': 'off',
 
+    ...restrictImports(...OUTSIDE_PLATFORM),
+
     // Promise rules.
     'promise/always-return': ['error', { ignoreLastCallback: true }],
     'promise/avoid-new': 'off',
@@ -154,5 +279,21 @@ export default defineConfig({
         ],
       },
     },
+    { files: ['src/server/**'], rules: restrictImports(...EVERYWHERE) },
+    {
+      files: ['src/routes/**', 'src/components/**', 'src/hooks/**', 'src/core/**'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, SERVER_CODE_IN_CLIENT),
+    },
+    { files: ['src/routes/api/**'], rules: restrictImports(...OUTSIDE_PLATFORM) },
+    { files: ['src/modules/**'], rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES) },
+    {
+      files: ['src/modules/**/*.repository.server.ts'],
+      rules: restrictImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
+    },
+    {
+      files: ['src/modules/**/*.functions.ts'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_FUNCTIONS),
+    },
+    { files: LEGACY_FILES, rules: restrictImports(...EVERYWHERE) },
   ],
 })
