@@ -6,7 +6,6 @@ export default {
     './src/entry-server.tsx',
     './src/entry-client.tsx',
     './src/route-tree.gen.ts',
-    './src/server/opentelemetry/nitro.ts',
   ],
   vitest: { entry: ['**/*.test.ts'] },
 } satisfies KnipConfig
