@@ -102,6 +102,10 @@ export class AuthService {
       return err({ type: 'AlreadyExistsError' })
     }
 
+    if (user.status !== 'guest') {
+      return err({ type: 'InactiveAccountError' })
+    }
+
     const sendRes = await this.#generateOtpForUser(user.id, user.email, 'signup')
 
     if (!sendRes.ok) {
@@ -124,7 +128,7 @@ export class AuthService {
 
     const user = userRes.value
 
-    if (user === null) {
+    if (user === null || (mode === 'signup' && user.status !== 'guest')) {
       return err({ type: 'InvalidRequestError' })
     }
 

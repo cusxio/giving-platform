@@ -125,6 +125,14 @@ export const requestOtp = createServerFn({ method: 'POST' })
           )
           return { error: { code: 'NOT_EXISTS' }, type: 'BUSINESS_ERROR' }
         }
+        case 'InactiveAccountError': {
+          logger.warn(
+            { email, event: 'auth.request_otp.blocked', reason: 'inactive' },
+            'Signup blocked: User is suspended or deleted',
+          )
+          // Answer like a successful signup so the response does not reveal the account state
+          return { type: 'SUCCESS' }
+        }
         case 'DBEmptyReturnError':
         case 'DBQueryError':
         case 'SendEmailError': {
