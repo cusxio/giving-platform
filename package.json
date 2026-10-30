@@ -64,7 +64,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.4.2",
     "@commitlint/config-conventional": "^20.4.2",
-    "@moonrepo/cli": "^2.2.4",
+    "@moonrepo/cli": "^2.6.5",
     "@react-email/ui": "^6.0.8",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-devtools": "^0.10.14",
