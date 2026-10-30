@@ -165,6 +165,13 @@ export class EghlService {
       return err({ type: 'EghlVerificationError' })
     }
 
+    if (
+      eghlResponse.PaymentID !== requestParams.PaymentID ||
+      eghlResponse.Amount !== requestParams.Amount
+    ) {
+      return err({ type: 'EghlQueryMismatchError' })
+    }
+
     return ok(eghlResponse)
   }
 

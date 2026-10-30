@@ -17,10 +17,15 @@ export interface EghlInvalidMethodError {
 
 export type EghlQueryError =
   | EghlFetchError
+  | EghlQueryMismatchError
   | EghlQueryResponseError
   | EghlServerError
   | EghlVerificationError
   | ParseError
+
+export interface EghlQueryMismatchError {
+  readonly type: 'EghlQueryMismatchError'
+}
 
 export interface EghlQueryResponseError {
   readonly message: string
