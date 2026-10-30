@@ -1,26 +1,39 @@
 import { createMiddleware } from '@tanstack/react-start'
 import { getCookie, setResponseHeader } from '@tanstack/react-start/server'
+import type { Logger } from 'pino'
 
 import { SESSION_COOKIE_NAME } from '#/features/session/constants'
 import { SessionRepository } from '#/features/session/session.repository'
 import { SessionService } from '#/features/session/session.service'
 import { clearSessionCookie } from '#/features/session/utils'
+import type { Deps } from '#/server/deps.server'
+import { createDeps } from '#/server/deps.server'
 import { logger } from '#/server/logger.server'
 import { db } from '#/server/neon.server'
 import type { Session, User } from '#/server/schema.server'
 
-export const sessionMiddleware = createMiddleware().server<{
-  session: null | Pick<Session, 'expiresAt' | 'id' | 'tokenHash'>
-  user: null | Pick<User, 'id' | 'journey' | 'role'>
-}>(async ({ next }) => {
-  const sessionRepository = new SessionRepository(db)
-  const sessionService = new SessionService(sessionRepository)
+/** What every server function and server route finds on `context`. */
+export interface RequestContext {
+  readonly deps: Deps
+  /** The same logger as `deps.logger`, kept until every caller reads it from `deps`. */
+  readonly logger: Logger
+  readonly session: null | Pick<Session, 'expiresAt' | 'id' | 'tokenHash'>
+  readonly user: null | Pick<User, 'id' | 'journey' | 'role'>
+}
+
+type SessionCheck = Pick<RequestContext, 'session' | 'user'>
+
+const ANONYMOUS: SessionCheck = { session: null, user: null }
+
+/** Verifies the session cookie and sets or clears it on the response. */
+async function checkSession(): Promise<SessionCheck> {
+  const sessionService = new SessionService(new SessionRepository(db))
 
   const sessionId = getCookie(SESSION_COOKIE_NAME)
 
   // We don't create sessions for unauthenticated users
   if (sessionId === undefined) {
-    return next({ context: { session: null, user: null } })
+    return ANONYMOUS
   }
 
   const verifyResult = await sessionService.verifyCookieSession(sessionId)
@@ -67,7 +80,7 @@ export const sessionMiddleware = createMiddleware().server<{
       }
     }
 
-    return next({ context: { session: null, user: null } })
+    return ANONYMOUS
   }
 
   const { serializedCookie, session, user } = verifyResult.value
@@ -76,5 +89,12 @@ export const sessionMiddleware = createMiddleware().server<{
     setResponseHeader('Set-Cookie', serializedCookie)
   }
 
-  return next({ context: { session, user } })
+  return { session, user }
+}
+
+/** The one global request middleware after csrf and maintenance. */
+export const requestContext = createMiddleware().server<RequestContext>(async ({ next }) => {
+  const { session, user } = await checkSession()
+  const deps = createDeps(logger.child({ user_id: user?.id }))
+  return next({ context: { deps, logger: deps.logger, session, user } })
 })

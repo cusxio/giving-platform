@@ -4,7 +4,6 @@ import { ok } from '#/core/result'
 import type { DB } from '#/server/neon.server'
 import type { Token, User } from '#/server/schema.server'
 
-import type { EmailService } from '../email/email.service'
 import type { SessionRepository } from '../session/session.repository'
 import type { UserRepository } from '../user/user.repository'
 
@@ -92,7 +91,7 @@ function setup(existing?: User['status']) {
       tokenRepository: tokenRepository as unknown as TokenRepository,
       userRepository: userRepository as unknown as UserRepository,
     },
-    { emailService: emailService as unknown as EmailService },
+    { emailService },
   )
 
   return {
