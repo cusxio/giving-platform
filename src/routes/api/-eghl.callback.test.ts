@@ -74,6 +74,50 @@ const replayedDuplicateBody = () =>
     'TxnMessage=Transaction+Failed',
   )
 
+// A signed success reply with an added TxnExists field, rewritten HashValue2-only fields and a
+// junk HashValue2.
+const tamperedSuccessBody = () => {
+  const body = new URLSearchParams(
+    signedCallbackBody(EghlTxnStatus.Success, 'Transaction Successful'),
+  )
+  body.set('OrderNumber', 'txn_other')
+  body.set('Param6', 'tampered')
+  body.set('Param7', 'tampered')
+  body.set('HashValue2', '0'.repeat(64))
+  body.set('TxnExists', EghlTxnExists.NotFound)
+  return body.toString()
+}
+
+const existingQueryReply = (
+  TxnStatus: EghlTxnStatus,
+  TxnMessage: string,
+  overrides: Record<string, string> = {},
+) =>
+  signedReply({
+    ...paymentFields(TxnStatus, TxnMessage),
+    QueryDesc: 'Exists',
+    TransactionType: 'QUERY',
+    TxnExists: EghlTxnExists.Exists,
+    ...overrides,
+  })
+
+/** Stands in for eGHL: answers every status query with the same signed `reply`. */
+const gatewayReplying = (reply: string) =>
+  vi.fn<typeof fetch>(() => Promise.resolve(new Response(reply, { status: 200 })))
+
+const timedOutGateway = vi.fn<typeof fetch>(() =>
+  Promise.reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError')),
+)
+
+const gatewayTimingOutMidReply = vi.fn<typeof fetch>(() => {
+  const body = new ReadableStream({
+    start(controller) {
+      controller.error(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+    },
+  })
+  return Promise.resolve(new Response(body, { status: 200 }))
+})
+
 /** Stands in for eGHL: answers a status query for the stored transaction with `TxnStatus`. */
 const gatewayAnswering = (TxnStatus: EghlTxnStatus, TxnMessage: string) =>
   vi.fn<typeof fetch>((_input, init) => {
@@ -83,12 +127,7 @@ const gatewayAnswering = (TxnStatus: EghlTxnStatus, TxnMessage: string) =>
       query.get('PaymentID') === TRANSACTION_ID &&
       query.get('Amount') === '50.00'
     const reply = matches
-      ? signedReply({
-          ...paymentFields(TxnStatus, TxnMessage),
-          QueryDesc: 'Exists',
-          TransactionType: 'QUERY',
-          TxnExists: EghlTxnExists.Exists,
-        })
+      ? existingQueryReply(TxnStatus, TxnMessage)
       : signedReply({
           ...paymentFields('-1', ''),
           QueryDesc: 'Not found',
@@ -241,9 +280,83 @@ describe('eGHL callback route', () => {
       'success',
     )
   })
+
+  it('rejects a reply whose HashValue2 does not match, whatever fields it adds', async () => {
+    expect.hasAssertions()
+
+    const { finalizePaymentFromCallback, response } = await postCallback(tamperedSuccessBody())
+
+    expect(response.status).toBe(400)
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+  })
+
+  it('leaves a failed reply pending when the gateway answers for another payment', async () => {
+    expect.hasAssertions()
+
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+      gatewayReplying(
+        existingQueryReply(EghlTxnStatus.Failed, 'Transaction Failed', {
+          OrderNumber: 'txn_other',
+          PaymentID: 'txn_other',
+        }),
+      ),
+    )
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('leaves a failed reply pending when the gateway answers with another amount', async () => {
+    expect.hasAssertions()
+
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+      gatewayReplying(
+        existingQueryReply(EghlTxnStatus.Failed, 'Transaction Failed', { Amount: '5.00' }),
+      ),
+    )
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('leaves a failed reply pending when the gateway query times out', async () => {
+    expect.hasAssertions()
+
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+      timedOutGateway,
+    )
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it('leaves a failed reply pending when the gateway reply times out mid-body', async () => {
+    expect.hasAssertions()
+
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+      gatewayTimingOutMidReply,
+    )
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    await expect(response.text()).resolves.toBe('OK')
+  })
 })
 
 describe('eGHL return route', () => {
+  it('does not settle a reply whose HashValue2 does not match, whatever fields it adds', async () => {
+    expect.hasAssertions()
+
+    const { finalizePaymentFromCallback } = await getReturn(tamperedSuccessBody())
+
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+  })
+
   it('leaves a replayed duplicate reply pending while the gateway still processes the payment', async () => {
     expect.hasAssertions()
 

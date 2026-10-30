@@ -101,6 +101,21 @@ const hashValueOnlyReply = ({
   return new URLSearchParams({ ...fields, HashValue: signature }).toString()
 }
 
+const existingTransactionReply = (overrides: Partial<EghlPaymentResponse> = {}) => {
+  const { HashValue2, ...fields } = buildResponse({
+    TransactionType: 'QUERY',
+    TxnMessage: 'Transaction Failed',
+    TxnStatus: EghlTxnStatus.Failed,
+    ...overrides,
+  })
+  return new URLSearchParams({
+    ...fields,
+    HashValue2,
+    QueryDesc: 'Exists',
+    TxnExists: EghlTxnExists.Exists,
+  }).toString()
+}
+
 const queryAgainstGatewayReply = async (body: string) => {
   vi.stubGlobal(
     'fetch',
@@ -226,6 +241,45 @@ describe('eghlService', () => {
       const result = await queryAgainstGatewayReply(
         hashValueOnlyReply({ TxnExists: EghlTxnExists.Exists, TxnStatus: EghlTxnStatus.Failed }),
       )
+
+      expect(result.ok).toBe(false)
+    })
+
+    it('rejects a reply signed with HashValue only that carries a final status', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({ TxnStatus: EghlTxnStatus.Failed }),
+      )
+
+      expect(result.ok).toBe(false)
+    })
+
+    it('returns a verified reply for the queried payment and amount', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(existingTransactionReply())
+
+      expect(result).toMatchObject({
+        ok: true,
+        value: { Amount: '50.00', PaymentID: 'txn_abc123', TxnStatus: EghlTxnStatus.Failed },
+      })
+    })
+
+    it('rejects a verified reply for another payment', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        existingTransactionReply({ OrderNumber: 'txn_other', PaymentID: 'txn_other' }),
+      )
+
+      expect(result.ok).toBe(false)
+    })
+
+    it('rejects a verified reply for another amount', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(existingTransactionReply({ Amount: '5.00' }))
 
       expect(result.ok).toBe(false)
     })

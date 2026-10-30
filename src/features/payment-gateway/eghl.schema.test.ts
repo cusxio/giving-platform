@@ -73,6 +73,17 @@ describe('eghlQueryResponseSchema', () => {
       }),
     ).toBe(true)
   })
+
+  it.each([
+    [EghlTxnExists.NotFound, EghlTxnStatus.Failed],
+    [EghlTxnExists.NotFound, '-2'],
+    [EghlTxnExists.InternalError, EghlTxnStatus.Success],
+    [EghlTxnExists.InternalError, '-1'],
+  ])('rejects TxnExists %s with TxnStatus %s', (TxnExists, TxnStatus) => {
+    expect.hasAssertions()
+
+    expect(EghlQueryResponseSchema.Check({ ...notFoundReply, TxnExists, TxnStatus })).toBe(false)
+  })
 })
 
 describe('eghlPaymentResponseSchema', () => {

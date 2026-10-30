@@ -82,6 +82,21 @@ describe('eGHL query reply finality', () => {
     ).toBeNull()
   })
 
+  it.each([EghlTxnExists.NotFound, EghlTxnExists.InternalError])(
+    'leaves a reply unsettled when TxnExists is %s',
+    (TxnExists) => {
+      expect.hasAssertions()
+
+      expect(
+        finalStatusOf({
+          TxnExists,
+          TxnMessage: 'Transaction Failed',
+          TxnStatus: EghlTxnStatus.Failed,
+        }),
+      ).toBeNull()
+    },
+  )
+
   it.each([
     EghlQueryTxnStatus.NotFound,
     EghlQueryTxnStatus.InternalError,
