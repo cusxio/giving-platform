@@ -8,6 +8,5 @@ export default {
     './src/route-tree.gen.ts',
     './src/server/opentelemetry/nitro.ts',
   ],
-  msw: { entry: ['**/tests/setup.ts'] },
   vitest: { entry: ['**/*.test.ts'] },
 } satisfies KnipConfig
