@@ -1,14 +1,40 @@
 import { describe, expect, it } from 'vitest'
 
-import { finalStatusOf } from './eghl.finality'
-import { EghlQueryTxnStatus, EghlTxnStatus } from './eghl.schema'
+import { finalStatusOf, inboundActionOf } from './eghl.finality'
+import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.schema'
 
-describe('eGHL reply finality', () => {
+describe('eGHL inbound reply action', () => {
+  it('settles a successful reply directly', () => {
+    expect.hasAssertions()
+
+    expect(inboundActionOf({ TxnStatus: EghlTxnStatus.Success })).toBe('settle-success')
+  })
+
+  it('confirms a failed reply with a status query', () => {
+    expect.hasAssertions()
+
+    expect(inboundActionOf({ TxnStatus: EghlTxnStatus.Failed })).toBe('confirm-by-query')
+  })
+
+  it('leaves a pending reply pending', () => {
+    expect.hasAssertions()
+
+    expect(inboundActionOf({ TxnStatus: EghlTxnStatus.Pending })).toBe('leave-pending')
+  })
+})
+
+describe('eGHL query reply finality', () => {
+  const exists = { TxnExists: EghlTxnExists.Exists }
+
   it('settles a successful reply as success', () => {
     expect.hasAssertions()
 
     expect(
-      finalStatusOf({ TxnMessage: 'Transaction Successful', TxnStatus: EghlTxnStatus.Success }),
+      finalStatusOf({
+        ...exists,
+        TxnMessage: 'Transaction Successful',
+        TxnStatus: EghlTxnStatus.Success,
+      }),
     ).toBe('success')
   })
 
@@ -16,23 +42,31 @@ describe('eGHL reply finality', () => {
     expect.hasAssertions()
 
     expect(
-      finalStatusOf({ TxnMessage: 'Transaction Failed', TxnStatus: EghlTxnStatus.Failed }),
+      finalStatusOf({
+        ...exists,
+        TxnMessage: 'Transaction Failed',
+        TxnStatus: EghlTxnStatus.Failed,
+      }),
     ).toBe('failed')
   })
 
   it('settles a buyer cancellation as failed', () => {
     expect.hasAssertions()
 
-    expect(finalStatusOf({ TxnMessage: 'Buyer cancelled', TxnStatus: EghlTxnStatus.Failed })).toBe(
-      'failed',
-    )
+    expect(
+      finalStatusOf({ ...exists, TxnMessage: 'Buyer cancelled', TxnStatus: EghlTxnStatus.Failed }),
+    ).toBe('failed')
   })
 
   it('leaves a pending reply unsettled', () => {
     expect.hasAssertions()
 
     expect(
-      finalStatusOf({ TxnMessage: 'Transaction Pending', TxnStatus: EghlTxnStatus.Pending }),
+      finalStatusOf({
+        ...exists,
+        TxnMessage: 'Transaction Pending',
+        TxnStatus: EghlTxnStatus.Pending,
+      }),
     ).toBeNull()
   })
 
@@ -40,7 +74,11 @@ describe('eGHL reply finality', () => {
     expect.hasAssertions()
 
     expect(
-      finalStatusOf({ TxnMessage: 'Duplicate Payment ID', TxnStatus: EghlTxnStatus.Failed }),
+      finalStatusOf({
+        ...exists,
+        TxnMessage: 'Duplicate Payment ID',
+        TxnStatus: EghlTxnStatus.Failed,
+      }),
     ).toBeNull()
   })
 
@@ -52,6 +90,6 @@ describe('eGHL reply finality', () => {
   ])('leaves query status %s unsettled', (TxnStatus) => {
     expect.hasAssertions()
 
-    expect(finalStatusOf({ TxnMessage: '', TxnStatus })).toBeNull()
+    expect(finalStatusOf({ ...exists, TxnMessage: '', TxnStatus })).toBeNull()
   })
 })

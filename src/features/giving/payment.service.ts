@@ -1,11 +1,11 @@
 import { and, eq, sql } from 'drizzle-orm'
 
 import { TZDate, now } from '#/core/date'
-import { createTransactionError } from '#/core/errors'
+import { createDBError, createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
-import { tryAsync } from '#/core/result'
+import { ok, tryAsync } from '#/core/result'
 import type { DBPool } from '#/db/client'
-import type { PaymentInsert } from '#/db/schema'
+import type { PaymentInsert, Transaction } from '#/db/schema'
 import { payments, savedPaymentMethods, transactions } from '#/db/schema'
 
 import type { EghlFinalStatus } from '../payment-gateway/eghl.finality'
@@ -16,6 +16,24 @@ export class PaymentService {
 
   constructor(db: DBPool) {
     this.#dbPool = db
+  }
+
+  /** The amount of a transaction still awaiting a final status, or undefined once settled. */
+  async findPendingAmountInCents(transactionId: Transaction['id']) {
+    const result = await tryAsync(
+      () =>
+        this.#dbPool
+          .select({ amount: transactions.amount })
+          .from(transactions)
+          .where(and(eq(transactions.id, transactionId), eq(transactions.status, 'pending'))),
+      createDBError,
+    )
+
+    if (!result.ok) {
+      return result
+    }
+
+    return ok(result.value[0]?.amount)
   }
 
   async finalizePaymentFromCallback(

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { pino } from 'pino'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ok } from '#/core/result'
 import type * as Envvars from '#/envvars'
@@ -75,8 +75,8 @@ const replayedDuplicateBody = () =>
   )
 
 /** Stands in for eGHL: answers a status query for the stored transaction with `TxnStatus`. */
-const stubGatewayQuery = (TxnStatus: EghlTxnStatus, TxnMessage: string) => {
-  const gateway = vi.fn<typeof fetch>((_input, init) => {
+const gatewayAnswering = (TxnStatus: EghlTxnStatus, TxnMessage: string) =>
+  vi.fn<typeof fetch>((_input, init) => {
     const query = new URLSearchParams(init?.body as URLSearchParams)
     const matches =
       query.get('TransactionType') === 'QUERY' &&
@@ -98,13 +98,17 @@ const stubGatewayQuery = (TxnStatus: EghlTxnStatus, TxnMessage: string) => {
         })
     return Promise.resolve(new Response(reply, { status: 200 }))
   })
-  vi.stubGlobal('fetch', gateway)
-  return gateway
-}
 
-afterEach(() => {
-  vi.unstubAllGlobals()
-})
+const unreachableGateway = vi.fn<typeof fetch>(() => Promise.reject(new TypeError('network down')))
+
+const withGateway = async <T>(gateway: typeof fetch, run: () => Promise<T>) => {
+  vi.stubGlobal('fetch', gateway)
+  try {
+    return await run()
+  } finally {
+    vi.unstubAllGlobals()
+  }
+}
 
 const stubPaymentService = () => ({
   finalizePaymentFromCallback: vi.fn<PaymentService['finalizePaymentFromCallback']>(() =>
@@ -121,34 +125,39 @@ const handlerContext = (paymentService: ReturnType<typeof stubPaymentService>) =
   paymentService,
 })
 
-const postCallback = async (body: string) => {
+const postCallback = async (body: string, gateway: typeof fetch = unreachableGateway) => {
   const paymentService = stubPaymentService()
   const handlers = Route.options.server?.handlers
-  if (typeof handlers !== 'object' || handlers.POST === undefined) {
+  const handlePost = typeof handlers === 'object' ? handlers.POST : undefined
+  if (handlePost === undefined) {
     throw new TypeError('callback route has no POST handler')
   }
-  const response = await handlers.POST({
-    context: handlerContext(paymentService),
-    request: new Request('https://app.give.test/api/eghl/callback', { body, method: 'POST' }),
-  } as never)
+  const response = await withGateway(gateway, async () =>
+    handlePost({
+      context: handlerContext(paymentService),
+      request: new Request('https://app.give.test/api/eghl/callback', { body, method: 'POST' }),
+    } as never),
+  )
   if (!(response instanceof Response)) {
     throw new TypeError('callback route did not answer with a Response')
   }
   return { finalizePaymentFromCallback: paymentService.finalizePaymentFromCallback, response }
 }
 
-const getReturn = async (query: string) => {
+const getReturn = async (query: string, gateway: typeof fetch = unreachableGateway) => {
   const paymentService = stubPaymentService()
   const handlers = ReturnRoute.options.server?.handlers
-  if (typeof handlers !== 'object' || handlers.GET === undefined) {
+  const handleGet = typeof handlers === 'object' ? handlers.GET : undefined
+  if (handleGet === undefined) {
     throw new TypeError('return route has no GET handler')
   }
-  await handlers
-    .GET({
+  // The return route always answers by throwing a redirect.
+  await withGateway(gateway, async () =>
+    handleGet({
       context: handlerContext(paymentService),
       request: new Request(`https://app.give.test/api/eghl/return?${query}`),
-    } as never)
-    .catch((redirect: unknown) => redirect)
+    } as never),
+  ).catch((error: unknown) => error)
   return { finalizePaymentFromCallback: paymentService.finalizePaymentFromCallback }
 }
 
@@ -183,9 +192,10 @@ describe('eGHL callback route', () => {
   it('leaves a replayed duplicate reply pending while the gateway still processes the payment', async () => {
     expect.hasAssertions()
 
-    stubGatewayQuery(EghlTxnStatus.Pending, 'Transaction Pending')
-
-    const { finalizePaymentFromCallback, response } = await postCallback(replayedDuplicateBody())
+    const { finalizePaymentFromCallback, response } = await postCallback(
+      replayedDuplicateBody(),
+      gatewayAnswering(EghlTxnStatus.Pending, 'Transaction Pending'),
+    )
 
     expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
     await expect(response.text()).resolves.toBe('OK')
@@ -194,13 +204,9 @@ describe('eGHL callback route', () => {
   it('leaves a failed reply pending when the gateway cannot be queried', async () => {
     expect.hasAssertions()
 
-    vi.stubGlobal(
-      'fetch',
-      vi.fn<typeof fetch>(() => Promise.reject(new TypeError('network down'))),
-    )
-
     const { finalizePaymentFromCallback, response } = await postCallback(
       signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+      unreachableGateway,
     )
 
     expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
@@ -210,10 +216,9 @@ describe('eGHL callback route', () => {
   it('settles a failed reply as failed once the gateway confirms the failure', async () => {
     expect.hasAssertions()
 
-    stubGatewayQuery(EghlTxnStatus.Failed, 'Transaction Failed')
-
     const { finalizePaymentFromCallback, response } = await postCallback(
       signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
+      gatewayAnswering(EghlTxnStatus.Failed, 'Transaction Failed'),
     )
 
     expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
@@ -226,9 +231,10 @@ describe('eGHL callback route', () => {
   it('settles a failed reply as success when the gateway reports the payment succeeded', async () => {
     expect.hasAssertions()
 
-    stubGatewayQuery(EghlTxnStatus.Success, 'Transaction Successful')
-
-    const { finalizePaymentFromCallback } = await postCallback(replayedDuplicateBody())
+    const { finalizePaymentFromCallback } = await postCallback(
+      replayedDuplicateBody(),
+      gatewayAnswering(EghlTxnStatus.Success, 'Transaction Successful'),
+    )
 
     expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
       expect.objectContaining({ PaymentID: TRANSACTION_ID }),
@@ -241,9 +247,10 @@ describe('eGHL return route', () => {
   it('leaves a replayed duplicate reply pending while the gateway still processes the payment', async () => {
     expect.hasAssertions()
 
-    stubGatewayQuery(EghlTxnStatus.Pending, 'Transaction Pending')
-
-    const { finalizePaymentFromCallback } = await getReturn(replayedDuplicateBody())
+    const { finalizePaymentFromCallback } = await getReturn(
+      replayedDuplicateBody(),
+      gatewayAnswering(EghlTxnStatus.Pending, 'Transaction Pending'),
+    )
 
     expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
   })

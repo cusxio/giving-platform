@@ -1,16 +1,37 @@
 import { assertExhaustive } from '#/core/assert-exhaustive'
 
+import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
 import { EghlQueryTxnStatus, EghlTxnStatus } from './eghl.schema'
 
 export type EghlFinalStatus = 'failed' | 'success'
 
-interface EghlReplyStatus {
-  readonly TxnMessage: string
-  readonly TxnStatus: EghlQueryTxnStatus | EghlTxnStatus
+/**
+ * What a callback or return reply may do on its own. Its signature covers TxnStatus but not
+ * TxnMessage, so a failure is only settled after our own status query confirms it.
+ */
+export type EghlInboundAction = 'confirm-by-query' | 'leave-pending' | 'settle-success'
+
+export function inboundActionOf(reply: Pick<EghlPaymentResponse, 'TxnStatus'>): EghlInboundAction {
+  switch (reply.TxnStatus) {
+    case EghlTxnStatus.Success: {
+      return 'settle-success'
+    }
+    case EghlTxnStatus.Failed: {
+      return 'confirm-by-query'
+    }
+    case EghlTxnStatus.Pending: {
+      return 'leave-pending'
+    }
+    default: {
+      return assertExhaustive(reply.TxnStatus)
+    }
+  }
 }
 
-/** Returns null when the reply does not settle the transaction, so it stays pending. */
-export function finalStatusOf(reply: EghlReplyStatus): EghlFinalStatus | null {
+type EghlQueryReplyStatus = Pick<EghlQueryResponse, 'TxnExists' | 'TxnMessage' | 'TxnStatus'>
+
+/** Returns null when the query reply does not settle the transaction, so it stays pending. */
+export function finalStatusOf(reply: EghlQueryReplyStatus): EghlFinalStatus | null {
   switch (reply.TxnStatus) {
     case EghlTxnStatus.Success: {
       return 'success'

@@ -1,11 +1,10 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { finalStatusOf } from '#/features/payment-gateway/eghl.finality'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
 
-import { parseAndVerifyEghlResponse } from './-eghl.shared'
+import { parseAndVerifyEghlResponse, settleInboundReply } from './-eghl.shared'
 
 export const Route = createFileRoute('/api/eghl/callback')({
   server: {
@@ -67,29 +66,11 @@ export const Route = createFileRoute('/api/eghl/callback')({
           'Signature verified, processing payment finalization',
         )
 
-        // eGHL keeps resending the callback until it reads this exact body.
-        const acknowledged = new Response('OK', {
-          headers: { 'Content-Type': 'text/plain' },
-          status: 200,
+        const finalizationResult = await settleInboundReply(eghlResponse, {
+          eghlService,
+          logger,
+          paymentService,
         })
-
-        const finalStatus = finalStatusOf(eghlResponse)
-        if (finalStatus === null) {
-          logger.info(
-            {
-              event: 'eghl.callback.not_final',
-              status: eghlResponse.TxnStatus,
-              transaction_id: eghlResponse.PaymentID,
-            },
-            'Reply does not settle the transaction, leaving it pending',
-          )
-          return acknowledged
-        }
-
-        const finalizationResult = await paymentService.finalizePaymentFromCallback(
-          eghlResponse,
-          finalStatus,
-        )
 
         if (!finalizationResult.ok) {
           logger.error(
@@ -109,7 +90,8 @@ export const Route = createFileRoute('/api/eghl/callback')({
           'Callback processed and saved successfully',
         )
 
-        return acknowledged
+        // eGHL resends the callback, up to 3 times, until it reads this exact body.
+        return new Response('OK', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
       },
     },
     middleware: [eghlServiceMiddleware, paymentServiceMiddleware],
