@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
 import { defineQuery, rows } from '#/server/db.server'
@@ -93,4 +93,36 @@ export const successYears = defineQuery(
       .orderBy(asc(year))
   },
   (found) => found.map(({ year }) => year),
+)
+
+function listedFor(donor: Donor) {
+  return and(
+    eq(transactions.userId, donor.id),
+    inArray(transactions.status, ['success', 'failed']),
+    startFreshOnly(donor.journey),
+  )
+}
+
+export const countTransactions = defineQuery(
+  'history.countTransactions',
+  (db, donor: Donor) => db.select({ value: count() }).from(transactions).where(listedFor(donor)),
+  rows,
+)
+
+export const transactionsPage = defineQuery(
+  'history.transactionsPage',
+  (db, donor: Donor, page: { readonly limit: number; readonly offset: number }) =>
+    db
+      .select({
+        amount: transactions.amount,
+        createdAt: transactions.createdAt,
+        id: transactions.id,
+        status: transactions.status,
+      })
+      .from(transactions)
+      .where(listedFor(donor))
+      .orderBy(desc(transactions.createdAt))
+      .limit(page.limit)
+      .offset(page.offset),
+  rows,
 )

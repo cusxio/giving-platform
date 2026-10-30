@@ -1,12 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import type * as Envvars from '#/server/env.server'
-
-vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
-  DATABASE_URL: 'postgres://user:pass@db.give.test/db',
-}))
-
-const { toTransactionsPage } = await import('./transactions.get-data.procedure')
+import { toTransactionsPage } from './transactions-page'
 
 const page = [
   {

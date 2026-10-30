@@ -5,13 +5,17 @@ import type { RequestContext } from '#/server/request-context.server'
 
 import type { Donor } from './history.repository.server'
 import {
+  countTransactions,
   recentTransactions,
   successFundItems,
   successTimeline,
   successYears,
+  transactionsPage,
 } from './history.repository.server'
 import type { Overview, OverviewYear } from './overview'
 import { scopeFor, summarizeOverview } from './overview'
+import type { TransactionsPage } from './transactions-page'
+import { PAGE_SIZE, toTransactionsPage } from './transactions-page'
 
 type Ctx = Pick<RequestContext, 'deps' | 'user'>
 
@@ -22,6 +26,11 @@ export interface OverviewInput {
 
 export interface AvailableYearsInput {
   readonly journey: Donor['journey']
+}
+
+export interface TransactionsInput {
+  readonly journey: Donor['journey']
+  readonly page?: number
 }
 
 /** One neon-http round trip for the three reads, then pure aggregation. */
@@ -40,6 +49,17 @@ async function loadOverview(
 
 function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor): Promise<number[]> {
   return deps.db.run(successYears(donor))
+}
+
+async function loadTransactionsPage(
+  deps: Pick<Deps, 'db'>,
+  input: { readonly donor: Donor; readonly page: number },
+): Promise<TransactionsPage> {
+  const [total, txs] = await deps.db.batch([
+    countTransactions(input.donor),
+    transactionsPage(input.donor, { limit: PAGE_SIZE, offset: PAGE_SIZE * (input.page - 1) }),
+  ])
+  return toTransactionsPage(total, txs)
 }
 
 // Transport adapters. Phase 2 replaces the null-user guard with `requireUser` middleware.
@@ -62,4 +82,15 @@ export async function getAvailableYearsProcedure(
     throw notFound()
   }
   return loadAvailableYears(context.deps, { id: context.user.id, journey: data.journey })
+}
+
+export async function getTransactionsProcedure(
+  context: Ctx,
+  data: TransactionsInput,
+): Promise<TransactionsPage> {
+  const { page = 1, journey } = data
+  if (!context.user) {
+    throw notFound()
+  }
+  return loadTransactionsPage(context.deps, { donor: { id: context.user.id, journey }, page })
 }
