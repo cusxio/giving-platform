@@ -10,7 +10,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@ariakit/react": "0.4.26",
+    "@ariakit/react": "^0.4.42",
     "@date-fns/tz": "^1.5.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/lora": "^5.3.0",

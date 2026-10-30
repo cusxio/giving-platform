@@ -115,8 +115,6 @@ export default defineConfig({
         'jsx-a11y/no-autofocus': ['error', { ignoreNonDOM: true }],
 
         // React preferences.
-        // Ariakit form stores expose hooks as methods (`store.useSubmit`); rules-of-hooks still applies.
-        'react/hooks': 'off',
         'react/jsx-max-depth': 'off',
         // Recharts takes render functions as props (`<Tooltip content={...}>`).
         'react/no-unstable-nested-components': ['error', { allowAsProps: true }],

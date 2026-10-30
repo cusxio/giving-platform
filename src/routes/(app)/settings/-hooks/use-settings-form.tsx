@@ -1,4 +1,4 @@
-import { useFormStore, useStoreState } from '@ariakit/react'
+import { useFormStore, useFormSubmit, useStoreState } from '@ariakit/react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { toast } from '#/components/ui/toaster'
@@ -17,7 +17,7 @@ export function useSettingsForm(user: Pick<User, 'email' | 'firstName' | 'lastNa
 
   const queryClient = useQueryClient()
   const updateUser = useUpdateUserMutation()
-  store.useSubmit(async (state) => {
+  useFormSubmit(store, async (state) => {
     try {
       const res = await updateUser.mutateAsync(
         { firstName: state.values.firstName, lastName: state.values.lastName },

@@ -1,4 +1,4 @@
-import { Form } from '@ariakit/react'
+import { Form, useFormSubmit } from '@ariakit/react'
 import { useCallback } from 'react'
 
 import { Spinner } from '#/components/ui/spinner'
@@ -35,7 +35,7 @@ export function GivingForm(props: GivingFormProps) {
     initialView,
   })
 
-  store.useSubmit(async () => {
+  useFormSubmit(store, async () => {
     if (view === 'amounts') {
       onContinue(extractFundAmounts(store))
       return

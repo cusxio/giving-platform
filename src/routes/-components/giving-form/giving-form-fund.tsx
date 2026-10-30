@@ -1,3 +1,4 @@
+import { useFormValue } from '@ariakit/react'
 import { createElement, useCallback } from 'react'
 
 import type { InputCurrencyProps } from '#/components/ui/input-currency'
@@ -28,7 +29,7 @@ export function GivingFormFund(props: GivingFormFundProps) {
     [store],
   )
 
-  const currentValue = store.useValue<string>(store.names[fund])
+  const currentValue = useFormValue<string>(store, store.names[fund])
 
   const handleSelect: GivingFormFundQuickFillProps['onSelect'] = useCallback(
     (v) => {
