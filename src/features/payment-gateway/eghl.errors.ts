@@ -7,7 +7,7 @@ export type EghlCallbackError =
   | ParseError
 
 export interface EghlFetchError {
-  readonly error: TypeError
+  readonly error: unknown
   readonly type: 'EghlFetchError'
 }
 

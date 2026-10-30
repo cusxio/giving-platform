@@ -11,7 +11,7 @@ import { err, ok, tryAsync, trySync } from '#/core/result'
 import type { Transaction } from '#/db/schema'
 import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/envvars'
 
-import type { EghlQueryError } from './eghl.errors'
+import type { EghlFetchError, EghlQueryError } from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
 import { EghlQueryResponseSchema, EghlTxnExists } from './eghl.schema'
 
@@ -28,6 +28,11 @@ interface QueryTransactionStatusParams {
   amountInCents: number
   transactionId: Transaction['id']
 }
+
+// Callback and return requests wait on this query, so a slow gateway must not hold them open.
+const QUERY_TIMEOUT_MS = 8000
+
+const toFetchError = (error: unknown): EghlFetchError => ({ error, type: 'EghlFetchError' })
 
 type SignedReply = Pick<
   EghlQueryResponse,
@@ -128,8 +133,9 @@ export class EghlService {
           body: new URLSearchParams({ ...requestParams, HashValue }),
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           method: 'POST',
+          signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
         }),
-      (error: unknown) => ({ error: error as TypeError, type: 'EghlFetchError' }),
+      toFetchError,
     )
 
     if (!queryResult.ok) {
@@ -138,7 +144,12 @@ export class EghlService {
 
     const response = queryResult.value
 
-    const responseText = await response.text()
+    const textResult = await tryAsync(() => response.text(), toFetchError)
+    if (!textResult.ok) {
+      return textResult
+    }
+
+    const responseText = textResult.value
     if (!response.ok) {
       return err({ message: responseText, type: 'EghlQueryResponseError' })
     }
