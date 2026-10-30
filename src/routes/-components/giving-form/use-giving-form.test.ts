@@ -28,7 +28,10 @@ const values = {
   token: undefined,
 } as unknown as Submission[0]
 
-async function submit(respond: () => Promise<StartContributionResponse>) {
+async function submit(
+  respond: () => Promise<StartContributionResponse>,
+  authenticated = false,
+) {
   vi.clearAllMocks()
   const store = {
     names: { email: 'email' },
@@ -42,6 +45,7 @@ async function submit(respond: () => Promise<StartContributionResponse>) {
     { mutateAsync: respond } as unknown as Submission[1],
     store as unknown as Submission[2],
     setIsRedirecting,
+    authenticated,
   )
 
   return {
@@ -78,7 +82,7 @@ describe('handleFormSubmission', () => {
     expect(messages).toStrictEqual({ inline: 0, toastError: 1, toastUnexpected: 0 })
   })
 
-  it('shows only inline field errors for a validation error', async () => {
+  it('shows only an inline error for a validation error on a rendered guest field', async () => {
     expect.hasAssertions()
 
     const { messages } = await submit(() =>
@@ -89,6 +93,50 @@ describe('handleFormSubmission', () => {
     )
 
     expect(messages).toStrictEqual({ inline: 1, toastError: 0, toastUnexpected: 0 })
+  })
+
+  it('shows one toast for a validation error when the user is signed in', async () => {
+    expect.hasAssertions()
+
+    const { messages } = await submit(
+      () =>
+        Promise.resolve({
+          errors: [{ message: 'Too short', path: '/lastName' }],
+          type: 'VALIDATION_ERROR',
+        }),
+      true,
+    )
+
+    expect(messages).toStrictEqual({ inline: 0, toastError: 1, toastUnexpected: 0 })
+  })
+
+  it.each(['/contributions/General', '/token', ''])(
+    'shows one toast for a validation error on the non-field path %j',
+    async (path) => {
+      expect.hasAssertions()
+
+      const { messages } = await submit(() =>
+        Promise.resolve({ errors: [{ message: 'Invalid', path }], type: 'VALIDATION_ERROR' }),
+      )
+
+      expect(messages).toStrictEqual({ inline: 0, toastError: 1, toastUnexpected: 0 })
+    },
+  )
+
+  it('shows one toast for several validation errors that have no rendered field', async () => {
+    expect.hasAssertions()
+
+    const { messages } = await submit(() =>
+      Promise.resolve({
+        errors: [
+          { message: 'Invalid', path: '/contributions/General' },
+          { message: 'Invalid', path: '/token' },
+        ],
+        type: 'VALIDATION_ERROR',
+      }),
+    )
+
+    expect(messages).toStrictEqual({ inline: 0, toastError: 1, toastUnexpected: 0 })
   })
 
   it('shows one unexpected toast for a server error', async () => {
