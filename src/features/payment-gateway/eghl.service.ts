@@ -9,7 +9,7 @@ import { centsToRinggit } from '#/core/money'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync, trySync } from '#/core/result'
 import type { Transaction } from '#/db/schema'
-import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/envvars'
+import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/server/env.server'
 
 import type { EghlFetchError, EghlQueryError } from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'

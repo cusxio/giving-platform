@@ -4,9 +4,9 @@ import { pino } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ok } from '#/core/result'
-import type * as Envvars from '#/envvars'
 import type { PaymentService } from '#/features/giving/payment.service'
 import { EghlTxnExists, EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
+import type * as Envvars from '#/server/env.server'
 
 const mockedEnv = vi.hoisted(() => ({
   BASE_URL: 'https://app.give.test',
@@ -16,7 +16,7 @@ const mockedEnv = vi.hoisted(() => ({
   EGHL_URL: 'https://eghl.test/pay',
 }))
 
-vi.mock<typeof Envvars>(import('#/envvars'), () => mockedEnv)
+vi.mock<typeof Envvars>(import('#/server/env.server'), () => mockedEnv)
 
 const { Route } = await import('./eghl.callback')
 const { Route: ReturnRoute } = await import('./eghl.return')

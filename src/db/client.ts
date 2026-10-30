@@ -2,7 +2,7 @@ import { Pool, neon, neonConfig } from '@neondatabase/serverless'
 import { drizzle } from 'drizzle-orm/neon-http'
 import { drizzle as drizzlePool } from 'drizzle-orm/neon-serverless'
 
-import { DATABASE_URL } from '#/envvars'
+import { DATABASE_URL } from '#/server/env.server'
 
 // Required for PlanetScale Postgres connections
 // https://planetscale.com/docs/postgres/connecting/neon-serverless-driver

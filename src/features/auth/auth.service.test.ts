@@ -11,7 +11,7 @@ import type { UserRepository } from '../user/user.repository'
 import { AuthService } from './auth.service'
 import type { TokenRepository } from './token.repository'
 
-vi.mock(import('#/envvars'), () => ({ SESSION_SECRET: 'test-session-secret' }))
+vi.mock(import('#/server/env.server'), () => ({ SESSION_SECRET: 'test-session-secret' }))
 
 const EMAIL = 'donor@example.com'
 

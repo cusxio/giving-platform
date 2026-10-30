@@ -4,7 +4,7 @@ import { createTestAccount, createTransport, getTestMessageUrl } from 'nodemaile
 import { config } from '#/core/brand'
 import { logger } from '#/core/logger'
 import { tryAsync } from '#/core/result'
-import { MAILERSEND_API_KEY, MAILERSEND_ROOT_DOMAIN } from '#/envvars'
+import { MAILERSEND_API_KEY, MAILERSEND_ROOT_DOMAIN } from '#/server/env.server'
 
 export interface SendEmailError {
   readonly error: unknown

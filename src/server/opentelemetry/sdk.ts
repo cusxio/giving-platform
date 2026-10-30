@@ -33,7 +33,7 @@ import {
 } from '@opentelemetry/sdk-trace'
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions'
 
-import { OTEL_LOGS_EXPORTER, OTEL_LOG_LEVEL, OTEL_TRACES_EXPORTER } from '#/envvars'
+import { OTEL_LOGS_EXPORTER, OTEL_LOG_LEVEL, OTEL_TRACES_EXPORTER } from '#/server/env.server'
 
 export interface Telemetry {
   flush: () => Promise<void>

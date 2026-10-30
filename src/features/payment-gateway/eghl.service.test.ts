@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 
 import { describe, expect, it, vi } from 'vitest'
 
-import type * as Envvars from '#/envvars'
+import type * as Envvars from '#/server/env.server'
 
 import type { EghlPaymentResponse } from './eghl.schema'
 import { EghlTxnExists, EghlTxnStatus } from './eghl.schema'
@@ -14,7 +14,7 @@ const mockedEnv = vi.hoisted(() => ({
   EGHL_URL: 'https://eghl.test/pay',
 }))
 
-vi.mock<typeof Envvars>(import('#/envvars'), () => mockedEnv)
+vi.mock<typeof Envvars>(import('#/server/env.server'), () => mockedEnv)
 
 const { EghlService } = await import('./eghl.service')
 

@@ -9,7 +9,7 @@ import type { SessionRepository } from './session.repository'
 import { SessionService } from './session.service'
 import { clearSessionCookie } from './utils'
 
-vi.mock(import('#/envvars'), () => ({ SESSION_SECRET: 'test-session-secret' }))
+vi.mock(import('#/server/env.server'), () => ({ SESSION_SECRET: 'test-session-secret' }))
 
 type FakeUser = Pick<User, 'id' | 'journey' | 'role' | 'status'>
 

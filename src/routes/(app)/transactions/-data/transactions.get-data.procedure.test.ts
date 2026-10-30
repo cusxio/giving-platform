@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type * as Envvars from '#/envvars'
+import type * as Envvars from '#/server/env.server'
 
-vi.mock<typeof Envvars>(import('#/envvars'), () => ({
+vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
   DATABASE_URL: 'postgres://user:pass@db.give.test/db',
 }))
 

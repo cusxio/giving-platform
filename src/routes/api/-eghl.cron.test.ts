@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { err, ok } from '#/core/result'
 import { TransactionRollbackError } from '#/db/errors'
-import type * as Envvars from '#/envvars'
 import type { PaymentService } from '#/features/giving/payment.service'
 import type { EghlQueryError } from '#/features/payment-gateway/eghl.errors'
 import type { EghlQueryResponse } from '#/features/payment-gateway/eghl.schema'
@@ -13,6 +12,7 @@ import {
   EghlTxnStatus,
 } from '#/features/payment-gateway/eghl.schema'
 import type { EghlService } from '#/features/payment-gateway/eghl.service'
+import type * as Envvars from '#/server/env.server'
 
 const mockedEnv = vi.hoisted(() => ({
   BASE_URL: 'https://app.give.test',
@@ -23,7 +23,7 @@ const mockedEnv = vi.hoisted(() => ({
   EGHL_URL: 'https://eghl.test/pay',
 }))
 
-vi.mock<typeof Envvars>(import('#/envvars'), () => mockedEnv)
+vi.mock<typeof Envvars>(import('#/server/env.server'), () => mockedEnv)
 
 const { Route } = await import('./eghl.cron')
 

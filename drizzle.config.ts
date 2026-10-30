@@ -1,6 +1,6 @@
 import { defineConfig } from 'drizzle-kit'
 
-import { DATABASE_URL } from './src/envvars'
+import { DATABASE_URL } from './src/server/env.server'
 
 export default defineConfig({
   casing: 'snake_case',
