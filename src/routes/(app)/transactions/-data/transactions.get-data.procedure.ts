@@ -15,7 +15,7 @@ const pageSize = 20
 
 export const getTransactionsData = createServerFn()
   .middleware([dbMiddleware])
-  .inputValidator((v: Input) => v)
+  .validator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { page = 1, journey } = data
     const { db, user } = context

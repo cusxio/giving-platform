@@ -40,7 +40,10 @@ export const Route = createFileRoute('/(app)/transactions')({
       queryClient,
     } = context
 
-    await queryClient.ensureQueryData(createTransactionsQueryOptions(userId, journey, page))
+    await queryClient.query({
+      ...createTransactionsQueryOptions(userId, journey, page),
+      staleTime: 'static',
+    })
   },
 })
 

@@ -40,7 +40,7 @@ type StartContributionBusinessErrorCode = 'EMAIL_EXISTS' | 'INVALID_REQUEST' | '
 
 export const startContribution = createServerFn({ method: 'POST' })
   .middleware([contributionServiceMiddleware, eghlServiceMiddleware])
-  .inputValidator((v: StartContributionInput) => v)
+  .validator((v: StartContributionInput) => v)
   .handler(async ({ data, context }): Promise<StartContributionResponse> => {
     const { contributionService, user, eghlService, logger } = context
 

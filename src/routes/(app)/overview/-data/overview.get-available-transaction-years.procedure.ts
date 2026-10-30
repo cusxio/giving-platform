@@ -12,7 +12,7 @@ interface Input {
 }
 
 export const getAvailableTransactionYears = createServerFn()
-  .inputValidator((v: Input) => v)
+  .validator((v: Input) => v)
   .middleware([dbMiddleware])
   .handler(async ({ context, data }) => {
     const { db, user } = context

@@ -36,7 +36,7 @@ type VerifyOtpBusinessErrorCode = 'INVALID_OR_EXPIRED_OTP' | 'RATE_LIMIT_EXCEEDE
 
 export const verifyOtp = createServerFn({ method: 'POST' })
   .middleware([authServiceMiddleware])
-  .inputValidator((v: VerifyOtpInput) => v)
+  .validator((v: VerifyOtpInput) => v)
   .handler(async ({ context, data }): Promise<undefined | VerifyOtpResponse> => {
     const { user, authService, rateLimitService, logger } = context
 

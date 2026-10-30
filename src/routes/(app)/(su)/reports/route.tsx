@@ -47,7 +47,10 @@ export const Route = createFileRoute('/(app)/(su)/reports')({
       deps.end_date,
     )
 
-    await context.queryClient.ensureQueryData(createReportsQueryOptions(startDate, endDate))
+    await context.queryClient.query({
+      ...createReportsQueryOptions(startDate, endDate),
+      staleTime: 'static',
+    })
   },
 })
 

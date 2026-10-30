@@ -9,25 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as appRouteRouteImport } from './routes/(app)/route'
+import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as UhOhRouteImport } from './routes/uh-oh'
 import { Route as WelcomeRouteRouteImport } from './routes/welcome/route'
-import { Route as authRouteRouteImport } from './routes/(auth)/route'
-import { Route as appRouteRouteImport } from './routes/(app)/route'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as appTransactionsRouteRouteImport } from './routes/(app)/transactions/route'
-import { Route as appSettingsRouteRouteImport } from './routes/(app)/settings/route'
-import { Route as appOverviewRouteRouteImport } from './routes/(app)/overview/route'
 import { Route as appsuRouteRouteImport } from './routes/(app)/(su)/route'
-import { Route as TransactionReceiptTransactionIdRouteImport } from './routes/transaction/receipt/$transactionId'
-import { Route as ApiEghlReturnRouteImport } from './routes/api/eghl.return'
-import { Route as ApiEghlCronRouteImport } from './routes/api/eghl.cron'
-import { Route as ApiEghlCallbackRouteImport } from './routes/api/eghl.callback'
-import { Route as authWelcomeSignupRouteImport } from './routes/(auth)/welcome.signup'
-import { Route as authAuthLoginRouteImport } from './routes/(auth)/auth.login'
-import { Route as appTransactionTransactionIdRouteImport } from './routes/(app)/transaction/$transactionId'
-import { Route as appsuReportsRouteRouteImport } from './routes/(app)/(su)/reports/route'
+import { Route as appOverviewRouteRouteImport } from './routes/(app)/overview/route'
+import { Route as appSettingsRouteRouteImport } from './routes/(app)/settings/route'
+import { Route as appTransactionsRouteRouteImport } from './routes/(app)/transactions/route'
 import { Route as appsuInsightsRouteRouteImport } from './routes/(app)/(su)/insights/route'
+import { Route as appsuReportsRouteRouteImport } from './routes/(app)/(su)/reports/route'
+import { Route as appTransactionTransactionIdRouteImport } from './routes/(app)/transaction/$transactionId'
+import { Route as authAuthLoginRouteImport } from './routes/(auth)/auth.login'
+import { Route as authWelcomeSignupRouteImport } from './routes/(auth)/welcome.signup'
+import { Route as ApiEghlCallbackRouteImport } from './routes/api/eghl.callback'
+import { Route as ApiEghlCronRouteImport } from './routes/api/eghl.cron'
+import { Route as ApiEghlReturnRouteImport } from './routes/api/eghl.return'
+import { Route as TransactionReceiptTransactionIdRouteImport } from './routes/transaction/receipt/$transactionId'
 
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const appRouteRoute = appRouteRouteImport.update({
+  id: '/(app)',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const authRouteRoute = authRouteRouteImport.update({
+  id: '/(auth)',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UhOhRoute = UhOhRouteImport.update({
   id: '/uh-oh',
   path: '/uh-oh',
@@ -38,27 +51,8 @@ const WelcomeRouteRoute = WelcomeRouteRouteImport.update({
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
-const authRouteRoute = authRouteRouteImport.update({
-  id: '/(auth)',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const appRouteRoute = appRouteRouteImport.update({
-  id: '/(app)',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const appTransactionsRouteRoute = appTransactionsRouteRouteImport.update({
-  id: '/transactions',
-  path: '/transactions',
-  getParentRoute: () => appRouteRoute,
-} as any)
-const appSettingsRouteRoute = appSettingsRouteRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+const appsuRouteRoute = appsuRouteRouteImport.update({
+  id: '/(su)',
   getParentRoute: () => appRouteRoute,
 } as any)
 const appOverviewRouteRoute = appOverviewRouteRouteImport.update({
@@ -66,40 +60,25 @@ const appOverviewRouteRoute = appOverviewRouteRouteImport.update({
   path: '/overview',
   getParentRoute: () => appRouteRoute,
 } as any)
-const appsuRouteRoute = appsuRouteRouteImport.update({
-  id: '/(su)',
+const appSettingsRouteRoute = appSettingsRouteRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => appRouteRoute,
 } as any)
-const TransactionReceiptTransactionIdRoute =
-  TransactionReceiptTransactionIdRouteImport.update({
-    id: '/transaction/receipt/$transactionId',
-    path: '/transaction/receipt/$transactionId',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiEghlReturnRoute = ApiEghlReturnRouteImport.update({
-  id: '/api/eghl/return',
-  path: '/api/eghl/return',
-  getParentRoute: () => rootRouteImport,
+const appTransactionsRouteRoute = appTransactionsRouteRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => appRouteRoute,
 } as any)
-const ApiEghlCronRoute = ApiEghlCronRouteImport.update({
-  id: '/api/eghl/cron',
-  path: '/api/eghl/cron',
-  getParentRoute: () => rootRouteImport,
+const appsuInsightsRouteRoute = appsuInsightsRouteRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => appsuRouteRoute,
 } as any)
-const ApiEghlCallbackRoute = ApiEghlCallbackRouteImport.update({
-  id: '/api/eghl/callback',
-  path: '/api/eghl/callback',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const authWelcomeSignupRoute = authWelcomeSignupRouteImport.update({
-  id: '/welcome/signup',
-  path: '/welcome/signup',
-  getParentRoute: () => authRouteRoute,
-} as any)
-const authAuthLoginRoute = authAuthLoginRouteImport.update({
-  id: '/auth/login',
-  path: '/auth/login',
-  getParentRoute: () => authRouteRoute,
+const appsuReportsRouteRoute = appsuReportsRouteRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => appsuRouteRoute,
 } as any)
 const appTransactionTransactionIdRoute =
   appTransactionTransactionIdRouteImport.update({
@@ -107,16 +86,37 @@ const appTransactionTransactionIdRoute =
     path: '/transaction/$transactionId',
     getParentRoute: () => appRouteRoute,
   } as any)
-const appsuReportsRouteRoute = appsuReportsRouteRouteImport.update({
-  id: '/reports',
-  path: '/reports',
-  getParentRoute: () => appsuRouteRoute,
+const authAuthLoginRoute = authAuthLoginRouteImport.update({
+  id: '/auth/login',
+  path: '/auth/login',
+  getParentRoute: () => authRouteRoute,
 } as any)
-const appsuInsightsRouteRoute = appsuInsightsRouteRouteImport.update({
-  id: '/insights',
-  path: '/insights',
-  getParentRoute: () => appsuRouteRoute,
+const authWelcomeSignupRoute = authWelcomeSignupRouteImport.update({
+  id: '/welcome/signup',
+  path: '/welcome/signup',
+  getParentRoute: () => authRouteRoute,
 } as any)
+const ApiEghlCallbackRoute = ApiEghlCallbackRouteImport.update({
+  id: '/api/eghl/callback',
+  path: '/api/eghl/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEghlCronRoute = ApiEghlCronRouteImport.update({
+  id: '/api/eghl/cron',
+  path: '/api/eghl/cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEghlReturnRoute = ApiEghlReturnRouteImport.update({
+  id: '/api/eghl/return',
+  path: '/api/eghl/return',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransactionReceiptTransactionIdRoute =
+  TransactionReceiptTransactionIdRouteImport.update({
+    id: '/transaction/receipt/$transactionId',
+    path: '/transaction/receipt/$transactionId',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -244,6 +244,27 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(app)': {
+      id: '/(app)'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof appRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/(auth)': {
+      id: '/(auth)'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof authRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/uh-oh': {
       id: '/uh-oh'
       path: '/uh-oh'
@@ -258,39 +279,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WelcomeRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(auth)': {
-      id: '/(auth)'
+    '/(app)/(su)': {
+      id: '/(app)/(su)'
       path: ''
       fullPath: ''
-      preLoaderRoute: typeof authRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(app)': {
-      id: '/(app)'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof appRouteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/(app)/transactions': {
-      id: '/(app)/transactions'
-      path: '/transactions'
-      fullPath: '/transactions'
-      preLoaderRoute: typeof appTransactionsRouteRouteImport
-      parentRoute: typeof appRouteRoute
-    }
-    '/(app)/settings': {
-      id: '/(app)/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof appSettingsRouteRouteImport
+      preLoaderRoute: typeof appsuRouteRouteImport
       parentRoute: typeof appRouteRoute
     }
     '/(app)/overview': {
@@ -300,25 +293,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof appOverviewRouteRouteImport
       parentRoute: typeof appRouteRoute
     }
-    '/(app)/(su)': {
-      id: '/(app)/(su)'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof appsuRouteRouteImport
+    '/(app)/settings': {
+      id: '/(app)/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof appSettingsRouteRouteImport
       parentRoute: typeof appRouteRoute
     }
-    '/transaction/receipt/$transactionId': {
-      id: '/transaction/receipt/$transactionId'
-      path: '/transaction/receipt/$transactionId'
-      fullPath: '/transaction/receipt/$transactionId'
-      preLoaderRoute: typeof TransactionReceiptTransactionIdRouteImport
-      parentRoute: typeof rootRouteImport
+    '/(app)/transactions': {
+      id: '/(app)/transactions'
+      path: '/transactions'
+      fullPath: '/transactions'
+      preLoaderRoute: typeof appTransactionsRouteRouteImport
+      parentRoute: typeof appRouteRoute
     }
-    '/api/eghl/return': {
-      id: '/api/eghl/return'
-      path: '/api/eghl/return'
-      fullPath: '/api/eghl/return'
-      preLoaderRoute: typeof ApiEghlReturnRouteImport
+    '/(app)/(su)/insights': {
+      id: '/(app)/(su)/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof appsuInsightsRouteRouteImport
+      parentRoute: typeof appsuRouteRoute
+    }
+    '/(app)/(su)/reports': {
+      id: '/(app)/(su)/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof appsuReportsRouteRouteImport
+      parentRoute: typeof appsuRouteRoute
+    }
+    '/(app)/transaction/$transactionId': {
+      id: '/(app)/transaction/$transactionId'
+      path: '/transaction/$transactionId'
+      fullPath: '/transaction/$transactionId'
+      preLoaderRoute: typeof appTransactionTransactionIdRouteImport
+      parentRoute: typeof appRouteRoute
+    }
+    '/(auth)/auth/login': {
+      id: '/(auth)/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof authAuthLoginRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/(auth)/welcome/signup': {
+      id: '/(auth)/welcome/signup'
+      path: '/welcome/signup'
+      fullPath: '/welcome/signup'
+      preLoaderRoute: typeof authWelcomeSignupRouteImport
+      parentRoute: typeof authRouteRoute
+    }
+    '/api/eghl/callback': {
+      id: '/api/eghl/callback'
+      path: '/api/eghl/callback'
+      fullPath: '/api/eghl/callback'
+      preLoaderRoute: typeof ApiEghlCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/eghl/cron': {
@@ -328,47 +356,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiEghlCronRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/eghl/callback': {
-      id: '/api/eghl/callback'
-      path: '/api/eghl/callback'
-      fullPath: '/api/eghl/callback'
-      preLoaderRoute: typeof ApiEghlCallbackRouteImport
+    '/api/eghl/return': {
+      id: '/api/eghl/return'
+      path: '/api/eghl/return'
+      fullPath: '/api/eghl/return'
+      preLoaderRoute: typeof ApiEghlReturnRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(auth)/welcome/signup': {
-      id: '/(auth)/welcome/signup'
-      path: '/welcome/signup'
-      fullPath: '/welcome/signup'
-      preLoaderRoute: typeof authWelcomeSignupRouteImport
-      parentRoute: typeof authRouteRoute
-    }
-    '/(auth)/auth/login': {
-      id: '/(auth)/auth/login'
-      path: '/auth/login'
-      fullPath: '/auth/login'
-      preLoaderRoute: typeof authAuthLoginRouteImport
-      parentRoute: typeof authRouteRoute
-    }
-    '/(app)/transaction/$transactionId': {
-      id: '/(app)/transaction/$transactionId'
-      path: '/transaction/$transactionId'
-      fullPath: '/transaction/$transactionId'
-      preLoaderRoute: typeof appTransactionTransactionIdRouteImport
-      parentRoute: typeof appRouteRoute
-    }
-    '/(app)/(su)/reports': {
-      id: '/(app)/(su)/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof appsuReportsRouteRouteImport
-      parentRoute: typeof appsuRouteRoute
-    }
-    '/(app)/(su)/insights': {
-      id: '/(app)/(su)/insights'
-      path: '/insights'
-      fullPath: '/insights'
-      preLoaderRoute: typeof appsuInsightsRouteRouteImport
-      parentRoute: typeof appsuRouteRoute
+    '/transaction/receipt/$transactionId': {
+      id: '/transaction/receipt/$transactionId'
+      path: '/transaction/receipt/$transactionId'
+      fullPath: '/transaction/receipt/$transactionId'
+      preLoaderRoute: typeof TransactionReceiptTransactionIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }

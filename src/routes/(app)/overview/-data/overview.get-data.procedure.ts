@@ -19,7 +19,7 @@ interface Input {
 
 export const getOverviewData = createServerFn()
   .middleware([dbMiddleware])
-  .inputValidator((v: Input) => v)
+  .validator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { db, user } = context
     const { year, journey } = data

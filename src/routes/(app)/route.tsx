@@ -9,7 +9,7 @@ export const Route = createFileRoute('/(app)')({
   async beforeLoad({ context }) {
     const { queryClient } = context
 
-    const result = await queryClient.ensureQueryData(createUserQueryOptions())
+    const result = await queryClient.query({ ...createUserQueryOptions(), staleTime: 'static' })
 
     if (result.type === 'AUTH_ERROR') {
       throw redirect({ to: '/auth/login' })

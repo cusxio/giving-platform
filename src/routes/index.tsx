@@ -33,7 +33,10 @@ export const Route = createFileRoute('/')({
       return { isAuthenticated: false, isMaintenanceMode: true }
     }
 
-    const result = await context.queryClient.ensureQueryData(createUserQueryOptions())
+    const result = await context.queryClient.query({
+      ...createUserQueryOptions(),
+      staleTime: 'static',
+    })
 
     if (result.type === 'SUCCESS' && result.value.user.journey === null) {
       throw redirect({ replace: true, to: '/welcome' })
@@ -52,7 +55,10 @@ export const Route = createFileRoute('/')({
 
   async loader({ context }) {
     if (context.shouldPreloadPaymentMethods === true) {
-      await context.queryClient.ensureQueryData(createSavedPaymentMethodsQueryOptions(true))
+      await context.queryClient.query({
+        ...createSavedPaymentMethodsQueryOptions(true),
+        staleTime: 'static',
+      })
     }
   },
 

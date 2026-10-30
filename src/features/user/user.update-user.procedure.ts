@@ -31,7 +31,7 @@ export type UpdateUserResponse =
 
 export const updateUser = createServerFn({ method: 'POST' })
   .middleware([userRepositoryMiddleware])
-  .inputValidator((v: UpdateUserInput) => v)
+  .validator((v: UpdateUserInput) => v)
   .handler(async ({ data, context }): Promise<undefined | UpdateUserResponse> => {
     const { logger, user, userRepository } = context
 

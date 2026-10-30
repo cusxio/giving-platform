@@ -34,7 +34,7 @@ type RequestOtpBusinessErrorCode = 'ALREADY_EXISTS' | 'NOT_EXISTS' | 'RATE_LIMIT
 
 export const requestOtp = createServerFn({ method: 'POST' })
   .middleware([authServiceMiddleware])
-  .inputValidator((v: RequestOtpInput) => v)
+  .validator((v: RequestOtpInput) => v)
   .handler(async ({ data, context }): Promise<RequestOtpResponse | undefined> => {
     const { user, authService, rateLimitService, logger } = context
 
