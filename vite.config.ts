@@ -34,6 +34,8 @@ export default defineConfig(({ mode, command }) => {
         // Keep the full pino package available for the runtime CommonJS require
         // used in src/core/logger.ts for OpenTelemetry pino instrumentation.
         traceDeps: ['pino*'],
+        // Nitro's Vercel preset only recognizes Node 22 and 24 and otherwise falls back to 24.
+        vercel: { functions: { runtime: 'nodejs26.x' } },
       }),
       command === 'build' && mode === 'production' && process.env.CI !== 'true' && bundleStats(),
     ],
