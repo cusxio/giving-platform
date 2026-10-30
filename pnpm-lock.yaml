@@ -254,8 +254,8 @@ importers:
         specifier: ^1.5.0
         version: 1.5.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       mailersend:
-        specifier: ^2.8.0
-        version: 2.8.0
+        specifier: ^3.6.0
+        version: 3.6.0
       nanoid:
         specifier: ^5.1.16
         version: 5.1.16
@@ -266,8 +266,8 @@ importers:
         specifier: 3.0.261029-rc
         version: 3.0.261029-rc
       nodemailer:
-        specifier: ^8.0.11
-        version: 8.0.11
+        specifier: ^10.3.1
+        version: 10.3.1
       pino:
         specifier: ^10.4.0
         version: 10.4.0
@@ -335,9 +335,6 @@ importers:
       '@types/canvas-confetti':
         specifier: ^1.9.0
         version: 1.9.0
-      '@types/nodemailer':
-        specifier: ^8.0.2
-        version: 8.0.2
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
@@ -3594,9 +3591,6 @@ packages:
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
-  '@types/nodemailer@8.0.2':
-    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
-
   '@types/pg@8.15.6':
     resolution: {integrity: sha512-NoaMtzhxOrubeL/7UZuNTrejB4MPAJ0RpxZqXQf2qXuVlTPuG6Y8p4u9dKRaue4yjmC7ZhzVO2/Yyyn25znrPQ==}
 
@@ -5102,8 +5096,8 @@ packages:
   magic-string@1.4.5:
     resolution: {integrity: sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w==}
 
-  mailersend@2.8.0:
-    resolution: {integrity: sha512-jpv6avO0/D1hyNkVuAT1bG99+j+nTxLlUDF1t5WYhIMuOXtTaI5LUj77AtXVCEUUBfJWPtmFNQ1yCVQIhDkmuA==}
+  mailersend@3.6.0:
+    resolution: {integrity: sha512-u7rpjAnyqI/7tdmgmfTqh7ybFEmyMvQ+Z1FjUUePMgg3gZ0hjOIn3W2CnPBveEzLAcRYFPm4AnaTlZEeMac1+w==}
 
   make-dir@3.1.0:
     resolution: {integrity: sha512-g3FeP20LNwhALb/6Cz6Dd4F2ngze0jz7tbzrD2wAV+o9FeNHe4rL+yK2md0J/fiSf1sa1ADhXqi5+oVwOM/eGw==}
@@ -5311,9 +5305,9 @@ packages:
     resolution: {integrity: sha512-5NUN6QCxNFrS9oEA9RPS+d0AP+ooGBzzovY2JhIpDRHacPvOhHjXjUsUMX9qp4nLHZ+5jVgXB2jj/P4arGOE/g==}
     engines: {node: '>=18'}
 
-  nodemailer@8.0.11:
-    resolution: {integrity: sha512-nrO/pDAUKl+wXX+lx16tDLbnm0fW6sK/x8mgohaCpg+CdCEl482bD4tCuAZk2DyliruiNTIZxRCoWkDqJEnAiA==}
-    engines: {node: '>=6.0.0'}
+  nodemailer@10.3.1:
+    resolution: {integrity: sha512-uF0AFsJC07Y1vdW7p580DKAnh7rAO+4UPSSB3mDCPNDufoiaOebV6JmrzpxB14OjEEEiBsNdYoM2Y+fN8M7BBA==}
+    engines: {node: '>=20.0.0'}
 
   nopt@8.1.0:
     resolution: {integrity: sha512-ieGu42u/Qsa4TFktmaKEwM6MQH0pOWnaB3htzh0JRtx84+Mebc0cbZYN5bC+6WTZ4+77xrL9Pn5m7CV6VIkV7A==}
@@ -8943,10 +8937,6 @@ snapshots:
     dependencies:
       undici-types: 8.9.0
 
-  '@types/nodemailer@8.0.2':
-    dependencies:
-      '@types/node': 26.6.6
-
   '@types/pg@8.15.6':
     dependencies:
       '@types/node': 26.6.6
@@ -10595,7 +10585,7 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  mailersend@2.8.0:
+  mailersend@3.6.0:
     dependencies:
       gaxios: 7.3.1
       qs: 6.17.1
@@ -10765,7 +10755,7 @@ snapshots:
 
   node-releases@2.0.61: {}
 
-  nodemailer@8.0.11: {}
+  nodemailer@10.3.1: {}
 
   nopt@8.1.0:
     dependencies:
