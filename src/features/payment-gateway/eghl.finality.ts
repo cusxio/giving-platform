@@ -1,7 +1,7 @@
 import { assertExhaustive } from '#/core/assert-exhaustive'
 
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
-import { EghlQueryTxnStatus, EghlTxnStatus } from './eghl.schema'
+import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.schema'
 
 export type EghlFinalStatus = 'failed' | 'success'
 
@@ -32,6 +32,10 @@ type EghlQueryReplyStatus = Pick<EghlQueryResponse, 'TxnExists' | 'TxnMessage' |
 
 /** Returns null when the query reply does not settle the transaction, so it stays pending. */
 export function finalStatusOf(reply: EghlQueryReplyStatus): EghlFinalStatus | null {
+  if (reply.TxnExists !== EghlTxnExists.Exists) {
+    return null
+  }
+
   switch (reply.TxnStatus) {
     case EghlTxnStatus.Success: {
       return 'success'
