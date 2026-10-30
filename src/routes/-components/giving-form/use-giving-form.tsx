@@ -149,7 +149,7 @@ function handleBusinessError(
   }
 }
 
-async function handleFormSubmission(
+export async function handleFormSubmission(
   values: ReturnType<typeof getInitialFormValues>,
   startContribution: ReturnType<typeof useStartContributionMutation>,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
@@ -166,12 +166,8 @@ async function handleFormSubmission(
       token: token === __NORMAL_CHECKOUT__ ? undefined : token,
     })
 
-    const success = handleSubmissionResponse(res, email, store)
-
-    if (success) {
+    if (handleSubmissionResponse(res, email, store)) {
       setIsRedirecting(true)
-    } else {
-      toast.unexpected()
     }
   } catch {
     toast.unexpected()
