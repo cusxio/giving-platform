@@ -1,6 +1,6 @@
 import { pino } from 'pino'
 
-import { createOtelLogStream, traceContextMixin } from '#/server/opentelemetry/pino'
+import { createOtelLogStream, traceContextMixin } from '#/server/opentelemetry/pino.server'
 
 async function createStdoutStream() {
   if (import.meta.env.MODE === 'development') {

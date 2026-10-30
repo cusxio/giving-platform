@@ -15,7 +15,7 @@ describe('logger', () => {
     logs.setGlobalLoggerProvider(
       new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter })] }),
     )
-    const { logger } = await import('./logger')
+    const { logger } = await import('./logger.server')
 
     logger.level = 'debug'
     logger.debug('Checking session')

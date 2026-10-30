@@ -1,6 +1,6 @@
 import { createMiddleware } from '@tanstack/react-start'
 
-import { logger } from '#/core/logger'
+import { logger } from '#/server/logger.server'
 
 import { sessionMiddleware } from './session-middleware'
 

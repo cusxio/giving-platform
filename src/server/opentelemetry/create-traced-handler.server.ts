@@ -9,7 +9,7 @@ import {
 } from '@opentelemetry/api'
 import type { createStartHandler } from '@tanstack/react-start/server'
 
-import type { Telemetry } from './sdk'
+import type { Telemetry } from './sdk.server'
 
 // Nitro's Vercel runtime attaches the platform's `waitUntil` to the incoming request.
 type PlatformRequest = Request & { waitUntil?: (promise: Promise<unknown>) => void }
