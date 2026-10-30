@@ -1,0 +1,96 @@
+import { and, asc, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
+
+import { clientTz } from '#/core/date'
+import { defineQuery, rows } from '#/server/db.server'
+import type { User } from '#/server/schema.server'
+import { funds, transactionItems, transactions } from '#/server/schema.server'
+
+/** The signed-in user whose giving history a query reads. */
+export type Donor = Pick<User, 'id' | 'journey'>
+
+/** A donor's transactions created in `[start, endExclusive)`; an unset bound leaves that side open. */
+export interface DonorScope {
+  readonly donor: Donor
+  readonly endExclusive: Date | undefined
+  readonly start: Date | undefined
+}
+
+/** A donor who chose to start fresh sees only what they gave while signed in, not as a guest. */
+function startFreshOnly(journey: Donor['journey']) {
+  return journey === 'start_fresh' ? eq(transactions.createdAs, 'user') : undefined
+}
+
+function inScope(scope: DonorScope) {
+  return [
+    eq(transactions.userId, scope.donor.id),
+    scope.start ? gte(transactions.createdAt, scope.start) : undefined,
+    scope.endExclusive ? lt(transactions.createdAt, scope.endExclusive) : undefined,
+    startFreshOnly(scope.donor.journey),
+  ]
+}
+
+export const recentTransactions = defineQuery(
+  'history.recentTransactions',
+  (db, scope: DonorScope) =>
+    db
+      .select({
+        amount: transactions.amount,
+        createdAt: transactions.createdAt,
+        id: transactions.id,
+        status: transactions.status,
+      })
+      .from(transactions)
+      .where(and(...inScope(scope), inArray(transactions.status, ['success', 'failed'])))
+      .orderBy(desc(transactions.createdAt))
+      .limit(15),
+  rows,
+)
+
+export const successTimeline = defineQuery(
+  'history.successTimeline',
+  (db, scope: DonorScope) =>
+    db
+      .select({ amount: transactions.amount, createdAt: transactions.createdAt })
+      .from(transactions)
+      .where(and(...inScope(scope), eq(transactions.status, 'success'))),
+  rows,
+)
+
+export const successFundItems = defineQuery(
+  'history.successFundItems',
+  (db, scope: DonorScope) =>
+    db
+      .select({
+        createdAt: transactions.createdAt,
+        fundId: transactionItems.fundId,
+        fundName: funds.name,
+      })
+      .from(transactionItems)
+      .innerJoin(transactions, eq(transactionItems.transactionId, transactions.id))
+      .innerJoin(funds, eq(transactionItems.fundId, funds.id))
+      .where(and(...inScope(scope), eq(transactions.status, 'success'))),
+  rows,
+)
+
+/** Kuala Lumpur calendar years with a successful transaction, ascending. */
+export const successYears = defineQuery(
+  'history.successYears',
+  (db, donor: Donor) => {
+    const year =
+      sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::integer`.as(
+        'year',
+      )
+    return db
+      .selectDistinct({ year })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, donor.id),
+          eq(transactions.status, 'success'),
+          startFreshOnly(donor.journey),
+        ),
+      )
+      .orderBy(asc(year))
+  },
+  (found) => found.map(({ year }) => year),
+)

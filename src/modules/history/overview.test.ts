@@ -1,14 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import type * as Envvars from '#/server/env.server'
-
-import { getYearDateRange } from './overview.helpers'
-
-vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
-  DATABASE_URL: 'postgres://user:pass@db.give.test/db',
-}))
-
-const { summarizeOverview } = await import('./overview.get-data.procedure')
+import { getYearDateRange, summarizeOverview } from './overview'
 
 // Kuala Lumpur is UTC+8, so 16:30Z on 31 January is already 1 February there.
 const FEB_1_KL_EARLY = new Date('2025-01-31T16:30:00Z')

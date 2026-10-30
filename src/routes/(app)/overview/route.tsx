@@ -5,6 +5,7 @@ import { config } from '#/core/brand'
 import { clientTz, now } from '#/core/date'
 import { useAuthUser } from '#/features/session/session.queries'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { availableYearsQuery, overviewQuery } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
 import { BibleVerse } from './-components/bible-verse'
@@ -14,10 +15,6 @@ import { OverviewEmpty } from './-components/overview-empty'
 import { OverviewTransactions } from './-components/overview-transactions'
 import { OverviewWelcome } from './-components/overview-welcome'
 import { OverviewYearSelector, hasMultipleYears } from './-components/overview-year-selector'
-import {
-  createAvailableTransactionYearsQuery,
-  createOverviewQueryOptions,
-} from './-overview.queries'
 
 const searchSchema = v.object({ year: v.optional(v.union([v.number(), v.literal('all')])) })
 
@@ -39,7 +36,7 @@ export const Route = createFileRoute('/(app)/overview')({
     const currentCalendarYear = now(clientTz).getFullYear()
 
     const dataYears = await queryClient.query({
-      ...createAvailableTransactionYearsQuery(userId, journey),
+      ...availableYearsQuery(userId, journey),
       staleTime: 'static',
     })
 
@@ -73,10 +70,7 @@ export const Route = createFileRoute('/(app)/overview')({
       queryClient,
     } = context
 
-    await queryClient.query({
-      ...createOverviewQueryOptions(userId, journey, year),
-      staleTime: 'static',
-    })
+    await queryClient.query({ ...overviewQuery(userId, journey, year), staleTime: 'static' })
   },
 })
 
@@ -95,7 +89,7 @@ function RouteComponent() {
       cumulativeContributions,
       transactions,
     },
-  } = useSuspenseQueryDeferred(createOverviewQueryOptions(user.id, user.journey, year))
+  } = useSuspenseQueryDeferred(overviewQuery(user.id, user.journey, year))
 
   const showYearSelector = hasMultipleYears(years)
 
