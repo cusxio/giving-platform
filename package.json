@@ -34,7 +34,7 @@
     "@tanstack/react-start": "^1.169.4",
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
-    "cookie": "^1.1.1",
+    "cookie": "^2.0.1",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
     "env-schema": "^7.0.0",

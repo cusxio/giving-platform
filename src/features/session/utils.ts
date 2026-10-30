@@ -1,4 +1,4 @@
-import { serialize } from 'cookie'
+import { stringifySetCookie } from 'cookie'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
@@ -15,12 +15,14 @@ export function serializeSessionCookie({
   cookieValue: string
   expiresAt: Date
 }): string {
-  return serialize(SESSION_COOKIE_NAME, cookieValue, {
+  return stringifySetCookie({
     expires: expiresAt,
     httpOnly: true,
+    name: SESSION_COOKIE_NAME,
     path: '/',
     sameSite: 'lax',
     secure: true,
+    value: cookieValue,
   })
 }
 
