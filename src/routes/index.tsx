@@ -5,7 +5,7 @@ import * as v from 'valibot'
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
 import { funds } from '#/core/brand'
-import { createUserQueryOptions, useOptionalAuthUser } from '#/features/session/session.queries'
+import { currentUserQuery, useOptionalAuthUser } from '#/modules/account'
 import { Nav } from '#/routes/-components/nav'
 import { cx } from '#/styles/cx'
 
@@ -33,10 +33,7 @@ export const Route = createFileRoute('/')({
       return { isAuthenticated: false, isMaintenanceMode: true }
     }
 
-    const result = await context.queryClient.query({
-      ...createUserQueryOptions(),
-      staleTime: 'static',
-    })
+    const result = await context.queryClient.query({ ...currentUserQuery(), staleTime: 'static' })
 
     if (result.type === 'SUCCESS' && result.value.user.journey === null) {
       throw redirect({ replace: true, to: '/welcome' })

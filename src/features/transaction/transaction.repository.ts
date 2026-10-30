@@ -1,7 +1,7 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 import type { DB, DBTransaction } from '#/server/neon.server'
-import type { Transaction, User } from '#/server/schema.server'
+import type { Transaction } from '#/server/schema.server'
 import { payments, transactions, users } from '#/server/schema.server'
 
 export class TransactionRepository {
@@ -25,13 +25,5 @@ export class TransactionRepository {
       .innerJoin(users, eq(users.id, transactions.userId))
       .leftJoin(payments, eq(payments.transactionId, transactions.id))
       .where(eq(transactions.id, transactionId))
-  }
-
-  findGuestTransactionExistsByUserIdQuery(userId: User['id'], db: DB | DBTransaction = this.#db) {
-    return db
-      .select({ exists: transactions.id })
-      .from(transactions)
-      .where(and(eq(transactions.userId, userId), eq(transactions.createdAs, 'guest')))
-      .limit(1)
   }
 }

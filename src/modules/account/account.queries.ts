@@ -2,14 +2,14 @@ import { queryOptions } from '@tanstack/react-query'
 
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
-import { getUser } from '../auth/auth.get-user.procedure'
+import { getCurrentUser, getWelcome } from './account.functions'
 
-export function createUserQueryOptions() {
-  return queryOptions({ queryFn: () => getUser(), queryKey: ['auth-user'] })
+export function currentUserQuery() {
+  return queryOptions({ queryFn: () => getCurrentUser(), queryKey: ['auth-user'] })
 }
 
 export function useAuthUser() {
-  const { data } = useSuspenseQueryDeferred(createUserQueryOptions())
+  const { data } = useSuspenseQueryDeferred(currentUserQuery())
 
   if (data.type !== 'SUCCESS') {
     throw new Error('useAuthUser must be used within a protected route')
@@ -19,8 +19,12 @@ export function useAuthUser() {
 }
 
 export function useOptionalAuthUser() {
-  const { data } = useSuspenseQueryDeferred(createUserQueryOptions())
+  const { data } = useSuspenseQueryDeferred(currentUserQuery())
   const authUser = data.type === 'SUCCESS' ? data.value : undefined
 
   return authUser
+}
+
+export function welcomeQuery() {
+  return queryOptions({ queryFn: () => getWelcome(), queryKey: ['welcome'] })
 }

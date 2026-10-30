@@ -56,10 +56,6 @@ export class UserRepository {
     return ok(user ?? null)
   }
 
-  findUserByIdQuery(userId: User['id'], db: DB | DBTransaction = this.#db) {
-    return db.select().from(users).where(eq(users.id, userId))
-  }
-
   markUserAsActiveByIdQuery(userId: User['id'], db: AnyDBOrTransaction = this.#db) {
     return db
       .update(users)

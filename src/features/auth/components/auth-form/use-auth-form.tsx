@@ -5,6 +5,7 @@ import { useState } from 'react'
 
 import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
+import { currentUserQuery } from '#/modules/account'
 
 import type { RequestOtpResponse, VerifyOtpResponse } from '../../auth.mutations'
 import { useRequestOtpMutation, useVerifyOtpMutation } from '../../auth.mutations'
@@ -85,7 +86,7 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
           break
         }
         case 'SUCCESS': {
-          queryClient.removeQueries({ queryKey: ['auth-user'] })
+          queryClient.removeQueries({ queryKey: currentUserQuery().queryKey })
           await navigate({ to: mode === 'signup' ? '/welcome' : '/' })
           break
         }

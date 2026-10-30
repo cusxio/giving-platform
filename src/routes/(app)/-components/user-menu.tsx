@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 
 import { Menu, MenuItem, MenuSeparator } from '#/components/ui/menu'
 import { useLogoutMutation } from '#/features/auth/auth.mutations'
-import type { User } from '#/server/schema.server'
+import type { User } from '#/modules/account'
 
 interface UserMenuProps {
   store: MenuStore

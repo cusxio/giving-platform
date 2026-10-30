@@ -4,8 +4,8 @@ import { useServerFn } from '@tanstack/react-start'
 
 import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
-
-import type { GetUserResponse } from '../auth/auth.get-user.procedure'
+import type { CurrentUserResponse } from '#/modules/account'
+import { currentUserQuery } from '#/modules/account'
 
 import type { UpdatePrivacyModeInput } from './user.update-privacy-mode.procedure'
 import { updatePrivacyMode } from './user.update-privacy-mode.procedure'
@@ -19,8 +19,8 @@ export function useUpdatePrivacyModeMutation() {
     mutationFn: (privacyMode: UpdatePrivacyModeInput['privacyMode']) =>
       updatePrivacyMode({ data: { privacyMode } }),
     onMutate(nextPrivacyMode) {
-      queryClient.setQueryData<Extract<GetUserResponse, { type: 'SUCCESS' }>>(
-        ['auth-user'],
+      queryClient.setQueryData<Extract<CurrentUserResponse, { type: 'SUCCESS' }>>(
+        currentUserQuery().queryKey,
         (prev) => {
           if (!prev) {
             return prev

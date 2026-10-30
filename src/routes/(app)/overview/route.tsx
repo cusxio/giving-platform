@@ -3,8 +3,8 @@ import * as v from 'valibot'
 
 import { config } from '#/core/brand'
 import { clientTz, now } from '#/core/date'
-import { useAuthUser } from '#/features/session/session.queries'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { useAuthUser } from '#/modules/account'
 import { availableYearsQuery, overviewQuery } from '#/modules/history'
 import { cx } from '#/styles/cx'
 

@@ -4,7 +4,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { buttonVariants } from '#/components/ui/button'
 import { FormSubmitButton } from '#/components/ui/form-submit-button'
 import { UserFormFields } from '#/components/user-form-fields'
-import { useAuthUser } from '#/features/session/session.queries'
+import { useAuthUser } from '#/modules/account'
 import { cx } from '#/styles/cx'
 
 import { useSettingsForm } from './-hooks/use-settings-form'

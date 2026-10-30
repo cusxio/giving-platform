@@ -8,7 +8,7 @@ import { Button, buttonVariants } from '#/components/ui/button'
 import { Spinner } from '#/components/ui/spinner'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import { useUpdateUserMutation } from '#/features/user/user.mutations'
-import type { User } from '#/server/schema.server'
+import type { User } from '#/modules/account'
 import { cx } from '#/styles/cx'
 
 import { useWelcomeViewStore } from './use-welcome-view-store'

@@ -3,7 +3,7 @@ import { createElement } from 'react'
 
 import { Button } from '#/components/ui/button'
 import { useUpdatePrivacyModeMutation } from '#/features/user/user.mutations'
-import type { UserSettings } from '#/server/schema.server'
+import type { UserSettings } from '#/modules/account'
 
 interface HeaderPrivacyToggleProps {
   userSettings: Pick<UserSettings, 'privacyMode'>
