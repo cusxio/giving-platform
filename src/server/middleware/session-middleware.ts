@@ -56,7 +56,8 @@ export const sessionMiddleware = createMiddleware().server<{
       }
       case 'SessionExpiredError':
       case 'SessionInvalidError':
-      case 'SessionNotFoundError': {
+      case 'SessionNotFoundError':
+      case 'SessionUserInactiveError': {
         logger.info(
           { event: 'session.verify.invalid', reason: type },
           'Session is invalid or expired',

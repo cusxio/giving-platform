@@ -63,6 +63,24 @@ export class SessionService {
       return err({ serializedCookie: clearSessionCookie(), type: 'SessionInvalidError' })
     }
 
+    if (user.status !== 'active') {
+      const deleteResult = await this.#sessionRepository.deleteSessionById(session.id)
+
+      if (!deleteResult.ok) {
+        logger.warn(
+          {
+            err: deleteResult.error.error,
+            error_type: deleteResult.error.type,
+            event: 'session.verify.inactive_delete_failed',
+            session_id: session.id,
+          },
+          'Failed to delete session of inactive user',
+        )
+      }
+
+      return err({ serializedCookie: clearSessionCookie(), type: 'SessionUserInactiveError' })
+    }
+
     const daysLeft = differenceInDays(session.expiresAt, now())
 
     if (daysLeft <= 0) {
