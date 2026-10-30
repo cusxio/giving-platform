@@ -85,7 +85,7 @@
     "rollup-plugin-bundle-stats": "^4.21.10",
     "tailwindcss": "^4.2.1",
     "typescript": "^6.0.3",
-    "vercel": "^53.1.1",
+    "vercel": "^65.8.0",
     "vite": "^8.0.10",
     "vitest": "^4.0.18"
   },
@@ -94,5 +94,8 @@
       "@commitlint/config-conventional"
     ]
   },
-  "packageManager": "pnpm@11.0.7+sha512.724a7b5d2319cdd7009d65e15a2c29aae9d3902b50585ca163d38a7737eb85bc4e72196879ff59768a71e81fe32aa71e8b70f088b2e24b9e4a2850d87e4607b5"
+  "engines": {
+    "node": "26.x"
+  },
+  "packageManager": "pnpm@12.16.1+sha512.091d1dee7927575661b25dab3c2ae31cafc1c54d6b71ed6a6600cf0c1cb10434a447eae14015f1b23e2e6bedeed79df94a932e2164d2832280dce3fb32f656d1"
 }

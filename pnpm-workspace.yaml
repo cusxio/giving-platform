@@ -1,6 +1,7 @@
 allowBuilds:
   core-js: false
   esbuild: false
+  koffi: false
   msw: false
   protobufjs: false
   sharp: false
