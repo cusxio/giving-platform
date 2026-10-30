@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { addSeconds, now } from '#/core/date'
 import { createDBError } from '#/core/errors'
@@ -67,35 +67,6 @@ export class RateLimitRepository {
       attemptCount: record?.attemptCount ?? 1,
       windowStartedAt: record?.windowStartedAt ?? currentTime,
     })
-  }
-
-  /**
-   * Get current attempt count without incrementing.
-   */
-  async getAttemptCount(identifier: string, action: Action, windowSeconds: number) {
-    const windowStart = addSeconds(now(), -windowSeconds)
-
-    const result = await tryAsync(
-      () =>
-        this.#db
-          .select({ attemptCount: rateLimitAttempts.attemptCount })
-          .from(rateLimitAttempts)
-          .where(
-            and(
-              eq(rateLimitAttempts.identifier, identifier),
-              eq(rateLimitAttempts.action, action),
-              gt(rateLimitAttempts.windowStartedAt, windowStart),
-            ),
-          )
-          .limit(1),
-      createDBError,
-    )
-
-    if (!result.ok) {
-      return result
-    }
-
-    return ok(result.value[0]?.attemptCount ?? 0)
   }
 
   /**

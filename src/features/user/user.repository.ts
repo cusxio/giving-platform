@@ -56,35 +56,8 @@ export class UserRepository {
     return ok(user ?? null)
   }
 
-  async findUserById(userId: User['id'], db: DB | DBTransaction = this.#db) {
-    const result = await tryAsync(() => this.findUserByIdQuery(userId, db), createDBError)
-    if (!result.ok) {
-      return result
-    }
-
-    const [user] = result.value
-    return ok(user ?? null)
-  }
-
   findUserByIdQuery(userId: User['id'], db: DB | DBTransaction = this.#db) {
     return db.select().from(users).where(eq(users.id, userId))
-  }
-
-  async markUserAsActiveById(userId: User['id']) {
-    const result = await tryAsync(
-      () =>
-        this.#db
-          .update(users)
-          .set({ emailVerifiedAt: now(), status: 'active' })
-          .where(eq(users.id, userId)),
-      createDBError,
-    )
-
-    if (!result.ok) {
-      return result
-    }
-
-    return ok()
   }
 
   markUserAsActiveByIdQuery(userId: User['id'], db: AnyDBOrTransaction = this.#db) {
