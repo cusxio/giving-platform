@@ -2,9 +2,8 @@ import { useFormStore, useFormSubmit, useStoreState } from '@ariakit/react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { toast } from '#/components/ui/toaster'
-import { useUpdateUserMutation } from '#/features/user/user.mutations'
 import type { CurrentUserResponse, User } from '#/modules/account'
-import { currentUserQuery } from '#/modules/account'
+import { currentUserQuery, useUpdateUserMutation } from '#/modules/account'
 
 export function useSettingsForm(user: Pick<User, 'email' | 'firstName' | 'lastName'>) {
   const store = useFormStore({

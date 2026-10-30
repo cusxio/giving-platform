@@ -3,9 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { useUpdateUserMutation } from '#/features/user/user.mutations'
 import type { User } from '#/modules/account'
-import { welcomeQuery } from '#/modules/account'
+import { useUpdateUserMutation, welcomeQuery } from '#/modules/account'
 
 export function useWelcomeForm(params: {
   guestTransactionExists: boolean

@@ -77,8 +77,6 @@ const LEGACY_FILES: string[] = [
   'src/features/session/session.service.ts',
   'src/features/transaction/transaction.repository.ts',
   'src/features/user/user.repository.ts',
-  'src/features/user/user.update-privacy-mode.procedure.ts',
-  'src/features/user/user.update-user.procedure.ts',
   'src/routes/(auth)/route.tsx',
   'src/routes/-components/giving-form/giving-form-details.tsx',
   'src/routes/-components/giving-form/giving-form.tsx',

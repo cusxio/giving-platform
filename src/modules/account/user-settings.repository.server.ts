@@ -12,3 +12,14 @@ export const findSettingsByUserId = defineQuery(
     db.select().from(userSettings).where(eq(userSettings.userId, userId)),
   firstOrNull,
 )
+
+export const upsertPrivacyMode = defineQuery(
+  'account.upsertPrivacyMode',
+  (db, userId: UserSettings['userId'], privacyMode: UserSettings['privacyMode']) =>
+    db
+      .insert(userSettings)
+      .values({ privacyMode, userId })
+      .onConflictDoUpdate({ set: { privacyMode }, target: userSettings.userId })
+      .returning(),
+  firstOrNull,
+)

@@ -3,7 +3,7 @@ import { eq, sql } from 'drizzle-orm'
 import { now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { AnyDBOrTransaction, DB, DBTransaction } from '#/server/neon.server'
+import type { AnyDBOrTransaction, DB } from '#/server/neon.server'
 import type { User, UserInsert } from '#/server/schema.server'
 import { users } from '#/server/schema.server'
 
@@ -61,23 +61,5 @@ export class UserRepository {
       .update(users)
       .set({ emailVerifiedAt: now(), status: 'active' })
       .where(eq(users.id, userId))
-  }
-
-  async updateUserById(
-    userId: User['id'],
-    input: Pick<UserInsert, 'firstName' | 'journey' | 'lastName'>,
-    db: DB | DBTransaction = this.#db,
-  ) {
-    const result = await tryAsync(
-      () => db.update(users).set(input).where(eq(users.id, userId)).returning(),
-      createDBError,
-    )
-
-    if (!result.ok) {
-      return result
-    }
-
-    const [user] = result.value
-    return ok(user ?? null)
   }
 }
