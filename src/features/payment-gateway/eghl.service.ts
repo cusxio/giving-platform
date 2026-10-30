@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import queryString from 'query-string'
 
+import { assertExhaustive } from '#/core/assert-exhaustive'
 import { constantTimeEqual } from '#/core/constant-time-equal'
 import { createParseError } from '#/core/errors'
 import { centsToRinggit } from '#/core/money'
@@ -27,6 +28,31 @@ interface QueryTransactionStatusParams {
   amountInCents: number
   transactionId: Transaction['id']
 }
+
+type SignedReply = Pick<
+  EghlQueryResponse,
+  | 'Amount'
+  | 'AuthCode'
+  | 'CurrencyCode'
+  | 'HashValue'
+  | 'PaymentID'
+  | 'ServiceID'
+  | 'TxnID'
+  | 'TxnStatus'
+>
+
+type HashValue2Field = 'HashValue2' | 'OrderNumber' | 'Param6' | 'Param7'
+
+const hashValueFields = (reply: SignedReply) => [
+  EGHL_PASSWORD,
+  reply.TxnID,
+  reply.ServiceID,
+  reply.PaymentID,
+  reply.TxnStatus,
+  reply.Amount,
+  reply.CurrencyCode,
+  reply.AuthCode,
+]
 
 export class EghlService {
   createPaymentRequestURL(params: CreatePaymentRequestParams) {
@@ -135,40 +161,45 @@ export class EghlService {
 
     const eghlResponse = parseResult.value
 
-    if (!this.verifyPaymentResponse(eghlResponse)) {
+    if (!this.#verifyQueryResponse(eghlResponse)) {
       return err({ type: 'EghlVerificationError' })
     }
 
     return ok(eghlResponse)
   }
 
-  verifyPaymentResponse(response: EghlPaymentResponse | EghlQueryResponse) {
-    const { TxnID, ServiceID, PaymentID, TxnStatus, Amount, CurrencyCode, AuthCode } = response
+  /** Verifies a callback or return reply, which always carries HashValue2. */
+  verifyPaymentResponse(response: EghlPaymentResponse) {
+    return this.#matchesHashValue2(response)
+  }
 
-    const hashValueFields = [
-      EGHL_PASSWORD,
-      TxnID,
-      ServiceID,
-      PaymentID,
-      TxnStatus,
-      Amount,
-      CurrencyCode,
-      AuthCode,
-    ]
-
-    if ('TxnExists' in response && response.TxnExists !== EghlTxnExists.Exists) {
-      return constantTimeEqual(
-        this.#generateHashValue(hashValueFields.join('')),
-        response.HashValue,
-      )
+  #verifyQueryResponse(response: EghlQueryResponse) {
+    switch (response.TxnExists) {
+      case EghlTxnExists.Exists: {
+        return this.#matchesHashValue2(response)
+      }
+      case EghlTxnExists.InternalError:
+      case EghlTxnExists.NotFound: {
+        return this.#matchesHashValue(response)
+      }
+      default: {
+        return assertExhaustive(response)
+      }
     }
+  }
 
+  #matchesHashValue(response: SignedReply) {
+    return constantTimeEqual(
+      this.#generateHashValue(hashValueFields(response).join('')),
+      response.HashValue,
+    )
+  }
+
+  #matchesHashValue2(response: SignedReply & Pick<EghlPaymentResponse, HashValue2Field>) {
     const { OrderNumber, Param6, Param7, HashValue2 } = response
-    const hashKeyFields = [...hashValueFields, OrderNumber, Param6, Param7].join('')
+    const hashKeyFields = [...hashValueFields(response), OrderNumber, Param6, Param7].join('')
 
-    const calculatedHash = this.#generateHashValue(hashKeyFields)
-
-    return constantTimeEqual(calculatedHash, HashValue2)
+    return constantTimeEqual(this.#generateHashValue(hashKeyFields), HashValue2)
   }
 
   #generateHashValue(value: string): string {

@@ -159,13 +159,17 @@ export const EghlQueryResponseSchema = Compile(
       HashValue2: Type.String({ minLength: 1 }),
       TxnExists: Type.Literal(EghlTxnExists.Exists),
     }),
-    // Not-found and internal-error replies are signed with HashValue alone.
+    // Not-found and internal-error replies are signed with HashValue alone, which covers
+    // TxnStatus but not TxnExists, so each pins the status HashValue vouches for.
     Type.Object({
       ...eghlQueryResponseFields,
-      TxnExists: Type.Union([
-        Type.Literal(EghlTxnExists.InternalError),
-        Type.Literal(EghlTxnExists.NotFound),
-      ]),
+      TxnExists: Type.Literal(EghlTxnExists.NotFound),
+      TxnStatus: Type.Literal(EghlQueryTxnStatus.NotFound),
+    }),
+    Type.Object({
+      ...eghlQueryResponseFields,
+      TxnExists: Type.Literal(EghlTxnExists.InternalError),
+      TxnStatus: Type.Literal(EghlQueryTxnStatus.InternalError),
     }),
   ]),
 )
