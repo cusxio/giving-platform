@@ -1,10 +1,9 @@
 import { inArray } from 'drizzle-orm'
 
 import type { Fund } from '#/core/brand/funds'
-import { createTransactionError } from '#/core/errors'
+import { createTransactionError, TransactionRollbackError } from '#/core/errors'
 import type { Result } from '#/core/result'
 import { tryAsync } from '#/core/result'
-import { TransactionRollbackError } from '#/db/errors'
 import type { DBPool } from '#/server/neon.server'
 import type { User } from '#/server/schema.server'
 import { funds, transactionItems, transactions } from '#/server/schema.server'

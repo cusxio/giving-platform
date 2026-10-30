@@ -5,13 +5,13 @@ import { Compile } from 'typebox/compile'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import { createParseError } from '#/core/errors'
+import { trySync } from '#/core/result'
 import type {
   BusinessErrorResponse,
   ServerErrorResponse,
   SuccessResponse,
   ValidationErrorResponse,
-} from '#/core/procedure-response-types'
-import { trySync } from '#/core/result'
+} from '#/core/wire'
 import { authServiceMiddleware } from '#/server/middleware/auth-service-middleware'
 
 const schema = Compile(

@@ -7,13 +7,13 @@ import { config, funds as fundsName } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
 import { createParseError } from '#/core/errors'
 import { ringgitToCents } from '#/core/money'
+import { trySync } from '#/core/result'
 import type {
   BusinessErrorResponse,
   ServerErrorResponse,
   SuccessResponse,
   ValidationErrorResponse,
-} from '#/core/procedure-response-types'
-import { trySync } from '#/core/result'
+} from '#/core/wire'
 import { contributionServiceMiddleware } from '#/server/middleware/contribution-service-middleware'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { savedPaymentMethodRepositoryMiddleware } from '#/server/middleware/saved-payment-method-repository-middleware'

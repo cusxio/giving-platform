@@ -4,12 +4,8 @@ import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
 import { createParseError } from '#/core/errors'
-import type {
-  ServerErrorResponse,
-  SuccessResponse,
-  ValidationErrorResponse,
-} from '#/core/procedure-response-types'
 import { trySync } from '#/core/result'
+import type { ServerErrorResponse, SuccessResponse, ValidationErrorResponse } from '#/core/wire'
 import { userRepositoryMiddleware } from '#/server/middleware/user-repository-middleware'
 import type { User } from '#/server/schema.server'
 

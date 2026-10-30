@@ -1,8 +1,8 @@
 import { drizzle } from 'drizzle-orm/neon-http'
 import { describe, expect, it, vi } from 'vitest'
 
+import { TransactionRollbackError } from '#/core/errors'
 import { err, ok } from '#/core/result'
-import { TransactionRollbackError } from '#/db/errors'
 import type { PaymentService } from '#/features/giving/payment.service'
 import type { EghlQueryError } from '#/features/payment-gateway/eghl.errors'
 import type { EghlQueryResponse } from '#/features/payment-gateway/eghl.schema'

@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import type { AuthErrorResponse, SuccessResponse } from '#/core/procedure-response-types'
+import type { AuthErrorResponse, SuccessResponse } from '#/core/wire'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 import { userRepositoryMiddleware } from '#/server/middleware/user-repository-middleware'
 import { userSettingsRepositoryMiddleware } from '#/server/middleware/user-settings-repository-middleware'
