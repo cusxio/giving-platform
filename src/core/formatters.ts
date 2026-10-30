@@ -1,4 +1,4 @@
-import { clientTz, now } from './date'
+import { TZDate, clientTz } from './date'
 
 export const REDACTED_VALUE = '—'
 
@@ -44,5 +44,5 @@ export function createDateFormatter(
 }
 
 export function monthLabel(month: number, style: 'long' | 'short') {
-  return createDateFormatter({ month: style }).format(now(clientTz).setMonth(month - 1))
+  return createDateFormatter({ month: style }).format(new TZDate(2000, month - 1, 1, clientTz))
 }
