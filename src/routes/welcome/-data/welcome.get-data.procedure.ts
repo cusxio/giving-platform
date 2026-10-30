@@ -1,18 +1,9 @@
 import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-// Import {
-//   AuthErrorResponse,
-//   SuccessResponse,
-// } from '#/core/procedure-response-types'
-// Import { User } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 import { transactionRepositoryMiddleware } from '#/server/middleware/transaction-repository-middleware'
 import { userRepositoryMiddleware } from '#/server/middleware/user-repository-middleware'
-
-// Type GetWelcomeDataResponse =
-//   | AuthErrorResponse
-//   | SuccessResponse<{ exists: boolean; user: User }>
 
 export const getWelcomeData = createServerFn()
   .middleware([dbMiddleware, userRepositoryMiddleware, transactionRepositoryMiddleware])

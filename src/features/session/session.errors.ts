@@ -8,10 +8,6 @@ export type VerificationError =
   | SessionInvalidError
   | SessionNotFoundError
   | SessionUserInactiveError
-// | DBError
-// | ExpiredError
-// | InvalidSessionError
-// | NotFoundError
 
 interface SessionExpiredError {
   readonly serializedCookie: string
@@ -32,21 +28,3 @@ interface SessionUserInactiveError {
   readonly serializedCookie: string
   readonly type: 'SessionUserInactiveError'
 }
-
-// Interface DBError {
-//   Error: DBEmptyReturnError | DBQueryError
-//   Type: 'DATABASE_ERROR'
-// }
-//
-// Interface ExpiredError {
-//   Type: 'SESSION_EXPIRED'
-// }
-//
-// Interface InvalidSessionError {
-//   Cookie: string
-//   Type: 'INVALID_SESSION'
-// }
-//
-// Interface NotFoundError {
-//   Type: 'SESSION_NOT_FOUND'
-// }
