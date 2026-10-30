@@ -1,1 +1,1 @@
-export { getSession } from './get-session'
+export { hasSession } from './has-session'
