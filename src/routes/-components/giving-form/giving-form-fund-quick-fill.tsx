@@ -29,6 +29,8 @@ export function GivingFormFundQuickFill(props: GivingFormFundQuickFillProps) {
       block: 'nearest',
       inline: 'center',
     })
+    // currentValue moves the ref to a different button, so re-run to scroll the new one into view.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [currentValue])
 
   return (

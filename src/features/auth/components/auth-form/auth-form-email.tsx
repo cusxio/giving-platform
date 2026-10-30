@@ -58,7 +58,8 @@ export default function AuthFormEmail(props: AuthFormEmailProps) {
               Refund Policy
             </a>
             {/*
-             */}.
+             */}
+            .
           </>
         )}
       </p>

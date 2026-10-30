@@ -27,6 +27,7 @@ export default defineConfig({
     'eslint/no-inline-comments': 'off',
     'eslint/no-magic-numbers': 'off',
     'eslint/no-ternary': 'off',
+    'eslint/one-var': 'off',
     'eslint/sort-imports': 'off',
     'eslint/sort-keys': 'off',
 
@@ -36,6 +37,7 @@ export default defineConfig({
     'eslint/max-lines-per-function': 'off',
     'eslint/max-params': 'off',
     'eslint/max-statements': 'off',
+    'unicorn/max-nested-calls': 'off',
 
     // Naming and comments.
     'eslint/capitalized-comments': 'off',
@@ -79,8 +81,13 @@ export default defineConfig({
     'import/no-nodejs-modules': 'off',
 
     // Unicorn.
-    'unicorn/filename-case': ['error', { ignore: '^\\$[A-Za-z][A-Za-z0-9]*\\.(?:ts|tsx|js|jsx)$' }],
+    'unicorn/filename-case': [
+      'error',
+      { ignore: [String.raw`^\$[A-Za-z][A-Za-z0-9]*\.(?:ts|tsx|js|jsx)$`] },
+    ],
     'unicorn/no-null': 'off',
+    // Its fix swaps parseInt/parseFloat for Number, which parses user-entered amounts differently.
+    'unicorn/prefer-number-coercion': 'off',
 
     // Promise rules.
     'promise/always-return': ['error', { ignoreLastCallback: true }],
@@ -108,7 +115,11 @@ export default defineConfig({
         'jsx-a11y/no-autofocus': ['error', { ignoreNonDOM: true }],
 
         // React preferences.
+        // Ariakit form stores expose hooks as methods (`store.useSubmit`); rules-of-hooks still applies.
+        'react/hooks': 'off',
         'react/jsx-max-depth': 'off',
+        // Recharts takes render functions as props (`<Tooltip content={...}>`).
+        'react/no-unstable-nested-components': ['error', { allowAsProps: true }],
         'react/jsx-props-no-spreading': 'off',
         'react/react-in-jsx-scope': 'off',
 
