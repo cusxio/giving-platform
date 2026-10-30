@@ -5,7 +5,7 @@ import { Spinner } from '#/components/ui/spinner'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
 import type { User } from '#/db/schema'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
 import { createSavedPaymentMethodsQueryOptions } from '../../-index.queries'
 

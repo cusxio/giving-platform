@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { config } from '#/core/brand'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
 import { useWelcomeViewStore } from './-components/use-welcome-view-store'
 import { WelcomeDone } from './-components/welcome-done'

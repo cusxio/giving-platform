@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
 import { getUser } from '../auth/auth.get-user.procedure'
 

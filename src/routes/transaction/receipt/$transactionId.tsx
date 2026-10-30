@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
 import { Failed } from './-components/failed'
 import { Pending } from './-components/pending'

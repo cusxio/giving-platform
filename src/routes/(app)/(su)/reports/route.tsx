@@ -7,7 +7,7 @@ import { Error } from '#/components/error'
 import type { DateRangePickerProps } from '#/components/ui/date-range-picker'
 import { DateRangePicker } from '#/components/ui/date-range-picker'
 import { config } from '#/core/brand'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
 import { ReportBreakdown } from './-components/report-breakdown'
 import { ReportEmpty } from './-components/report-empty'

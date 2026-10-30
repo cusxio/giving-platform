@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { config } from '#/core/brand'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 import { cx } from '#/styles/cx'
 
 import { InsightsGivingBreakdown } from './-components/insights-giving-breakdown'

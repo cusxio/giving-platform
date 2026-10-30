@@ -7,7 +7,7 @@ import { TransactionStatus } from '#/components/transaction-status'
 import { TZDate, clientTz, formatDistanceToNow } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 import { centsToRinggit } from '#/core/money'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 
 import { createTransactionQueryOptions } from './-transaction.queries'
 

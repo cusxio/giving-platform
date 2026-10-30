@@ -6,7 +6,7 @@ import { Button, buttonVariants } from '#/components/ui/button'
 import { Pagination } from '#/components/ui/pagination'
 import { config } from '#/core/brand'
 import { useAuthUser } from '#/features/session/session.queries'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 import { cx } from '#/styles/cx'
 
 import { TransactionsTable } from '../-components/transactions-table'
