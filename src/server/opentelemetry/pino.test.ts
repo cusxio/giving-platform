@@ -33,7 +33,7 @@ describe('pino log bridge', () => {
 
     const { exporter, logger, tracer } = setup()
     const traceId = tracer.startActiveSpan('request', (span) => {
-      logger.error({ err: new Error('boom'), event: 'payment.failed' }, 'Payment failed')
+      logger.error({ err: new RangeError('boom'), event: 'payment.failed' }, 'Payment failed')
       span.end()
       return span.spanContext().traceId
     })
@@ -41,13 +41,47 @@ describe('pino log bridge', () => {
     const [record] = exporter.getFinishedLogRecords()
 
     expect(record).toMatchObject({
-      attributes: { event: 'payment.failed', 'exception.message': 'boom' },
+      attributes: {
+        event: 'payment.failed',
+        'exception.message': 'boom',
+        'exception.type': 'RangeError',
+      },
       body: 'Payment failed',
       severityNumber: SeverityNumber.ERROR,
       severityText: 'error',
     })
     expect(record?.attributes).not.toHaveProperty('trace_id')
     expect(record?.spanContext?.traceId).toBe(traceId)
+  })
+
+  it('follows a logger provider registered after the stream was created', () => {
+    expect.hasAssertions()
+
+    const { exporter: replaced, logger } = setup()
+    const current = new InMemoryLogRecordExporter()
+    logs.disable()
+    logs.setGlobalLoggerProvider(
+      new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: current })] }),
+    )
+
+    logger.info('After reload')
+
+    expect(current.getFinishedLogRecords().map((r) => r.body)).toStrictEqual(['After reload'])
+    expect(replaced.getFinishedLogRecords()).toHaveLength(0)
+  })
+
+  it('keeps a log call that passes its own time field', () => {
+    expect.hasAssertions()
+
+    const { exporter, logger } = setup()
+
+    expect(() => {
+      logger.info({ time: 'yesterday' }, 'Backfilled')
+    }).not.toThrow()
+    expect(exporter.getFinishedLogRecords()[0]).toMatchObject({
+      attributes: { time: 'yesterday' },
+      body: 'Backfilled',
+    })
   })
 })
 

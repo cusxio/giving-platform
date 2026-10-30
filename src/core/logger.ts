@@ -11,7 +11,11 @@ async function createStdoutStream() {
   return pino.destination(1)
 }
 
+// Multistream entries default to `info`, so open them fully and let the logger's level filter.
 export const logger = pino(
   { mixin: traceContextMixin },
-  pino.multistream([{ stream: await createStdoutStream() }, { stream: createOtelLogStream() }]),
+  pino.multistream([
+    { level: 'trace', stream: await createStdoutStream() },
+    { level: 'trace', stream: createOtelLogStream() },
+  ]),
 )

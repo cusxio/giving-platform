@@ -39,7 +39,13 @@ export interface Telemetry {
   flush: () => Promise<void>
 }
 
+// The dev server re-evaluates server modules on edit without running HMR dispose
+// callbacks, so each start releases whatever the previous evaluation registered.
+const RELEASE_PREVIOUS = Symbol.for('giving-platform.telemetry.release')
+const registry = globalThis as { [RELEASE_PREVIOUS]?: () => void }
+
 export function startTelemetry(): Telemetry {
+  registry[RELEASE_PREVIOUS]?.()
   setDiagLogLevel(OTEL_LOG_LEVEL)
 
   const resource = defaultResource().merge(
@@ -75,7 +81,18 @@ export function startTelemetry(): Telemetry {
 
   // Subscribes to undici's diagnostics channels rather than patching modules, so it
   // still sees `fetch` calls after Nitro bundles the server.
-  new UndiciInstrumentation().enable()
+  const undici = new UndiciInstrumentation()
+  undici.enable()
+
+  registry[RELEASE_PREVIOUS] = () => {
+    undici.disable()
+    trace.disable()
+    logs.disable()
+    propagation.disable()
+    context.disable()
+    diag.disable()
+    void Promise.all([tracerProvider.shutdown(), loggerProvider.shutdown()])
+  }
 
   return {
     flush: async () => {
