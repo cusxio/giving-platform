@@ -18,7 +18,7 @@ export const getTransactionReceiptData = createServerFn()
     const { transactionId } = data
     const { db, transactionRepository, logger } = context
 
-    const [queryResult] = await transactionRepository.findFullTransactionByIdQuery(
+    const [queryResult] = await transactionRepository.findTransactionReceiptByIdQuery(
       transactionId,
       db,
     )
