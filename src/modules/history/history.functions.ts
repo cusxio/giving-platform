@@ -1,9 +1,15 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import type { AvailableYearsInput, OverviewInput, TransactionsInput } from './history.server'
+import type {
+  AvailableYearsInput,
+  OverviewInput,
+  TransactionInput,
+  TransactionsInput,
+} from './history.server'
 import {
   getAvailableYearsProcedure,
   getOverviewProcedure,
+  getTransactionProcedure,
   getTransactionsProcedure,
 } from './history.server'
 
@@ -18,3 +24,7 @@ export const getAvailableYears = createServerFn()
 export const getTransactions = createServerFn()
   .validator((input: TransactionsInput) => input)
   .handler(({ context, data }) => getTransactionsProcedure(context, data))
+
+export const getTransaction = createServerFn()
+  .validator((input: TransactionInput) => input)
+  .handler(({ context, data }) => getTransactionProcedure(context, data))

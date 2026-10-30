@@ -92,8 +92,6 @@ const LEGACY_FILES: string[] = [
   'src/routes/(app)/overview/-components/greet-user.tsx',
   'src/routes/(app)/overview/-components/overview-welcome.tsx',
   'src/routes/(app)/settings/-hooks/use-settings-form.tsx',
-  'src/routes/(app)/transaction/-data/transaction.get-data.procedure.ts',
-  'src/routes/(app)/transaction/-transaction.queries.ts',
   'src/routes/(auth)/route.tsx',
   'src/routes/-components/giving-form/giving-form-details.tsx',
   'src/routes/-components/giving-form/giving-form.tsx',

@@ -1,7 +1,12 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { getAvailableYears, getOverview, getTransactions } from './history.functions'
-import type { Donor } from './history.repository.server'
+import {
+  getAvailableYears,
+  getOverview,
+  getTransaction,
+  getTransactions,
+} from './history.functions'
+import type { Donor, TransactionId } from './history.repository.server'
 import type { OverviewYear } from './overview'
 
 export function availableYearsQuery(userId: Donor['id'], journey: Donor['journey']) {
@@ -24,5 +29,12 @@ export function transactionsQuery(userId: Donor['id'], journey: Donor['journey']
   return queryOptions({
     queryFn: () => getTransactions({ data: { journey, page } }),
     queryKey: ['transactions', { journey, page, userId }],
+  })
+}
+
+export function transactionQuery(transactionId: TransactionId) {
+  return queryOptions({
+    queryFn: () => getTransaction({ data: { transactionId } }),
+    queryKey: ['transaction', { transactionId }],
   })
 }

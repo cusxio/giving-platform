@@ -1,15 +1,18 @@
 import { notFound } from '@tanstack/react-router'
 
+import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
 import type { RequestContext } from '#/server/request-context.server'
 
-import type { Donor } from './history.repository.server'
+import type { Donor, TransactionId } from './history.repository.server'
 import {
   countTransactions,
   recentTransactions,
   successFundItems,
   successTimeline,
   successYears,
+  transactionById,
+  transactionItemsOf,
   transactionsPage,
 } from './history.repository.server'
 import type { Overview, OverviewYear } from './overview'
@@ -32,6 +35,15 @@ export interface TransactionsInput {
   readonly journey: Donor['journey']
   readonly page?: number
 }
+
+export interface TransactionInput {
+  readonly transactionId: TransactionId
+}
+
+type TransactionDetail = readonly [
+  NonNullable<QueryResult<typeof transactionById>>,
+  QueryResult<typeof transactionItemsOf>,
+]
 
 /** One neon-http round trip for the three reads, then pure aggregation. */
 async function loadOverview(
@@ -60,6 +72,21 @@ async function loadTransactionsPage(
     transactionsPage(input.donor, { limit: PAGE_SIZE, offset: PAGE_SIZE * (input.page - 1) }),
   ])
   return toTransactionsPage(total, txs)
+}
+
+/** Null unless the transaction exists, has items, and belongs to the viewer. */
+export async function findOwnTransaction(
+  deps: Pick<Deps, 'db'>,
+  input: { readonly transactionId: TransactionId; readonly viewerId: Donor['id'] | undefined },
+): Promise<TransactionDetail | null> {
+  const [transaction, items] = await deps.db.batch([
+    transactionById(input.transactionId),
+    transactionItemsOf(input.transactionId),
+  ])
+  if (transaction === null || transaction.userId !== input.viewerId || items.length === 0) {
+    return null
+  }
+  return [transaction, items]
 }
 
 // Transport adapters. Phase 2 replaces the null-user guard with `requireUser` middleware.
@@ -93,4 +120,18 @@ export async function getTransactionsProcedure(
     throw notFound()
   }
   return loadTransactionsPage(context.deps, { donor: { id: context.user.id, journey }, page })
+}
+
+export async function getTransactionProcedure(
+  context: Ctx,
+  data: TransactionInput,
+): Promise<TransactionDetail> {
+  const detail = await findOwnTransaction(context.deps, {
+    transactionId: data.transactionId,
+    viewerId: context.user?.id,
+  })
+  if (detail === null) {
+    throw notFound()
+  }
+  return detail
 }

@@ -1,12 +1,14 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
-import { defineQuery, rows } from '#/server/db.server'
-import type { User } from '#/server/schema.server'
+import { defineQuery, firstOrNull, rows } from '#/server/db.server'
+import type { Transaction, User } from '#/server/schema.server'
 import { funds, transactionItems, transactions } from '#/server/schema.server'
 
 /** The signed-in user whose giving history a query reads. */
 export type Donor = Pick<User, 'id' | 'journey'>
+
+export type TransactionId = Transaction['id']
 
 /** A donor's transactions created in `[start, endExclusive)`; an unset bound leaves that side open. */
 export interface DonorScope {
@@ -124,5 +126,23 @@ export const transactionsPage = defineQuery(
       .orderBy(desc(transactions.createdAt))
       .limit(page.limit)
       .offset(page.offset),
+  rows,
+)
+
+export const transactionById = defineQuery(
+  'history.transactionById',
+  (db, transactionId: TransactionId) =>
+    db.select().from(transactions).where(eq(transactions.id, transactionId)),
+  firstOrNull,
+)
+
+export const transactionItemsOf = defineQuery(
+  'history.transactionItems',
+  (db, transactionId: TransactionId) =>
+    db
+      .select({ amountInCents: transactionItems.amount, fundName: funds.name })
+      .from(transactionItems)
+      .innerJoin(funds, eq(funds.id, transactionItems.fundId))
+      .where(eq(transactionItems.transactionId, transactionId)),
   rows,
 )
