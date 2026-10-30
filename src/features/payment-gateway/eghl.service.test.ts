@@ -1,5 +1,5 @@
-import { sha256 } from '@oslojs/crypto/sha2'
-import { encodeHexLowerCase } from '@oslojs/encoding'
+import { createHash } from 'node:crypto'
+
 import { describe, expect, it, vi } from 'vitest'
 
 import type * as Envvars from '#/envvars'
@@ -18,11 +18,7 @@ vi.mock<typeof Envvars>(import('#/envvars'), () => mockedEnv)
 
 const { EghlService } = await import('./eghl.service')
 
-const hashValue = (value: string) => {
-  const data = new TextEncoder().encode(value)
-  const hash = sha256(data)
-  return encodeHexLowerCase(hash)
-}
+const hashValue = (value: string) => createHash('sha256').update(value).digest('hex')
 
 const createService = () => new EghlService()
 

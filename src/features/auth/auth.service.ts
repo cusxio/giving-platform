@@ -1,10 +1,10 @@
-import { constantTimeEqual } from '@oslojs/crypto/subtle'
 import type { BatchItem } from 'drizzle-orm/batch'
 import { nanoid } from 'nanoid'
 import { createElement } from 'react'
 import { render, toPlainText } from 'react-email'
 
 import { config } from '#/core/brand'
+import { constantTimeEqual } from '#/core/constant-time-equal'
 import { createDBError } from '#/core/errors'
 import { hashToken } from '#/core/hash-token'
 import type { Result } from '#/core/result'
@@ -145,13 +145,7 @@ export class AuthService {
       return err({ type: 'InvalidRequestError' })
     }
 
-    const expectedTokenHash = hashToken(otp)
-
-    const encoder = new TextEncoder()
-    const isValid = constantTimeEqual(
-      encoder.encode(expectedTokenHash),
-      encoder.encode(token.tokenHash),
-    )
+    const isValid = constantTimeEqual(hashToken(otp), token.tokenHash)
 
     if (!isValid) {
       return err({ type: 'InvalidOtpError' })

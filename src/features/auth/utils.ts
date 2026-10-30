@@ -1,22 +1,5 @@
-import type { RandomReader } from '@oslojs/crypto/random'
-import { generateRandomString } from '@oslojs/crypto/random'
-
-const random: RandomReader = {
-  read(bytes) {
-    bytes.set(crypto.getRandomValues(new Uint8Array(bytes.byteLength)))
-  },
-}
+import { randomInt } from 'node:crypto'
 
 export function generateOtp() {
-  let otp = generateRandomOtp()
-
-  while (Number(otp) < 100_000) {
-    otp = generateRandomOtp()
-  }
-
-  return otp
-}
-
-function generateRandomOtp() {
-  return generateRandomString(random, '0123456789', 6)
+  return randomInt(100_000, 1_000_000).toString()
 }
