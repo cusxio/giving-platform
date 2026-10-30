@@ -1,22 +1,18 @@
 import { and, asc, count, eq, gte, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
-import type { DB } from '#/server/neon.server'
+import { defineQuery, rows } from '#/server/db.server'
 import { transactions } from '#/server/schema.server'
 import { roundedAvg, safeSum } from '#/server/sql.server'
 
-export class InsightsRepository {
-  readonly #db: DB
-  constructor(db: DB) {
-    this.#db = db
-  }
-
-  /**
-   * Combined query for all summary statistics in a single table scan.
-   * Uses conditional aggregates (FILTER clause) to compute multiple metrics at once.
-   */
-  summaryQuery() {
-    return this.#db
+/**
+ * Combined query for all summary statistics in a single table scan.
+ * Uses conditional aggregates (FILTER clause) to compute multiple metrics at once.
+ */
+export const insightsSummary = defineQuery(
+  'analytics.insightsSummary',
+  (db) =>
+    db
       .select({
         // Core stats
         totalAmount: safeSum(transactions.amount),
@@ -31,16 +27,19 @@ export class InsightsRepository {
         weekdayCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) NOT IN (0, 6))::integer`,
       })
       .from(transactions)
-      .where(eq(transactions.status, 'success'))
-  }
+      .where(eq(transactions.status, 'success')),
+  rows,
+)
 
-  weeklyCumulativeTotalsByYearQuery() {
+export const weeklyCumulativeTotalsByYear = defineQuery(
+  'analytics.weeklyCumulativeTotalsByYear',
+  (db) => {
     const week = sql<number>`EXTRACT(WEEK FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::integer`
     const year = sql<number>`EXTRACT(YEAR FROM ${transactions.createdAt} AT TIME ZONE ${clientTz})::integer`
     const cutoffYear = sql<number>`EXTRACT(YEAR FROM NOW() AT TIME ZONE ${clientTz})::integer - 4`
 
-    const weeklyTotals = this.#db.$with('weekly_totals').as(
-      this.#db
+    const weeklyTotals = db.$with('weekly_totals').as(
+      db
         .select({
           week: week.as('week'),
           weeklyAmount: safeSum(transactions.amount).as('weeklyAmount'),
@@ -51,7 +50,7 @@ export class InsightsRepository {
         .groupBy(year.as('year'), week.as('week')),
     )
 
-    return this.#db
+    return db
       .with(weeklyTotals)
       .select({
         cumulativeAmount: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})::integer`,
@@ -61,5 +60,6 @@ export class InsightsRepository {
       })
       .from(weeklyTotals)
       .orderBy(asc(weeklyTotals.year), asc(weeklyTotals.week))
-  }
-}
+  },
+  rows,
+)
