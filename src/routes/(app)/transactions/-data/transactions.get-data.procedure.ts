@@ -2,7 +2,7 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
-import type { User } from '#/db/schema'
+import type { Transaction, User } from '#/db/schema'
 import { transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 
@@ -48,5 +48,12 @@ export const getTransactionsData = createServerFn()
         .offset(pageSize * (page - 1)),
     ])
 
-    return { pageSize, totalCount: total[0]?.value ?? 0, transactions: txs }
+    return toTransactionsPage(total, txs)
   })
+
+export function toTransactionsPage(
+  total: { value: number }[],
+  txs: Pick<Transaction, 'amount' | 'createdAt' | 'id' | 'status'>[],
+) {
+  return { pageSize, totalCount: total[0]?.value ?? 0, transactions: txs }
+}

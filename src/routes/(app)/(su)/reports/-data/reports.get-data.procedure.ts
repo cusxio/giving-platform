@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
 
 import { centsToRinggit } from '#/core/money'
 import { safeSum } from '#/db/aggregates'
+import type { Transaction } from '#/db/schema'
 import { funds, transactionItems, transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 
@@ -52,9 +53,15 @@ export const getReportsData = createServerFn()
       .innerJoin(funds, eq(funds.id, aggregated.fundId))
       .orderBy(desc(aggregated.createdAs), asc(funds.name))
 
-    return rows.map((row) => ({
-      createdAs: row.createdAs,
-      fundName: row.fundName,
-      totalAmount: centsToRinggit(row.totalAmount),
-    }))
+    return toReportRows(rows)
   })
+
+export function toReportRows(
+  rows: { createdAs: Transaction['createdAs']; fundName: string; totalAmount: number }[],
+) {
+  return rows.map((row) => ({
+    createdAs: row.createdAs,
+    fundName: row.fundName,
+    totalAmount: centsToRinggit(row.totalAmount),
+  }))
+}
