@@ -130,7 +130,7 @@ export const requestOtp = createServerFn({ method: 'POST' })
             { email, event: 'auth.request_otp.blocked', reason: 'inactive' },
             'Signup blocked: User is suspended or deleted',
           )
-          // Answer like a successful signup so the response does not reveal the account state
+          // The response body matches a real signup. Timing still differs, as no email is sent.
           return { type: 'SUCCESS' }
         }
         case 'DBEmptyReturnError':
