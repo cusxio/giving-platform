@@ -10,8 +10,8 @@ import type {
   ValidationErrorResponse,
 } from '#/core/procedure-response-types'
 import { trySync } from '#/core/result'
-import type { User } from '#/db/schema'
 import { userRepositoryMiddleware } from '#/server/middleware/user-repository-middleware'
+import type { User } from '#/server/schema.server'
 
 const schema = Compile(
   Type.Object({

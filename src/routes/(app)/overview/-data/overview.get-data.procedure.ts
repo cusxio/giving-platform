@@ -4,9 +4,9 @@ import { and, desc, eq, gte, inArray, lt } from 'drizzle-orm'
 
 import { TZDate, clientTz } from '#/core/date'
 import { centsToRinggit } from '#/core/money'
-import type { Transaction, User } from '#/db/schema'
-import { funds, transactionItems, transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
+import type { Transaction, User } from '#/server/schema.server'
+import { funds, transactionItems, transactions } from '#/server/schema.server'
 
 import { getYearDateRange } from './overview.helpers'
 

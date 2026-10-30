@@ -8,8 +8,8 @@ import { PaymentMethods } from '#/components/ui/payment-methods'
 import { UserFormFields } from '#/components/user-form-fields'
 import { funds } from '#/core/brand'
 import { ringgitToCents } from '#/core/money'
-import type { SavedPaymentMethod } from '#/db/schema'
 import { useLogoutMutation } from '#/features/auth/auth.mutations'
+import type { SavedPaymentMethod } from '#/server/schema.server'
 
 import type { GivingFormStore } from './use-giving-form'
 

@@ -4,10 +4,10 @@ import type { Fund } from '#/core/brand/funds'
 import { createTransactionError } from '#/core/errors'
 import type { Result } from '#/core/result'
 import { tryAsync } from '#/core/result'
-import type { DBPool } from '#/db/client'
 import { TransactionRollbackError } from '#/db/errors'
-import type { User } from '#/db/schema'
-import { funds, transactionItems, transactions } from '#/db/schema'
+import type { DBPool } from '#/server/neon.server'
+import type { User } from '#/server/schema.server'
+import { funds, transactionItems, transactions } from '#/server/schema.server'
 
 import type { UserRepository } from '../user/user.repository'
 

@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 
 import { getTransactionData } from './-data/transaction.get-data.procedure'
 

@@ -11,10 +11,10 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core'
+import { customAlphabet } from 'nanoid'
+import { alphanumeric } from 'nanoid-dictionary'
 
 import { now } from '#/core/date'
-
-import { createId } from './create-id'
 
 const timestamptz = () => timestamp({ withTimezone: true })
 
@@ -329,3 +329,7 @@ export const rateLimitAttempts = pgTable(
 
 export type RateLimitAttempt = InferSelectModel<typeof rateLimitAttempts>
 export type RateLimitAttemptInsert = InferInsertModel<typeof rateLimitAttempts>
+
+function createId(length?: number): string {
+  return customAlphabet(alphanumeric, length)()
+}

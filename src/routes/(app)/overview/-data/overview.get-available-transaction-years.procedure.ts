@@ -3,9 +3,9 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, asc, eq, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
-import type { User } from '#/db/schema'
-import { transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
+import type { User } from '#/server/schema.server'
+import { transactions } from '#/server/schema.server'
 
 interface Input {
   journey: User['journey']

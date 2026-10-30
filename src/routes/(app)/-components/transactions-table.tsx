@@ -11,7 +11,7 @@ import {
 } from '#/components/ui/table'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 import { centsToRinggit } from '#/core/money'
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 
 interface TransactionsTableProps {
   privacyMode: boolean

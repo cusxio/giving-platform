@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import type { User } from '#/db/schema'
+import type { User } from '#/server/schema.server'
 
 import { getAvailableTransactionYears } from './-data/overview.get-available-transaction-years.procedure'
 import { getOverviewData } from './-data/overview.get-data.procedure'

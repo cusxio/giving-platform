@@ -4,8 +4,8 @@ import { useCallback } from 'react'
 import { Spinner } from '#/components/ui/spinner'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
-import type { User } from '#/db/schema'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import type { User } from '#/server/schema.server'
 
 import { createSavedPaymentMethodsQueryOptions } from '../../-index.queries'
 

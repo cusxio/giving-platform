@@ -3,7 +3,7 @@ import { useMatches } from '@tanstack/react-router'
 
 import { Button } from '#/components/ui/button'
 import { MenuButton } from '#/components/ui/menu'
-import type { User, UserSettings } from '#/db/schema'
+import type { User, UserSettings } from '#/server/schema.server'
 
 import { AsideNavButton } from './aside-nav'
 import { HeaderPrivacyToggle } from './header-privacy-toggle'

@@ -2,7 +2,7 @@ import type { Icon } from '@phosphor-icons/react'
 import { CheckCircleIcon, HourglassIcon, WarningCircleIcon } from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 import { cx } from '#/styles/cx'
 
 import { transactionStatusStyles } from './transaction-status'

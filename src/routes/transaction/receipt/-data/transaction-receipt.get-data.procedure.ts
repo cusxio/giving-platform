@@ -1,9 +1,9 @@
 import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-import type { Transaction } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 import { transactionRepositoryMiddleware } from '#/server/middleware/transaction-repository-middleware'
+import type { Transaction } from '#/server/schema.server'
 
 import { toTransactionReceipt } from './transaction-receipt.dto'
 

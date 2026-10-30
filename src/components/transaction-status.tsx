@@ -1,4 +1,4 @@
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 import { cx } from '#/styles/cx'
 
 interface TransactionStatusProps {

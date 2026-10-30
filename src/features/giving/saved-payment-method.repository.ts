@@ -2,9 +2,9 @@ import { and, eq } from 'drizzle-orm'
 
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { DB, DBTransaction } from '#/db/client'
-import type { SavedPaymentMethod } from '#/db/schema'
-import { savedPaymentMethods } from '#/db/schema'
+import type { DB, DBTransaction } from '#/server/neon.server'
+import type { SavedPaymentMethod } from '#/server/schema.server'
+import { savedPaymentMethods } from '#/server/schema.server'
 
 export class SavedPaymentMethodRepository {
   readonly #db: DB

@@ -2,7 +2,7 @@ import { now } from '#/core/date'
 import type { DBQueryErrorResult } from '#/core/errors'
 import type { Result } from '#/core/result'
 import { err, ok } from '#/core/result'
-import type { User } from '#/db/schema'
+import type { User } from '#/server/schema.server'
 
 import type { RateLimitExceededError } from './auth.errors'
 import type { RateLimitRepository } from './rate-limit.repository'

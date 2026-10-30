@@ -3,8 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import type { User } from '#/db/schema'
 import { useUpdateUserMutation } from '#/features/user/user.mutations'
+import type { User } from '#/server/schema.server'
 
 import type { getWelcomeData } from '../-data/welcome.get-data.procedure'
 

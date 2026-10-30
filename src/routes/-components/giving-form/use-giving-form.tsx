@@ -10,9 +10,9 @@ import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
-import type { SavedPaymentMethod, User } from '#/db/schema'
 import type { StartContributionResponse } from '#/features/giving/contribution.mutations'
 import { useStartContributionMutation } from '#/features/giving/contribution.mutations'
+import type { SavedPaymentMethod, User } from '#/server/schema.server'
 
 export type GivingFormStore = ReturnType<typeof useGivingForm>['store']
 export type GivingFormView = 'amounts' | 'details' | 'redirecting'

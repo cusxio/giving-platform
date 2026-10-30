@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Payment, Transaction, User } from '#/db/schema'
+import type { Payment, Transaction, User } from '#/server/schema.server'
 
 import { toTransactionReceipt } from './transaction-receipt.dto'
 

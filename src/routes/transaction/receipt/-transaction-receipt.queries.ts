@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { isNotFound } from '@tanstack/react-router'
 
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 
 import { getTransactionReceiptData } from './-data/transaction-receipt.get-data.procedure'
 

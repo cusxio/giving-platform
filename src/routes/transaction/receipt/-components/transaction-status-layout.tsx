@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 import { TransactionIconStatus } from '#/components/transaction-icon-status'
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 
 interface TransactionStatusLayoutProps {
   children?: ReactNode

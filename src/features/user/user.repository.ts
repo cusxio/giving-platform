@@ -3,9 +3,9 @@ import { eq, sql } from 'drizzle-orm'
 import { now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { AnyDBOrTransaction, DB, DBTransaction } from '#/db/client'
-import type { User, UserInsert } from '#/db/schema'
-import { users } from '#/db/schema'
+import type { AnyDBOrTransaction, DB, DBTransaction } from '#/server/neon.server'
+import type { User, UserInsert } from '#/server/schema.server'
+import { users } from '#/server/schema.server'
 
 export class UserRepository {
   readonly #db: DB

@@ -2,9 +2,9 @@ import { eq } from 'drizzle-orm'
 
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { AnyDBOrTransaction, DB } from '#/db/client'
-import type { Session } from '#/db/schema'
-import { sessions, users } from '#/db/schema'
+import type { AnyDBOrTransaction, DB } from '#/server/neon.server'
+import type { Session } from '#/server/schema.server'
+import { sessions, users } from '#/server/schema.server'
 
 export class SessionRepository {
   readonly #db: DB

@@ -2,8 +2,8 @@ import { EyeIcon, EyeSlashIcon } from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
 import { Button } from '#/components/ui/button'
-import type { UserSettings } from '#/db/schema'
 import { useUpdatePrivacyModeMutation } from '#/features/user/user.mutations'
+import type { UserSettings } from '#/server/schema.server'
 
 interface HeaderPrivacyToggleProps {
   userSettings: Pick<UserSettings, 'privacyMode'>

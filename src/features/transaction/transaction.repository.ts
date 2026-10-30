@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 
-import type { DB, DBTransaction } from '#/db/client'
-import type { Transaction, User } from '#/db/schema'
-import { funds, payments, transactionItems, transactions, users } from '#/db/schema'
+import type { DB, DBTransaction } from '#/server/neon.server'
+import type { Transaction, User } from '#/server/schema.server'
+import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
 
 export class TransactionRepository {
   readonly #db: DB

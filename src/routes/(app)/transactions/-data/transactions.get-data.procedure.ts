@@ -2,9 +2,9 @@ import { notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { and, count, desc, eq, inArray } from 'drizzle-orm'
 
-import type { Transaction, User } from '#/db/schema'
-import { transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
+import type { Transaction, User } from '#/server/schema.server'
+import { transactions } from '#/server/schema.server'
 
 interface Input {
   journey: User['journey']

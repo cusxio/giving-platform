@@ -1,9 +1,9 @@
 import { and, asc, count, eq, gte, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
-import { roundedAvg, safeSum } from '#/db/aggregates'
-import type { DB } from '#/db/client'
-import { transactions } from '#/db/schema'
+import type { DB } from '#/server/neon.server'
+import { transactions } from '#/server/schema.server'
+import { roundedAvg, safeSum } from '#/server/sql.server'
 
 export class InsightsRepository {
   readonly #db: DB

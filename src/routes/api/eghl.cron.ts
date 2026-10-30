@@ -2,13 +2,13 @@ import { createFileRoute } from '@tanstack/react-router'
 import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import { addDays, addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
-import { transactions } from '#/db/schema'
 import { finalStatusOf } from '#/features/payment-gateway/eghl.finality'
 import { EghlTxnExists } from '#/features/payment-gateway/eghl.schema'
 import { CRON_SECRET } from '#/server/env.server'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
+import { transactions } from '#/server/schema.server'
 
 const LOG_EVENTS = {
   BATCH_UPDATE_FAILED: 'eghl.cron.batch_update_failed',

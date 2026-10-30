@@ -2,8 +2,8 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
-import { savedPaymentMethods } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
+import { savedPaymentMethods } from '#/server/schema.server'
 
 export const getSavedPaymentMethods = createServerFn()
   .middleware([dbMiddleware])

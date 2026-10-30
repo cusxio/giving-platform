@@ -1,4 +1,4 @@
-import type { Payment, Transaction, User } from '#/db/schema'
+import type { Payment, Transaction, User } from '#/server/schema.server'
 
 export interface TransactionReceipt {
   payment: null | Pick<Payment, 'message'>

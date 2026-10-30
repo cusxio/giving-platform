@@ -3,9 +3,9 @@ import { and, eq, sql } from 'drizzle-orm'
 import { addSeconds, now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { DB } from '#/db/client'
-import type { RateLimitAttempt } from '#/db/schema'
-import { rateLimitAttempts } from '#/db/schema'
+import type { DB } from '#/server/neon.server'
+import type { RateLimitAttempt } from '#/server/schema.server'
+import { rateLimitAttempts } from '#/server/schema.server'
 
 type Action = RateLimitAttempt['action']
 

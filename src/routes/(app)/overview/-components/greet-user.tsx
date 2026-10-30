@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 
 import { clientTz, now } from '#/core/date'
-import type { User } from '#/db/schema'
+import type { User } from '#/server/schema.server'
 
 interface GreetUserProps {
   user: Pick<User, 'firstName' | 'lastName'>

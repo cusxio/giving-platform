@@ -7,9 +7,9 @@ import type {
   SuccessResponse,
 } from '#/core/procedure-response-types'
 import { tryAsync } from '#/core/result'
-import type { UserSettings } from '#/db/schema'
-import { userSettings as userSettingsTable } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
+import type { UserSettings } from '#/server/schema.server'
+import { userSettings as userSettingsTable } from '#/server/schema.server'
 
 export interface UpdatePrivacyModeInput {
   privacyMode: boolean

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { addDays, now } from '#/core/date'
 import { hashToken } from '#/core/hash-token'
 import { ok } from '#/core/result'
-import type { Session, User } from '#/db/schema'
+import type { Session, User } from '#/server/schema.server'
 
 import type { SessionRepository } from './session.repository'
 import { SessionService } from './session.service'

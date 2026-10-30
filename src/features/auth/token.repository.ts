@@ -3,9 +3,9 @@ import { and, desc, eq, gt, isNull } from 'drizzle-orm'
 import { addMinutes, now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { DB, DBTransaction } from '#/db/client'
-import type { Token, TokenInsert, User } from '#/db/schema'
-import { tokens } from '#/db/schema'
+import type { DB, DBTransaction } from '#/server/neon.server'
+import type { Token, TokenInsert, User } from '#/server/schema.server'
+import { tokens } from '#/server/schema.server'
 
 export class TokenRepository {
   readonly #db: DB

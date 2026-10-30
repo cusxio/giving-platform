@@ -5,7 +5,7 @@ import { hashToken } from '#/core/hash-token'
 import { logger } from '#/core/logger'
 import type { Result } from '#/core/result'
 import { err, ok, trySync } from '#/core/result'
-import type { Session, User } from '#/db/schema'
+import type { Session, User } from '#/server/schema.server'
 
 import { SESSION_MAX_AGE_SECONDS } from './constants'
 import type { VerificationError } from './session.errors'

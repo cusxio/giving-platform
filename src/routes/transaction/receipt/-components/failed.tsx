@@ -1,4 +1,4 @@
-import type { Payment, Transaction } from '#/db/schema'
+import type { Payment, Transaction } from '#/server/schema.server'
 import { cx } from '#/styles/cx'
 
 import { ReturnToHome } from './return-to-home'

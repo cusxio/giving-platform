@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { Suspense } from 'react'
 
 import { Button, buttonVariants } from '#/components/ui/button'
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 import { cx } from '#/styles/cx'
 
 import type { TransactionReceiptUser } from '../-data/transaction-receipt.dto'

@@ -2,12 +2,12 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getCookie, setResponseHeader } from '@tanstack/react-start/server'
 
 import { logger } from '#/core/logger'
-import { db } from '#/db/client'
-import type { Session, User } from '#/db/schema'
 import { SESSION_COOKIE_NAME } from '#/features/session/constants'
 import { SessionRepository } from '#/features/session/session.repository'
 import { SessionService } from '#/features/session/session.service'
 import { clearSessionCookie } from '#/features/session/utils'
+import { db } from '#/server/neon.server'
+import type { Session, User } from '#/server/schema.server'
 
 export const sessionMiddleware = createMiddleware().server<{
   session: null | Pick<Session, 'expiresAt' | 'id' | 'tokenHash'>

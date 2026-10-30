@@ -3,10 +3,10 @@ import { createServerFn } from '@tanstack/react-start'
 import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
 
 import { centsToRinggit } from '#/core/money'
-import { safeSum } from '#/db/aggregates'
-import type { Transaction } from '#/db/schema'
-import { funds, transactionItems, transactions } from '#/db/schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
+import type { Transaction } from '#/server/schema.server'
+import { funds, transactionItems, transactions } from '#/server/schema.server'
+import { safeSum } from '#/server/sql.server'
 
 interface Input {
   endDateUTCExclusive: Date

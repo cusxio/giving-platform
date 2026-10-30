@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 
-import type { DB, DBTransaction } from '#/db/client'
-import type { UserSettings } from '#/db/schema'
-import { userSettings } from '#/db/schema'
+import type { DB, DBTransaction } from '#/server/neon.server'
+import type { UserSettings } from '#/server/schema.server'
+import { userSettings } from '#/server/schema.server'
 
 export class UserSettingsRepository {
   readonly #db: DB

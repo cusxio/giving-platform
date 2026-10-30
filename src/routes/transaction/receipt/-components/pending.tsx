@@ -1,5 +1,5 @@
 import { Spinner } from '#/components/ui/spinner'
-import type { Transaction } from '#/db/schema'
+import type { Transaction } from '#/server/schema.server'
 
 import { TransactionStatusLayout } from './transaction-status-layout'
 

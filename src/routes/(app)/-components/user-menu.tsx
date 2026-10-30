@@ -2,8 +2,8 @@ import type { MenuStore } from '@ariakit/react'
 import { Link } from '@tanstack/react-router'
 
 import { Menu, MenuItem, MenuSeparator } from '#/components/ui/menu'
-import type { User } from '#/db/schema'
 import { useLogoutMutation } from '#/features/auth/auth.mutations'
+import type { User } from '#/server/schema.server'
 
 interface UserMenuProps {
   store: MenuStore
