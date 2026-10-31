@@ -6,7 +6,6 @@ import { defineQuery, rows } from '#/server/db.server'
 import { infra } from '#/server/infra-error'
 import { legacyDb } from '#/server/legacy-db.server'
 import { users } from '#/server/schema.server'
-import { createFakeDb } from '#/server/testing/fake-db'
 
 const touch = defineQuery('test.touch', (sql) => sql.select({ id: users.id }).from(users), rows)
 
@@ -29,16 +28,5 @@ describe('the legacy adapter', () => {
 
     await expect(db.run(touch())).rejects.toBe(cause)
     await expect(db.batch([touch()])).rejects.toBe(cause)
-    await expect(db.transaction(() => Promise.resolve(1))).rejects.toBe(cause)
-  })
-
-  it('rethrows a throw from transaction work as the same object', async () => {
-    expect.hasAssertions()
-
-    const bug = new TypeError('a bug in the work')
-    const fake = createFakeDb()
-
-    await expect(legacyDb(fake).transaction(() => Promise.reject(bug))).rejects.toBe(bug)
-    expect(fake.transactions).toStrictEqual(['rollback'])
   })
 })

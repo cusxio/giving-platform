@@ -1,17 +1,21 @@
 import { createHash } from 'node:crypto'
 
+import { SpanStatusCode } from '@opentelemetry/api'
+import { Result } from 'better-result'
 import { pino } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ok } from '#/core/result'
+import type { FakeDb } from '#/server/testing/fake-db'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
+import { errValue } from '#/server/testing/result'
+import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
 import { handleEghlCallback, handleEghlReturnGet, handleEghlReturnPost } from './eghl.http.server'
 import { EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 import type { recordOutcome } from './record-outcome.server'
-import { findPendingAmountInCents } from './transactions.repository.server'
+import { findPendingAmountInCents, insertPayment } from './transactions.repository.server'
 
 type Finalize = (
   response: Parameters<typeof recordOutcome>[1],
@@ -154,12 +158,12 @@ const withGateway = async <T>(gateway: typeof fetch, run: () => Promise<T>) => {
   }
 }
 
-const stubPaymentService = (logger = pino({ level: 'silent' })) => {
-  finalizePaymentFromCallback.mockReset().mockResolvedValue(ok({ finalized: true }))
-  return testDeps({
-    db: createFakeDb().on(findPendingAmountInCents, () => AMOUNT_IN_CENTS),
-    logger,
-  })
+const stubPaymentService = (
+  logger = pino({ level: 'silent' }),
+  db: FakeDb = createFakeDb().on(findPendingAmountInCents, () => AMOUNT_IN_CENTS),
+) => {
+  finalizePaymentFromCallback.mockReset().mockResolvedValue(Result.ok({ finalized: true }))
+  return testDeps({ db, logger })
 }
 
 const postCallback = async (body: string, gateway: typeof fetch = unreachableGateway) => {
@@ -418,6 +422,119 @@ describe('refusing a reply', () => {
         `eghl.return.${why}`,
       ])
       expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    },
+  )
+})
+
+/** A failed payment insert, as the port reports it: its driver error quotes the parameters. */
+const failedWrite = async () => {
+  const db = createFakeDb().on(insertPayment, () => {
+    throw new Error('connection reset')
+  })
+  const result = await db.run(
+    insertPayment({ message: 'tok_secret', provider: 'eghl', transactionId: TRANSACTION_ID }),
+  )
+  return errValue(result)
+}
+
+describe('failing to record a settlement', () => {
+  it('answers the callback 500, so the gateway sends it again, and logs the failure once', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const deps = stubPaymentService(logger)
+    finalizePaymentFromCallback.mockResolvedValue(Result.err(await failedWrite()))
+
+    const { settled, span } = await inRequestSpan(async () => {
+      const response = await handleEghlCallback(
+        deps,
+        post(CALLBACK_URL, signedCallbackBody(EghlTxnStatus.Success, 'Transaction Successful')),
+      )
+      return { body: await response.text(), status: response.status }
+    })
+
+    expect(settled).toStrictEqual({
+      status: 'fulfilled',
+      value: { body: '{"message":"Internal Server Error"}', status: 500 },
+    })
+    expect(events.filter(({ level }) => level >= 50)).toMatchObject([
+      {
+        'error.type': 'Error',
+        err: { message: 'connection reset' },
+        event: 'eghl.callback.failed',
+        msg: 'payments.insertPayment failed',
+        op: 'payments.insertPayment',
+        transaction_id: TRANSACTION_ID,
+      },
+    ])
+    expect(JSON.stringify(events)).not.toContain('tok_secret')
+    expect(span.status.code).toBe(SpanStatusCode.ERROR)
+  })
+
+  it('answers the callback 500 when the amount to confirm a failure cannot be read', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = createFakeDb().on(findPendingAmountInCents, () => {
+      throw new Error('connection reset')
+    })
+
+    const response = await handleEghlCallback(
+      stubPaymentService(logger, db),
+      post(CALLBACK_URL, signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed')),
+    )
+
+    expect(response.status).toBe(500)
+    expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    expect(events.at(-1)).toMatchObject({
+      event: 'eghl.callback.failed',
+      op: 'payments.findPendingAmountInCents',
+      transaction_id: TRANSACTION_ID,
+    })
+  })
+
+  it.each([
+    [
+      'GET',
+      async (deps: ReturnType<typeof stubPaymentService>) =>
+        handleEghlReturnGet(
+          deps,
+          new Request(
+            `${RETURN_URL}?${signedCallbackBody(EghlTxnStatus.Success, 'Transaction Successful')}`,
+          ),
+        ).catch((error: unknown) => error),
+    ],
+    [
+      'POST',
+      async (deps: ReturnType<typeof stubPaymentService>) =>
+        handleEghlReturnPost(
+          deps,
+          post(RETURN_URL, signedCallbackBody(EghlTxnStatus.Success, 'Transaction Successful')),
+        ),
+    ],
+  ])(
+    'sends the donor of a %s return to the error page and logs the failure once',
+    async (_method, run) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const deps = stubPaymentService(logger)
+      finalizePaymentFromCallback.mockResolvedValue(Result.err(await failedWrite()))
+
+      const { settled, span } = await inRequestSpan(() => run(deps))
+
+      expect(settled).toMatchObject({
+        status: 'fulfilled',
+        value: { options: { replace: true, to: '/uh-oh' } },
+      })
+      expect(events.filter(({ level }) => level >= 50)).toMatchObject([
+        {
+          event: 'eghl.return.failed',
+          op: 'payments.insertPayment',
+          transaction_id: TRANSACTION_ID,
+        },
+      ])
+      expect(span.status.code).toBe(SpanStatusCode.ERROR)
     },
   )
 })

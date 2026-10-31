@@ -1,10 +1,10 @@
 import { redirect } from '@tanstack/react-router'
+import { Result } from 'better-result'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { createDBError } from '#/core/errors'
-import { ok, tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
-import { legacyDb } from '#/server/legacy-db.server'
+import type { InfraError } from '#/server/infra-error'
+import { logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlReplyError } from './eghl.errors'
 import { finalStatusOf, inboundActionOf } from './eghl.outcome'
@@ -49,8 +49,10 @@ function refuseReply(
   })
 }
 
+type Settlement = Promise<Result<{ finalized: boolean }, InfraError>>
+
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
-async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentResponse) {
+async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentResponse): Settlement {
   const { logger } = deps
   const action = inboundActionOf(reply)
 
@@ -66,7 +68,7 @@ async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentRespon
         { event: 'eghl.settlement.not_final', transaction_id: reply.PaymentID },
         'Reply does not settle the transaction, leaving it pending',
       )
-      return ok({ finalized: false })
+      return Result.ok({ finalized: false })
     }
     default: {
       return assertExhaustive(action)
@@ -77,17 +79,14 @@ async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentRespon
 async function confirmByQuery(
   deps: SettlementDeps,
   transactionId: EghlPaymentResponse['PaymentID'],
-) {
+): Settlement {
   const { eghl, logger } = deps
-  const amountResult = await tryAsync(
-    () => legacyDb(deps.db).run(findPendingAmountInCents(transactionId)),
-    createDBError,
-  )
-  if (!amountResult.ok) {
-    return amountResult
+  const amountResult = await deps.db.run(findPendingAmountInCents(transactionId))
+  if (amountResult.isErr()) {
+    return Result.err(amountResult.error)
   }
   if (amountResult.value === undefined) {
-    return ok({ finalized: false })
+    return Result.ok({ finalized: false })
   }
 
   const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
@@ -100,7 +99,7 @@ async function confirmByQuery(
       },
       'Could not confirm the reply with the gateway, leaving it pending',
     )
-    return ok({ finalized: false })
+    return Result.ok({ finalized: false })
   }
 
   const finalStatus = finalStatusOf(queryResult.value)
@@ -113,7 +112,7 @@ async function confirmByQuery(
       },
       'Gateway status does not settle the transaction, leaving it pending',
     )
-    return ok({ finalized: false })
+    return Result.ok({ finalized: false })
   }
 
   return recordOutcome(deps, queryResult.value, finalStatus)
@@ -149,16 +148,10 @@ export async function handleEghlCallback(deps: SettlementDeps, request: Request)
 
   const finalizationResult = await settleInboundReply(deps, eghlResponse)
 
-  if (!finalizationResult.ok) {
-    logger.error(
-      {
-        err: finalizationResult.error.error,
-        error_type: finalizationResult.error.type,
-        event: 'eghl.callback.finalization_failed',
-        transaction_id: eghlResponse.PaymentID,
-      },
-      'Failed to record payment outcome in database',
-    )
+  if (finalizationResult.isErr()) {
+    logInfraFailure(logger, 'eghl.callback', finalizationResult.error, {
+      transaction_id: eghlResponse.PaymentID,
+    })
     return internalError
   }
 
@@ -200,16 +193,10 @@ export async function handleEghlReturnGet(deps: SettlementDeps, request: Request
 
   const finalizationResult = await settleInboundReply(deps, eghlResponse)
 
-  if (!finalizationResult.ok) {
-    logger.error(
-      {
-        err: finalizationResult.error.error,
-        error_type: finalizationResult.error.type,
-        event: 'eghl.return.finalization_failed',
-        transaction_id: eghlResponse.PaymentID,
-      },
-      'Failed to record payment outcome in database',
-    )
+  if (finalizationResult.isErr()) {
+    logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
+      transaction_id: eghlResponse.PaymentID,
+    })
     throw errorRedirect
   }
 
@@ -254,16 +241,10 @@ export async function handleEghlReturnPost(deps: SettlementDeps, request: Reques
 
   const finalizationResult = await settleInboundReply(deps, eghlResponse)
 
-  if (!finalizationResult.ok) {
-    logger.error(
-      {
-        err: finalizationResult.error.error,
-        error_type: finalizationResult.error.type,
-        event: 'eghl.return.finalization_failed',
-        transaction_id: eghlResponse.PaymentID,
-      },
-      'Failed to record payment outcome in database',
-    )
+  if (finalizationResult.isErr()) {
+    logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
+      transaction_id: eghlResponse.PaymentID,
+    })
     return errorRedirect
   }
 

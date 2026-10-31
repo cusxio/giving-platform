@@ -1,6 +1,6 @@
 import { addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import type { Deps } from '#/server/deps.server'
-import { legacyDb } from '#/server/legacy-db.server'
+import { logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlQueryError } from './eghl.errors'
 import { finalStatusOf } from './eghl.outcome'
@@ -12,9 +12,7 @@ import {
 } from './transactions.repository.server'
 
 const LOG_EVENTS = {
-  BATCH_UPDATE_FAILED: 'eghl.cron.batch_update_failed',
   COMPLETE: 'eghl.cron.complete',
-  FINALIZATION_FAILED: 'eghl.cron.finalization_failed',
   JOB_START: 'eghl.cron.job_start',
   NOT_EXISTS: 'eghl.cron.not_exists',
   QUERY_FAILED: 'eghl.cron.query_failed',
@@ -49,16 +47,12 @@ export async function handleReconcile(
 
   logger.info({ event: LOG_EVENTS.JOB_START }, 'Starting eGHL cron job')
 
-  let pendingTransactions
-  try {
-    pendingTransactions = await legacyDb(db).run(pendingTransactionsToReconcile())
-  } catch (error: unknown) {
-    logger.error(
-      { err: error, event: LOG_EVENTS.QUERY_FAILED },
-      'Failed to fetch pending transactions',
-    )
+  const pending = await db.run(pendingTransactionsToReconcile())
+  if (pending.isErr()) {
+    logInfraFailure(logger, 'eghl.cron', pending.error)
     return new Response('Internal Server Error', { status: 500 })
   }
+  const pendingTransactions = pending.value
 
   let finalizedCount = 0
   let failCount = 0
@@ -154,16 +148,10 @@ export async function handleReconcile(
     // oxlint-disable-next-line no-await-in-loop
     const finalizationResult = await recordOutcome(deps, eghlResponse, finalStatus)
 
-    if (!finalizationResult.ok) {
-      logger.error(
-        {
-          err: finalizationResult.error.error,
-          error_type: finalizationResult.error.type,
-          event: LOG_EVENTS.FINALIZATION_FAILED,
-          transaction_id: eghlResponse.PaymentID,
-        },
-        'Failed to record payment outcome in database',
-      )
+    if (finalizationResult.isErr()) {
+      logInfraFailure(logger, 'eghl.cron', finalizationResult.error, {
+        transaction_id: eghlResponse.PaymentID,
+      })
       errorCount++
       continue
     }
@@ -175,20 +163,15 @@ export async function handleReconcile(
 
   // Batch update all transactions that need to be marked as failed
   if (transactionsToMarkFailed.length > 0) {
-    try {
-      failCount = await legacyDb(db).run(markPendingTransactionsFailed(transactionsToMarkFailed))
-    } catch (error: unknown) {
-      logger.error(
-        {
-          count: transactionsToMarkFailed.length,
-          err: error,
-          event: LOG_EVENTS.BATCH_UPDATE_FAILED,
-          sampleIds: transactionsToMarkFailed.slice(0, 10),
-        },
-        'Failed to mark transactions as failed',
-      )
+    const marked = await db.run(markPendingTransactionsFailed(transactionsToMarkFailed))
+    if (marked.isErr()) {
+      logInfraFailure(logger, 'eghl.cron', marked.error, {
+        count: transactionsToMarkFailed.length,
+        sampleIds: transactionsToMarkFailed.slice(0, 10),
+      })
       errorCount += transactionsToMarkFailed.length
-      failCount = 0
+    } else {
+      failCount = marked.value
     }
   }
 

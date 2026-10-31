@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { FakeDb } from '#/server/testing/fake-db'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { errValue, okValue } from '#/server/testing/result'
 import { testDeps } from '#/server/testing/test-deps'
 
 import type { EghlPaymentResponse } from './eghl.wire'
@@ -80,7 +81,8 @@ describe('recording a payment outcome', () => {
     const db = pendingFor('guest')
     const result = await record(db, reply(), 'success')
 
-    expect(result).toStrictEqual({ ok: true, value: { finalized: true } })
+    expect(okValue(result)).toStrictEqual({ finalized: true })
+    expect(db.transactions).toStrictEqual(['commit'])
     // paidAt is a TZDate, which toStrictEqual would not equate with a Date of the same time.
     expect(db.calls).toMatchObject([
       { args: ['txn_abc123', 'success'], name: 'payments.settleTransaction' },
@@ -94,7 +96,7 @@ describe('recording a payment outcome', () => {
     const db = createFakeDb().on(settleTransaction, () => null)
     const result = await record(db, reply(), 'failed')
 
-    expect(result).toStrictEqual({ ok: true, value: { finalized: false } })
+    expect(okValue(result)).toStrictEqual({ finalized: false })
     expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.settleTransaction'])
   })
 
@@ -178,7 +180,7 @@ describe('recording a payment outcome', () => {
     })
   })
 
-  it('reports a failed write as a transaction error', async () => {
+  it('rolls the settlement back and names the failed write', async () => {
     expect.hasAssertions()
 
     const db = createFakeDb()
@@ -188,7 +190,25 @@ describe('recording a payment outcome', () => {
       })
     const result = await record(db, reply(), 'success')
 
-    expect(result).toMatchObject({ error: { type: 'TransactionRollbackError' }, ok: false })
+    expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.insertPayment' })
+    expect(db.transactions).toStrictEqual(['rollback'])
+  })
+
+  it('rolls the settlement and the payment back when the card cannot be saved', async () => {
+    expect.hasAssertions()
+
+    const db = pendingFor('user').on(upsertSavedCard, () => {
+      throw new Error('upsert failed')
+    })
+    const result = await record(db, reply(newCard), 'success')
+
+    expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.upsertSavedCard' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.settleTransaction',
+      'payments.insertPayment',
+      'payments.upsertSavedCard',
+    ])
+    expect(db.transactions).toStrictEqual(['rollback'])
   })
 
   it('logs the replay of a settled transaction', async () => {

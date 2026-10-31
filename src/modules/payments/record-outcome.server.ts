@@ -1,8 +1,8 @@
+import { Result } from 'better-result'
+
 import { TZDate, now } from '#/core/date'
-import { createTransactionError } from '#/core/errors'
-import { tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
-import { legacyDb } from '#/server/legacy-db.server'
+import type { InfraError } from '#/server/infra-error'
 
 import type { EghlFinalStatus } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
@@ -12,13 +12,14 @@ import { insertPayment, settleTransaction } from './transactions.repository.serv
 /**
  * The one writer of a settled status. Moves a pending transaction to `status` and records the
  * payment, and for a user's successful card payment saves or touches the card, all in one
- * transaction. A transaction that is no longer pending is left alone.
+ * transaction that any failed statement rolls back. A transaction that is no longer pending is
+ * left alone.
  */
-export async function recordOutcome(
+export function recordOutcome(
   deps: Pick<Deps, 'db' | 'logger'>,
   response: EghlPaymentResponse | EghlQueryResponse,
   status: EghlFinalStatus,
-) {
+): Promise<Result<{ finalized: boolean }, InfraError>> {
   const {
     PaymentID,
     PymtMethod,
@@ -45,20 +46,20 @@ export async function recordOutcome(
     }
   }
 
-  return tryAsync(
-    () =>
-      legacyDb(deps.db).transaction(async (tx) => {
-        const transaction = await tx.run(settleTransaction(PaymentID, status))
+  return deps.db.transaction((tx) =>
+    Result.gen(async function* settle() {
+      const transaction = yield* Result.await(tx.run(settleTransaction(PaymentID, status)))
 
-        if (transaction === null) {
-          deps.logger.info(
-            { event: 'payment.finalize.idempotent', transaction_id: PaymentID },
-            'Transaction already processed or not found',
-          )
-          return { finalized: false }
-        }
+      if (transaction === null) {
+        deps.logger.info(
+          { event: 'payment.finalize.idempotent', transaction_id: PaymentID },
+          'Transaction already processed or not found',
+        )
+        return Result.ok({ finalized: false })
+      }
 
-        await tx.run(
+      yield* Result.await(
+        tx.run(
           insertPayment({
             message: TxnMessage,
             paidAt,
@@ -67,19 +68,21 @@ export async function recordOutcome(
             providerTransactionId: TxnID,
             transactionId: PaymentID,
           }),
-        )
+        ),
+      )
 
-        const shouldSaveCard = isTransactionSuccess && transaction.createdAs === 'user'
+      const shouldSaveCard = isTransactionSuccess && transaction.createdAs === 'user'
 
-        if (
-          shouldSaveCard &&
-          TokenType === 'OCP' &&
-          Token !== undefined &&
-          CardNoMask !== undefined &&
-          CardExp !== undefined &&
-          CardType !== undefined
-        ) {
-          await tx.run(
+      if (
+        shouldSaveCard &&
+        TokenType === 'OCP' &&
+        Token !== undefined &&
+        CardNoMask !== undefined &&
+        CardExp !== undefined &&
+        CardType !== undefined
+      ) {
+        yield* Result.await(
+          tx.run(
             upsertSavedCard({
               cardExp: CardExp,
               cardHolder: CardHolder,
@@ -88,14 +91,14 @@ export async function recordOutcome(
               token: Token,
               userId: transaction.userId,
             }),
-          )
-        } else if (shouldSaveCard && TokenType === 'OCP' && Token !== undefined) {
-          // Update last used time if existing token was used
-          await tx.run(touchSavedCard(transaction.userId, Token))
-        }
+          ),
+        )
+      } else if (shouldSaveCard && TokenType === 'OCP' && Token !== undefined) {
+        // Update last used time if existing token was used
+        yield* Result.await(tx.run(touchSavedCard(transaction.userId, Token)))
+      }
 
-        return { finalized: true }
-      }),
-    createTransactionError,
+      return Result.ok({ finalized: true })
+    }),
   )
 }

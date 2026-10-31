@@ -1,6 +1,6 @@
-import { Result } from 'better-result'
+import type { Result } from 'better-result'
 
-import type { Db, Executor as ResultExecutor, Query, Results } from '#/server/db.server'
+import type { Executor as ResultExecutor, Query, Results } from '#/server/db.server'
 import type { InfraError } from '#/server/infra-error'
 
 /**
@@ -15,11 +15,6 @@ interface Executor {
   ) => Promise<Results<Q>>
 }
 
-interface LegacyDb extends Executor {
-  /** Throwing inside `work` rolls back and rethrows. */
-  readonly transaction: <T>(work: (tx: Executor) => Promise<T>) => Promise<T>
-}
-
 function unwrap<T>(result: Result<T, InfraError>): T {
   if (result.isErr()) {
     // oxlint-disable-next-line typescript/only-throw-error -- the driver's own error, unchanged
@@ -28,17 +23,9 @@ function unwrap<T>(result: Result<T, InfraError>): T {
   return result.value
 }
 
-function throwing(executor: ResultExecutor): Executor {
+export function legacyDb(executor: ResultExecutor): Executor {
   return {
     batch: async (queries) => unwrap(await executor.batch(queries)),
     run: async (query) => unwrap(await executor.run(query)),
-  }
-}
-
-export function legacyDb(db: Db): LegacyDb {
-  return {
-    ...throwing(db),
-    transaction: async (work) =>
-      unwrap(await db.transaction(async (tx) => Result.ok(await work(throwing(tx))))),
   }
 }

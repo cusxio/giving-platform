@@ -1,8 +1,7 @@
 import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
-import { TransactionRollbackError } from '#/core/errors'
-import { err, ok } from '#/core/result'
+import { infra } from '#/server/infra-error'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { testDeps } from '#/server/testing/test-deps'
 
@@ -51,6 +50,7 @@ interface PendingRow {
 }
 
 interface LogFields {
+  [field: string]: unknown
   event?: string
   stats?: unknown
 }
@@ -126,7 +126,7 @@ const gatewayAnswering = (replies: Record<string, QueryResult>) =>
 const finalizeBy =
   (outcomes: Record<string, FinalizeResult> = {}) =>
   (response: EghlQueryResponse) =>
-    Promise.resolve(outcomes[response.PaymentID] ?? ok({ finalized: true }))
+    Promise.resolve(outcomes[response.PaymentID] ?? Result.ok({ finalized: true }))
 
 const notFound = (id: string) => Result.ok(queryReply(id, NotFound, QueryNotFound))
 
@@ -177,6 +177,7 @@ const runCron = async ({
   const complete = logger.info.mock.calls.find(([fields]) => fields.event === 'eghl.cron.complete')
   return {
     body: await response.text(),
+    errors: logger.error.mock.calls.map(([fields]) => fields),
     finalizeCalls: finalizePaymentFromCallback.mock.calls,
     queried: queryTransactionStatus.mock.calls.map(([params]) => params),
     stats: complete?.[0].stats,
@@ -250,16 +251,24 @@ describe('eGHL cron', () => {
     const run = await runCron({
       db,
       finalize: finalizeBy({
-        txn_already_final: ok({ finalized: false }),
-        txn_finalize_error: err({
-          error: new TransactionRollbackError('rolled back'),
-          type: 'TransactionRollbackError',
-        }),
+        txn_already_final: Result.ok({ finalized: false }),
+        txn_finalize_error: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
       }),
       replies,
     })
 
-    expect(run).toMatchObject({ body: 'ok', status: 200 })
+    expect(run).toMatchObject({
+      body: 'ok',
+      errors: [
+        { error_type: 'EghlServerError', event: 'eghl.cron.query_failed' },
+        {
+          event: 'eghl.cron.failed',
+          op: 'payments.insertPayment',
+          transaction_id: 'txn_finalize_error',
+        },
+      ],
+      status: 200,
+    })
     expect(run.queried).toStrictEqual(
       rows.map(({ amountInCents, transactionId }) => ({ amountInCents, transactionId })),
     )
@@ -305,6 +314,14 @@ describe('eGHL cron', () => {
       'pending',
     ])
     expect(run.stats).toStrictEqual({ errors: 2, finalized: 0, found: 2, marked_failed: 0 })
+    expect(run.errors).toMatchObject([
+      {
+        count: 2,
+        event: 'eghl.cron.failed',
+        op: 'payments.markPendingTransactionsFailed',
+        sampleIds: ['txn_a', 'txn_b'],
+      },
+    ])
   })
 
   it('answers 500 without querying eGHL when the pending select fails', async () => {
@@ -314,6 +331,9 @@ describe('eGHL cron', () => {
     const run = await runCron({ db })
 
     expect(run).toMatchObject({ body: 'Internal Server Error', queried: [], status: 500 })
+    expect(run.errors).toMatchObject([
+      { event: 'eghl.cron.failed', op: 'payments.pendingTransactionsToReconcile' },
+    ])
   })
 
   it.each([

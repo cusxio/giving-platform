@@ -11,6 +11,7 @@ import type {
   ValidationErrorResponse,
 } from '#/core/wire'
 import type { Forbidden, Policy, Refusal, SignedOut } from '#/server/authorize.server'
+import type { Deps } from '#/server/deps.server'
 import { InfraError } from '#/server/infra-error'
 import type { InvalidInput, Parser } from '#/server/input.server'
 import type { RequestContext } from '#/server/request-context.server'
@@ -225,6 +226,34 @@ function markSpanFailed(failure: Loggable, type: string, message: string) {
   span?.setStatus({ code: SpanStatusCode.ERROR, message })
 }
 
+/**
+ * Logs an `InfraError` once, as `<event>.failed` with the failing `op`, the cause's type and the
+ * cause with its parameters left out, and marks the request span failed. `fields` adds context,
+ * such as the transaction the failure was about.
+ */
+export function logInfraFailure(
+  logger: Deps['logger'],
+  event: string,
+  error: InfraError,
+  fields: Readonly<Record<string, unknown>> = {},
+) {
+  // `no-row` has no cause to name: the statement succeeded and returned nothing.
+  const cause = error.reason === 'no-row' ? undefined : loggable(error.cause)
+  const type = cause === undefined ? error.reason : typeOf(cause)
+  logger.error(
+    {
+      ...fields,
+      'error.type': type,
+      ...(cause !== undefined && { err: cause }),
+      event: `${event}.failed`,
+      op: error.op,
+      ...(error.rejected !== undefined && { rejected: loggable(error.rejected).name }),
+    },
+    error.message,
+  )
+  markSpanFailed(cause ?? { message: error.message, name: type }, type, error.message)
+}
+
 type AnySpec = Spec<unknown, Refusal, unknown, unknown, Tagged> & {
   readonly wire: Readonly<Record<string, (error: never, input: never) => Outcome>>
 }
@@ -263,20 +292,7 @@ async function settle(kind: Kind, spec: AnySpec, { context, data }: Invocation):
 
   const { error } = result
   if (InfraError.is(error)) {
-    // `no-row` has no cause to name: the statement succeeded and returned nothing.
-    const cause = error.reason === 'no-row' ? undefined : loggable(error.cause)
-    const type = cause === undefined ? error.reason : typeOf(cause)
-    logger.error(
-      {
-        'error.type': type,
-        ...(cause !== undefined && { err: cause }),
-        event: `${event}.failed`,
-        op: error.op,
-        ...(error.rejected !== undefined && { rejected: loggable(error.rejected).name }),
-      },
-      error.message,
-    )
-    markSpanFailed(cause ?? { message: error.message, name: type }, type, error.message)
+    logInfraFailure(logger, event, error)
     return kind.serverError()
   }
 
