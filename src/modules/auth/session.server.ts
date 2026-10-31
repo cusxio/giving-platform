@@ -7,6 +7,7 @@ import { constantTimeEqual } from '#/server/crypto.server'
 import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
 import { InfraError } from '#/server/infra-error'
+import type { PlatformRequest } from '#/server/platform-request.server'
 import { logInfraEvent } from '#/server/procedure.server'
 import type { RequestContext } from '#/server/request-context.server'
 
@@ -46,9 +47,6 @@ export type SessionCheck =
   | { readonly session: ResolvedSession['session']; readonly user: ResolvedSession['user'] }
 
 type SessionDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
-
-// Nitro's Vercel runtime attaches the platform's `waitUntil` to the incoming request.
-type PlatformRequest = Request & { waitUntil?: (promise: Promise<unknown>) => void }
 
 /**
  * Lets `work` finish after the response is sent. A serverless platform may freeze the function
