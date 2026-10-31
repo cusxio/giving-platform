@@ -70,10 +70,6 @@ export class AuthService {
     return ok()
   }
 
-  async logout(sessionId: Session['id']) {
-    return this.#sessionRepository.deleteSessionById(sessionId)
-  }
-
   async signup(email: User['email']): Promise<Result<void, AuthSignUpError | SendEmailError>> {
     const userRes = await this.#userRepository.findUserByEmail(email)
 
