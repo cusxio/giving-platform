@@ -102,6 +102,15 @@ function slowExtension(db: Db) {
   return { db: slow, release }
 }
 
+/** A database whose session extension rejects instead of answering a Result, like a bug. */
+const crashingExtension = (db: Db): Db => ({
+  ...db,
+  run: (query) =>
+    query.name === extendSession.queryName
+      ? Promise.reject(new Error('driver crashed'))
+      : db.run(query),
+})
+
 describe('verifying a session cookie', () => {
   it('accepts a valid cookie for an active user', async () => {
     expect.hasAssertions()
@@ -207,6 +216,35 @@ describe('the session cookie on the response', () => {
 
     expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(check.session?.expiresAt)
     expect(events.map((e) => e.event)).toStrictEqual(['session.extend.background_success'])
+  })
+
+  it('logs a crash of the handed-over extension, so the platform never sees a rejection', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, deps, events } = setup('active', 3)
+    const kept: Promise<unknown>[] = []
+    io.request = Object.assign(new Request('https://app.give.test/'), {
+      waitUntil: (work: Promise<unknown>) => {
+        kept.push(work)
+      },
+    })
+
+    const check = await verifySessionCookie(
+      { ...deps, db: crashingExtension(deps.db) },
+      cookieValue,
+    )
+
+    expect(check.user).toMatchObject({ id: 1 })
+    expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
+    await expect(Promise.all(kept)).resolves.toStrictEqual([undefined])
+    expect(events).toMatchObject([
+      {
+        err: { message: 'driver crashed' },
+        event: 'session.extend.background_crash',
+        level: 50,
+        session_id: SESSION_ID,
+      },
+    ])
   })
 
   it('waits for the extension where the platform has no waitUntil', async () => {
