@@ -43,11 +43,10 @@ interface ResolvedSession {
   user: Pick<SessionWithUser['user'], 'id' | 'journey' | 'role'>
 }
 
-/** Who the request belongs to, or nulls for an anonymous one. */
-export interface SessionCheck {
-  readonly session: null | ResolvedSession['session']
-  readonly user: null | ResolvedSession['user']
-}
+/** Who the request belongs to. An anonymous request has neither, so a null test on one narrows both. */
+export type SessionCheck =
+  | { readonly session: null; readonly user: null }
+  | { readonly session: ResolvedSession['session']; readonly user: ResolvedSession['user'] }
 
 type SessionDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 
