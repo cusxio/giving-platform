@@ -1,10 +1,14 @@
-import { notFound } from '@tanstack/react-router'
+import { Result } from 'better-result'
+import { Type } from 'typebox'
+import { Compile } from 'typebox/compile'
 
-import type { QueryResult } from '#/server/db.server'
+import { requireUser } from '#/server/authorize.server'
 import type { Deps } from '#/server/deps.server'
-import { legacyDb } from '#/server/legacy-db.server'
-import type { RequestContext } from '#/server/request-context.server'
+import type { Parsed } from '#/server/input.server'
+import { noInput, parseWith } from '#/server/input.server'
+import { defineRead, toNotFound } from '#/server/procedure.server'
 
+import { TransactionNotFound } from './history.errors'
 import type { Donor, TransactionId } from './history.repository.server'
 import {
   countTransactions,
@@ -20,115 +24,93 @@ import type { OverviewYear } from './overview'
 import { scopeFor, summarizeOverview } from './overview'
 import { PAGE_SIZE, toTransactionsPage } from './transactions-page'
 
-type Ctx = Pick<RequestContext, 'deps' | 'user'>
-
-export interface OverviewInput {
-  readonly journey: Donor['journey']
-  readonly year: OverviewYear
-}
-
-export interface AvailableYearsInput {
-  readonly journey: Donor['journey']
-}
-
-export interface TransactionsInput {
-  readonly journey: Donor['journey']
-  readonly page?: number
-}
-
-export interface TransactionInput {
-  readonly transactionId: TransactionId
-}
-
-type TransactionDetail = readonly [
-  NonNullable<QueryResult<typeof transactionById>>,
-  QueryResult<typeof transactionItemsOf>,
-]
-
 /** One neon-http round trip for the three reads, then pure aggregation. */
 export async function loadOverview(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly year: OverviewYear },
 ) {
   const scope = scopeFor(input.donor, input.year)
-  const [recent, timeline, fundItems] = await legacyDb(deps.db).batch([
+  const read = await deps.db.batch([
     recentTransactions(scope),
     successTimeline(scope),
     successFundItems(scope),
   ])
-  return summarizeOverview(recent, timeline, fundItems)
+  return read.map(([recent, timeline, fundItems]) => summarizeOverview(recent, timeline, fundItems))
 }
 
-export function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor): Promise<number[]> {
-  return legacyDb(deps.db).run(successYears(donor))
+export function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor) {
+  return deps.db.run(successYears(donor))
 }
 
 export async function loadTransactionsPage(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly page: number },
 ) {
-  const [total, txs] = await legacyDb(deps.db).batch([
+  const read = await deps.db.batch([
     countTransactions(input.donor),
     transactionsPage(input.donor, { limit: PAGE_SIZE, offset: PAGE_SIZE * (input.page - 1) }),
   ])
-  return toTransactionsPage(total, txs)
+  return read.map(([total, txs]) => toTransactionsPage(total, txs))
 }
 
-/** Null unless the transaction exists, has items, and belongs to the viewer. */
+/** The transaction and its items, if it has items and belongs to the viewer. */
 export async function findOwnTransaction(
   deps: Pick<Deps, 'db'>,
-  input: { readonly transactionId: TransactionId; readonly viewerId: Donor['id'] | undefined },
-): Promise<TransactionDetail | null> {
-  const [transaction, items] = await legacyDb(deps.db).batch([
+  input: { readonly transactionId: TransactionId; readonly viewerId: Donor['id'] },
+) {
+  const read = await deps.db.batch([
     transactionById(input.transactionId),
     transactionItemsOf(input.transactionId),
   ])
-  if (transaction === null || transaction.userId !== input.viewerId || items.length === 0) {
-    return null
-  }
-  return [transaction, items]
+  return read.andThen(([transaction, items]) =>
+    transaction === null || transaction.userId !== input.viewerId || items.length === 0
+      ? Result.err(new TransactionNotFound())
+      : Result.ok([transaction, items] as const),
+  )
 }
 
-// Transport adapters. Phase 2 replaces the null-user guard with `requireUser` middleware.
+const overviewInput = parseWith(
+  Compile(Type.Object({ year: Type.Union([Type.Literal('all'), Type.Integer()]) })),
+)
+export type OverviewInput = Parsed<typeof overviewInput>
 
-export async function getOverviewProcedure(context: Ctx, data: OverviewInput) {
-  if (!context.user) {
-    throw notFound()
-  }
-  return loadOverview(context.deps, {
-    donor: { id: context.user.id, journey: data.journey },
-    year: data.year,
-  })
-}
+export const getOverviewAction = defineRead({
+  auth: requireUser,
+  event: 'history.overview',
+  input: overviewInput,
+  run: ({ deps, user }, { year }) =>
+    loadOverview(deps, { donor: { id: user.id, journey: user.journey }, year }),
+  wire: {},
+})
 
-export async function getAvailableYearsProcedure(
-  context: Ctx,
-  data: AvailableYearsInput,
-): Promise<number[]> {
-  if (!context.user) {
-    throw notFound()
-  }
-  return loadAvailableYears(context.deps, { id: context.user.id, journey: data.journey })
-}
+export const getAvailableYearsAction = defineRead({
+  auth: requireUser,
+  event: 'history.available_years',
+  input: noInput,
+  run: ({ deps, user }) => loadAvailableYears(deps, { id: user.id, journey: user.journey }),
+  wire: {},
+})
 
-export async function getTransactionsProcedure(context: Ctx, data: TransactionsInput) {
-  const { page = 1, journey } = data
-  if (!context.user) {
-    throw notFound()
-  }
-  return loadTransactionsPage(context.deps, { donor: { id: context.user.id, journey }, page })
-}
+const transactionsInput = parseWith(Compile(Type.Object({ page: Type.Optional(Type.Integer()) })))
+export type TransactionsInput = Parsed<typeof transactionsInput>
 
-export async function getTransactionProcedure(
-  context: Ctx,
-  data: TransactionInput,
-): Promise<TransactionDetail> {
-  const detail = await findOwnTransaction(context.deps, {
-    transactionId: data.transactionId,
-    viewerId: context.user?.id,
-  })
-  if (detail === null) {
-    throw notFound()
-  }
-  return detail
-}
+export const getTransactionsAction = defineRead({
+  auth: requireUser,
+  event: 'history.transactions',
+  input: transactionsInput,
+  run: ({ deps, user }, { page }) =>
+    loadTransactionsPage(deps, { donor: { id: user.id, journey: user.journey }, page: page ?? 1 }),
+  wire: {},
+})
+
+const transactionInput = parseWith(Compile(Type.Object({ transactionId: Type.String() })))
+export type TransactionInput = Parsed<typeof transactionInput>
+
+export const getTransactionAction = defineRead({
+  auth: requireUser,
+  event: 'history.transaction',
+  input: transactionInput,
+  run: ({ deps, user }, { transactionId }) =>
+    findOwnTransaction(deps, { transactionId, viewerId: user.id }),
+  wire: { TransactionNotFound: () => toNotFound() },
+})

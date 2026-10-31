@@ -6,7 +6,7 @@ import { parseSync } from 'vite'
 import { describe, expect, it } from 'vitest'
 
 /** Modules whose server functions still call `*Procedure` adapters. Each wave removes its own. */
-const NOT_YET_MIGRATED = new Set(['account', 'auth', 'history', 'payments'])
+const NOT_YET_MIGRATED = new Set(['account', 'auth', 'payments'])
 
 const root = path.resolve(import.meta.dirname, '../..')
 const functionFiles = globSync('src/modules/*/*.functions.ts', { cwd: root }).filter(

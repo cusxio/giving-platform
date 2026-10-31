@@ -1,5 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
+import type { SessionUser } from '#/server/authorize.server'
+
 import {
   getAvailableYears,
   getOverview,
@@ -8,12 +10,13 @@ import {
 } from './history.functions'
 import type { OverviewInput, TransactionInput } from './history.server'
 
-type Journey = OverviewInput['journey']
+// The server reads the journey from the session. It stays in the keys so a journey change refetches.
+type Journey = SessionUser['journey']
 
 export function availableYearsQuery(userId: number, journey: Journey) {
   return queryOptions({
     queryKey: ['overview-years', journey, userId],
-    queryFn: () => getAvailableYears({ data: { journey } }),
+    queryFn: () => getAvailableYears(),
     // 5 minutes
     staleTime: 5 * 60 * 1000,
   })
@@ -21,14 +24,14 @@ export function availableYearsQuery(userId: number, journey: Journey) {
 
 export function overviewQuery(userId: number, journey: Journey, year: OverviewInput['year']) {
   return queryOptions({
-    queryFn: () => getOverview({ data: { journey, year } }),
+    queryFn: () => getOverview({ data: { year } }),
     queryKey: ['overview', { journey, userId, year }],
   })
 }
 
 export function transactionsQuery(userId: number, journey: Journey, page = 1) {
   return queryOptions({
-    queryFn: () => getTransactions({ data: { journey, page } }),
+    queryFn: () => getTransactions({ data: { page } }),
     queryKey: ['transactions', { journey, page, userId }],
   })
 }
