@@ -2,6 +2,7 @@ import { notFound } from '@tanstack/react-router'
 
 import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import type { Donor, TransactionId } from './history.repository.server'
@@ -50,7 +51,7 @@ export async function loadOverview(
   input: { readonly donor: Donor; readonly year: OverviewYear },
 ) {
   const scope = scopeFor(input.donor, input.year)
-  const [recent, timeline, fundItems] = await deps.db.batch([
+  const [recent, timeline, fundItems] = await legacyDb(deps.db).batch([
     recentTransactions(scope),
     successTimeline(scope),
     successFundItems(scope),
@@ -59,14 +60,14 @@ export async function loadOverview(
 }
 
 export function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor): Promise<number[]> {
-  return deps.db.run(successYears(donor))
+  return legacyDb(deps.db).run(successYears(donor))
 }
 
 export async function loadTransactionsPage(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly page: number },
 ) {
-  const [total, txs] = await deps.db.batch([
+  const [total, txs] = await legacyDb(deps.db).batch([
     countTransactions(input.donor),
     transactionsPage(input.donor, { limit: PAGE_SIZE, offset: PAGE_SIZE * (input.page - 1) }),
   ])
@@ -78,7 +79,7 @@ export async function findOwnTransaction(
   deps: Pick<Deps, 'db'>,
   input: { readonly transactionId: TransactionId; readonly viewerId: Donor['id'] | undefined },
 ): Promise<TransactionDetail | null> {
-  const [transaction, items] = await deps.db.batch([
+  const [transaction, items] = await legacyDb(deps.db).batch([
     transactionById(input.transactionId),
     transactionItemsOf(input.transactionId),
   ])

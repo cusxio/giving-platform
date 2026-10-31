@@ -1,5 +1,6 @@
 import { addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 
 import { finalStatusOf } from './eghl.outcome'
 import { EghlTxnExists } from './eghl.wire'
@@ -38,7 +39,7 @@ export async function handleReconcile(
 
   let pendingTransactions
   try {
-    pendingTransactions = await db.run(pendingTransactionsToReconcile())
+    pendingTransactions = await legacyDb(db).run(pendingTransactionsToReconcile())
   } catch (error: unknown) {
     logger.error(
       { err: error, event: LOG_EVENTS.QUERY_FAILED },
@@ -164,7 +165,7 @@ export async function handleReconcile(
   // Batch update all transactions that need to be marked as failed
   if (transactionsToMarkFailed.length > 0) {
     try {
-      failCount = await db.run(markPendingTransactionsFailed(transactionsToMarkFailed))
+      failCount = await legacyDb(db).run(markPendingTransactionsFailed(transactionsToMarkFailed))
     } catch (error: unknown) {
       logger.error(
         {

@@ -18,6 +18,7 @@ import type {
 import type { User } from '#/modules/account/server'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import type { AuthLoginError, AuthSignUpError, SendEmailError } from './auth.errors'
@@ -53,7 +54,7 @@ export async function login(
   deps: OtpDeps,
   email: User['email'],
 ): Promise<Result<void, AuthLoginError | SendEmailError>> {
-  const userRes = await tryAsync(() => deps.db.run(findUserByEmail(email)), createDBError)
+  const userRes = await tryAsync(() => legacyDb(deps.db).run(findUserByEmail(email)), createDBError)
 
   if (!userRes.ok) {
     return userRes
@@ -79,7 +80,7 @@ export async function signup(
   deps: OtpDeps,
   email: User['email'],
 ): Promise<Result<void, AuthSignUpError | SendEmailError>> {
-  const userRes = await tryAsync(() => deps.db.run(findUserByEmail(email)), createDBError)
+  const userRes = await tryAsync(() => legacyDb(deps.db).run(findUserByEmail(email)), createDBError)
 
   if (!userRes.ok) {
     return userRes
@@ -88,7 +89,10 @@ export async function signup(
   let user = userRes.value
 
   if (user === null) {
-    const createRes = await tryAsync(() => deps.db.run(upsertGuestUser({ email })), createDBError)
+    const createRes = await tryAsync(
+      () => legacyDb(deps.db).run(upsertGuestUser({ email })),
+      createDBError,
+    )
 
     if (!createRes.ok) {
       return createRes
@@ -125,7 +129,7 @@ async function sendOtp(
 ) {
   const otp = generateOtp()
   const tokenRes = await tryAsync(
-    () => deps.db.run(createToken(userId, deps.hashToken(otp), mode)),
+    () => legacyDb(deps.db).run(createToken(userId, deps.hashToken(otp), mode)),
     createDBError,
   )
 

@@ -20,8 +20,9 @@ import type {
 } from '#/core/wire'
 import type { User } from '#/modules/account/server'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
-import type { Executor } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
+import type { Executor } from '#/server/legacy-db.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import type { ContributionItem } from './contribution'
@@ -105,7 +106,7 @@ export async function createPendingContribution(
 
   return tryAsync(
     () =>
-      deps.db.transaction(async (tx) => {
+      legacyDb(deps.db).transaction(async (tx) => {
         const ownerResult = await tryAsync(() => tx.run(findUserByEmail(email)), createDBError)
 
         if (!ownerResult.ok) {
@@ -220,7 +221,7 @@ export async function beginContribution(
     }
 
     const savedCardResult = await tryAsync(
-      () => deps.db.run(findSavedCard(sessionUser.id, token)),
+      () => legacyDb(deps.db).run(findSavedCard(sessionUser.id, token)),
       createDBError,
     )
 

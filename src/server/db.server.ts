@@ -1,6 +1,9 @@
+import { Result } from 'better-result'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 
+import { infra } from '#/server/infra-error'
+import type { InfraError } from '#/server/infra-error'
 import type { DB, DBPool, DBPoolTransaction } from '#/server/neon.server'
 
 /**
@@ -91,25 +94,43 @@ export const nothing = (): undefined => undefined
  */
 export const affectedRows = (raw: unknown): number => (raw as { rowCount: number }).rowCount
 
-type Results<Q extends readonly Query<unknown>[]> = {
+/** The decoded results of a batch, one per query, in order. */
+export type Results<Q extends readonly Query<unknown>[]> = {
   -readonly [K in keyof Q]: Q[K] extends Query<infer T> ? T : never
 }
 
-/** Runs queries. Inside a transaction `batch` runs them in order; outside it is one atomic neon-http batch. */
+/**
+ * Runs queries. A driver or decoder failure is `Err(InfraError)`, never a throw. Inside a
+ * transaction `batch` runs the statements in order; outside it is one atomic neon-http batch.
+ */
 export interface Executor {
-  readonly run: <T>(query: Query<T>) => Promise<T>
+  readonly run: <T>(query: Query<T>) => Promise<Result<T, InfraError>>
   readonly batch: <const Q extends readonly [Query<unknown>, ...Query<unknown>[]]>(
     queries: Q,
-  ) => Promise<Results<Q>>
+  ) => Promise<Result<Results<Q>, InfraError>>
 }
 
 export interface Db extends Executor {
-  /** Interactive transaction on the websocket pool. Throwing inside `work` rolls back. */
-  readonly transaction: <T>(work: (tx: Executor) => Promise<T>) => Promise<T>
+  /**
+   * Interactive transaction on the websocket pool. `Ok` from `work` commits. `Err` rolls back
+   * and is returned as it is. A throw from `work` is a defect: it rolls back and propagates
+   * untouched. A failed begin, commit or rollback is `Err(InfraError{ op: 'db.transaction' })`.
+   */
+  readonly transaction: <T, E>(
+    work: (tx: Executor) => Promise<Result<T, E>>,
+  ) => Promise<Result<T, E | InfraError>>
 }
 
-async function runOn<T>(sql: Sql, query: Query<T>): Promise<T> {
-  return query.decode(await query.build(sql))
+/** The `op` of a neon-http batch, which fails as one statement. */
+export const batchOp = (queries: readonly Query<unknown>[]): string =>
+  queries.map((query) => query.name).join(' + ')
+
+function attempt<T>(op: string, execute: () => Promise<T>): Promise<Result<T, InfraError>> {
+  return Result.tryPromise({ catch: (cause) => infra(op, cause), try: execute })
+}
+
+function runOn<T>(sql: Sql, query: Query<T>): Promise<Result<T, InfraError>> {
+  return attempt(query.name, async () => query.decode(await query.build(sql)))
 }
 
 function sequentialExecutor(sql: Sql): Executor {
@@ -118,26 +139,81 @@ function sequentialExecutor(sql: Sql): Executor {
       const results: unknown[] = []
       for (const query of queries) {
         // oxlint-disable-next-line no-await-in-loop -- statements share one transaction connection
-        results.push(await runOn(sql, query))
+        const result = await runOn(sql, query)
+        if (result.isErr()) {
+          return Result.err(result.error)
+        }
+        results.push(result.value)
       }
-      return results as Results<Q>
+      return Result.ok(results as Results<Q>)
     },
     run: (query) => runOn(sql, query),
+  }
+}
+
+/** Carries a throw from `work` past the pool, so it is rethrown as it was thrown. */
+class ThrownError extends Error {
+  readonly thrown: unknown
+
+  constructor(thrown: unknown) {
+    super('transaction work threw')
+    this.name = 'ThrownError'
+    this.thrown = thrown
+  }
+}
+
+/** Thrown for an `Err`, because the pool rolls back only when its callback throws. */
+class RolledBackError extends Error {
+  constructor() {
+    super('transaction work returned Err')
+    this.name = 'RolledBackError'
+  }
+}
+
+async function transact<T, E>(
+  pool: DBPool,
+  work: (tx: Executor) => Promise<Result<T, E>>,
+): Promise<Result<T, E | InfraError>> {
+  let rejected: Result<T, E> | undefined
+  try {
+    return await pool.transaction(async (tx) => {
+      let outcome: Result<T, E>
+      try {
+        outcome = await work(sequentialExecutor(tx))
+      } catch (error) {
+        throw new ThrownError(error)
+      }
+      if (outcome.isErr()) {
+        rejected = outcome
+        throw new RolledBackError()
+      }
+      return outcome
+    })
+  } catch (error) {
+    if (error instanceof ThrownError) {
+      // oxlint-disable-next-line typescript/only-throw-error -- the work's own throw, unchanged
+      throw error.thrown
+    }
+    if (error instanceof RolledBackError && rejected !== undefined) {
+      return rejected
+    }
+    return Result.err(infra('db.transaction', error))
   }
 }
 
 /** Wraps the two neon clients. Only the composition root calls it. */
 export function createDb(http: DB, pool: DBPool): Db {
   return {
-    batch: async <const Q extends readonly [Query<unknown>, ...Query<unknown>[]]>(queries: Q) => {
-      const [head, ...tail] = queries
-      const raw: readonly unknown[] = await http.batch([
-        head.build(http),
-        ...tail.map((query) => query.build(http)),
-      ])
-      return queries.map((query, index) => query.decode(raw[index])) as Results<Q>
-    },
+    batch: <const Q extends readonly [Query<unknown>, ...Query<unknown>[]]>(queries: Q) =>
+      attempt(batchOp(queries), async () => {
+        const [head, ...tail] = queries
+        const raw: readonly unknown[] = await http.batch([
+          head.build(http),
+          ...tail.map((query) => query.build(http)),
+        ])
+        return queries.map((query, index) => query.decode(raw[index])) as Results<Q>
+      }),
     run: (query) => runOn(http, query),
-    transaction: (work) => pool.transaction((tx) => work(sequentialExecutor(tx))),
+    transaction: (work) => transact(pool, work),
   }
 }

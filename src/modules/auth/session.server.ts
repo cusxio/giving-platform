@@ -8,6 +8,7 @@ import { err, ok, trySync, tryAsync } from '#/core/result'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import type { VerificationError } from './auth.errors'
@@ -62,7 +63,7 @@ export async function resolveSession(
 
   const { rawToken, sessionId } = parseResult.value
   const sessionWithUserResult = await tryAsync(
-    () => deps.db.run(findSessionByIdWithUser(sessionId)),
+    () => legacyDb(deps.db).run(findSessionByIdWithUser(sessionId)),
     createDBError,
   )
 
@@ -86,7 +87,7 @@ export async function resolveSession(
 
   if (user.status !== 'active') {
     const deleteResult = await tryAsync(
-      () => deps.db.run(deleteSessionById(session.id)),
+      () => legacyDb(deps.db).run(deleteSessionById(session.id)),
       createDBError,
     )
 
@@ -114,7 +115,10 @@ export async function resolveSession(
   if (daysLeft <= 7) {
     const extendedExpiresAt = addSeconds(now(), SESSION_MAX_AGE_SECONDS)
 
-    tryAsync(() => deps.db.run(extendSession(session.id, extendedExpiresAt)), createDBError)
+    tryAsync(
+      () => legacyDb(deps.db).run(extendSession(session.id, extendedExpiresAt)),
+      createDBError,
+    )
       .then((res) => {
         if (res.ok) {
           logger.info(
@@ -227,7 +231,10 @@ export async function endSession(
 
   logger.info({ event: 'auth.logout.processing', session_id: sessionId }, 'Processing user logout')
 
-  const result = await tryAsync(() => deps.db.run(deleteSessionById(sessionId)), createDBError)
+  const result = await tryAsync(
+    () => legacyDb(deps.db).run(deleteSessionById(sessionId)),
+    createDBError,
+  )
 
   if (!result.ok) {
     logger.error(

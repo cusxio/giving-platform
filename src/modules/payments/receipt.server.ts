@@ -1,6 +1,7 @@
 import { notFound } from '@tanstack/react-router'
 
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import { toTransactionReceipt } from './receipt'
@@ -13,7 +14,7 @@ export interface ReceiptInput {
 
 /** Null when no transaction has the id. Anyone holding the id may read the receipt. */
 export async function loadReceipt(deps: Pick<Deps, 'db'>, transactionId: TransactionId) {
-  const row = await deps.db.run(findReceipt(transactionId))
+  const row = await legacyDb(deps.db).run(findReceipt(transactionId))
   return row === null ? null : toTransactionReceipt(row)
 }
 

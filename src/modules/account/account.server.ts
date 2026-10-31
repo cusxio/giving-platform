@@ -12,6 +12,7 @@ import type {
 } from '#/core/wire'
 import { hasGuestTransaction } from '#/modules/payments/server'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import type { UserSettings } from './user-settings.repository.server'
@@ -59,7 +60,10 @@ export async function loadCurrentUser(
   deps: Pick<Deps, 'db' | 'logger'>,
   userId: User['id'],
 ): Promise<CurrentUserResponse> {
-  const [user, settings] = await deps.db.batch([findUserById(userId), findSettingsByUserId(userId)])
+  const [user, settings] = await legacyDb(deps.db).batch([
+    findUserById(userId),
+    findSettingsByUserId(userId),
+  ])
 
   if (user === null) {
     deps.logger.warn(
@@ -80,7 +84,7 @@ export async function loadWelcome(
   deps: Pick<Deps, 'db'>,
   userId: User['id'],
 ): Promise<Welcome | null> {
-  const [user, guestTransactionExists] = await deps.db.batch([
+  const [user, guestTransactionExists] = await legacyDb(deps.db).batch([
     findUserById(userId),
     hasGuestTransaction(userId),
   ])
@@ -130,7 +134,7 @@ export async function updateProfile(
   )
 
   const userResult = await tryAsync(
-    () => deps.db.run(updateUserById(userId, parseResult.value)),
+    () => legacyDb(deps.db).run(updateUserById(userId, parseResult.value)),
     createDBError,
   )
 
@@ -172,7 +176,7 @@ export async function updatePrivacy(
   )
 
   const result = await tryAsync(
-    () => deps.db.run(upsertPrivacyMode(userId, privacyMode)),
+    () => legacyDb(deps.db).run(upsertPrivacyMode(userId, privacyMode)),
     createDBError,
   )
 

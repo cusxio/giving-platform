@@ -2,6 +2,7 @@ import { TZDate, now } from '#/core/date'
 import { createTransactionError } from '#/core/errors'
 import { tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 
 import type { EghlFinalStatus } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
@@ -46,7 +47,7 @@ export async function recordOutcome(
 
   return tryAsync(
     () =>
-      deps.db.transaction(async (tx) => {
+      legacyDb(deps.db).transaction(async (tx) => {
         const transaction = await tx.run(settleTransaction(PaymentID, status))
 
         if (transaction === null) {

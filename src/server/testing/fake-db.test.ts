@@ -1,11 +1,14 @@
+import { Result } from 'better-result'
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { defineQuery, firstOrNull, nothing } from '#/server/db.server'
+import { InfraError } from '#/server/infra-error'
 import type { User } from '#/server/schema.server'
 import { users } from '#/server/schema.server'
 
 import { createFakeDb } from './fake-db'
+import { errValue, okValue } from './result'
 
 const findUserByEmail = defineQuery(
   'users.findByEmail',
@@ -21,6 +24,10 @@ const activateUser = defineQuery(
   nothing,
 )
 
+function fail(): never {
+  throw new Error('connection terminated')
+}
+
 describe('a fake db', () => {
   it('answers a query with the impl registered for its factory', async () => {
     expect.hasAssertions()
@@ -30,11 +37,11 @@ describe('a fake db', () => {
       status: 'active',
     }))
 
-    await expect(db.run(findUserByEmail('a@give.test'))).resolves.toStrictEqual({
+    expect(okValue(await db.run(findUserByEmail('a@give.test')))).toStrictEqual({
       id: 11,
       status: 'active',
     })
-    await expect(db.run(findUserByEmail('long.name@give.test'))).resolves.toMatchObject({ id: 19 })
+    expect(okValue(await db.run(findUserByEmail('long.name@give.test')))).toMatchObject({ id: 19 })
   })
 
   it('rejects a query nobody answered, naming it', async () => {
@@ -43,6 +50,26 @@ describe('a fake db', () => {
     await expect(createFakeDb().run(activateUser(1, new Date(0)))).rejects.toThrow(
       'unexpected query users.activate',
     )
+  })
+
+  it('answers an impl that throws with an InfraError named after the query', async () => {
+    expect.hasAssertions()
+
+    const at = new Date(0)
+    const db = createFakeDb()
+      .on(findUserByEmail, () => null)
+      .on(activateUser, fail)
+
+    const alone = errValue(await db.run(activateUser(1, at)))
+    const batched = errValue(await db.batch([findUserByEmail('a@give.test'), activateUser(1, at)]))
+    const inTransaction = errValue(
+      await db.transaction((tx) => tx.batch([findUserByEmail('a@give.test'), activateUser(1, at)])),
+    )
+
+    expect(alone).toBeInstanceOf(InfraError)
+    expect(alone).toMatchObject({ cause: new Error('connection terminated'), op: 'users.activate' })
+    expect(batched).toMatchObject({ op: 'users.findByEmail + users.activate' })
+    expect(inTransaction).toMatchObject({ op: 'users.activate' })
   })
 
   it('records every call in order across run, batch and transaction', async () => {
@@ -55,9 +82,7 @@ describe('a fake db', () => {
 
     await db.run(findUserByEmail('a@give.test'))
     await db.batch([findUserByEmail('b@give.test'), activateUser(3, at)])
-    await db.transaction(async (tx) => {
-      await tx.run(activateUser(4, at))
-    })
+    await db.transaction((tx) => tx.run(activateUser(4, at)))
 
     expect(db.calls).toStrictEqual([
       { args: ['a@give.test'], name: 'users.findByEmail' },
@@ -79,7 +104,7 @@ describe('a fake db', () => {
     await db.batch([findUserByEmail('b@give.test'), activateUser(3, at)])
     await db.transaction(async (tx) => {
       await tx.batch([findUserByEmail('c@give.test'), activateUser(4, at)])
-      await tx.run(activateUser(5, at))
+      return tx.run(activateUser(5, at))
     })
 
     expect(db.roundTrips).toStrictEqual([
@@ -89,6 +114,19 @@ describe('a fake db', () => {
       ['users.activate'],
       ['users.activate'],
     ])
+  })
+
+  it('records whether each transaction committed or rolled back', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb()
+    const bug = new Error('a bug in the work')
+
+    await db.transaction(() => Promise.resolve(Result.ok(1)))
+    await db.transaction(() => Promise.resolve(Result.err(new Error('refused'))))
+    await expect(db.transaction(() => Promise.reject(bug))).rejects.toBe(bug)
+
+    expect(db.transactions).toStrictEqual(['commit', 'rollback', 'rollback'])
   })
 
   it('types each impl from the real query factory', () => {

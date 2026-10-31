@@ -1,6 +1,7 @@
 import { notFound } from '@tanstack/react-router'
 
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import {
@@ -20,7 +21,10 @@ export interface ReportsInput {
 }
 
 export async function loadInsights(deps: Pick<Deps, 'db'>): Promise<Insights> {
-  const [summary, weekly] = await deps.db.batch([insightsSummary(), weeklyCumulativeTotalsByYear()])
+  const [summary, weekly] = await legacyDb(deps.db).batch([
+    insightsSummary(),
+    weeklyCumulativeTotalsByYear(),
+  ])
   return summarizeInsights(summary, weekly)
 }
 
@@ -28,7 +32,7 @@ export async function loadReport(
   deps: Pick<Deps, 'db'>,
   input: { readonly endExclusive: Date; readonly start: Date },
 ) {
-  return toReportRows(await deps.db.run(fundTotals(input)))
+  return toReportRows(await legacyDb(deps.db).run(fundTotals(input)))
 }
 
 // Transport adapters. Phase 2 replaces the role guard with `requireRole('su')` middleware.

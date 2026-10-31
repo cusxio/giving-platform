@@ -4,6 +4,7 @@ import { assertExhaustive } from '#/core/assert-exhaustive'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 
 import { finalStatusOf, inboundActionOf } from './eghl.outcome'
 import type { EghlPaymentResponse } from './eghl.wire'
@@ -43,7 +44,7 @@ async function confirmByQuery(
 ) {
   const { eghl, logger } = deps
   const amountResult = await tryAsync(
-    () => deps.db.run(findPendingAmountInCents(transactionId)),
+    () => legacyDb(deps.db).run(findPendingAmountInCents(transactionId)),
     createDBError,
   )
   if (!amountResult.ok) {

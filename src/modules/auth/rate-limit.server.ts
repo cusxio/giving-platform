@@ -4,6 +4,7 @@ import { createDBError } from '#/core/errors'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 
 import type { RateLimitExceededError } from './auth.errors'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
@@ -53,7 +54,7 @@ export async function resetOtpVerify(
   email: string,
 ): Promise<Result<void, DBQueryErrorResult>> {
   const result = await tryAsync(
-    () => deps.db.run(resetAttempts(email.toLowerCase(), 'otp_verify')),
+    () => legacyDb(deps.db).run(resetAttempts(email.toLowerCase(), 'otp_verify')),
     createDBError,
   )
 
@@ -69,7 +70,7 @@ async function checkRateLimit(
 ): Promise<RateLimitResult> {
   const currentTime = now()
   const result = await tryAsync(
-    () => deps.db.run(recordAttempt(identifier, action, windowSeconds, currentTime)),
+    () => legacyDb(deps.db).run(recordAttempt(identifier, action, windowSeconds, currentTime)),
     createDBError,
   )
 

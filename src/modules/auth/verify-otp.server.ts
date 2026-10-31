@@ -18,6 +18,7 @@ import type { User } from '#/modules/account/server'
 import { activateUser, findUserByEmail } from '#/modules/account/server'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { Deps } from '#/server/deps.server'
+import { legacyDb } from '#/server/legacy-db.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 import type { AuthValidateOtpError } from './auth.errors'
@@ -56,7 +57,7 @@ export async function validateOtp(
   otp: string,
   mode: 'login' | 'signup',
 ): Promise<Result<string, AuthValidateOtpError>> {
-  const userRes = await tryAsync(() => deps.db.run(findUserByEmail(email)), createDBError)
+  const userRes = await tryAsync(() => legacyDb(deps.db).run(findUserByEmail(email)), createDBError)
 
   if (!userRes.ok) {
     return userRes
@@ -68,7 +69,7 @@ export async function validateOtp(
     return err({ type: 'InvalidRequestError' })
   }
 
-  const tokenRes = await tryAsync(() => deps.db.run(findToken(user.id)), createDBError)
+  const tokenRes = await tryAsync(() => legacyDb(deps.db).run(findToken(user.id)), createDBError)
 
   if (!tokenRes.ok) {
     return tokenRes
@@ -92,7 +93,7 @@ export async function validateOtp(
 
   // The claim is a compare-and-set, so two concurrent requests cannot both use one code.
   const claimResult = await tryAsync(
-    () => deps.db.run(claimTokenIfUnused(token.id, token.tokenHash)),
+    () => legacyDb(deps.db).run(claimTokenIfUnused(token.id, token.tokenHash)),
     createDBError,
   )
 
@@ -112,8 +113,8 @@ export async function validateOtp(
   const batchResult = await tryAsync(async () => {
     const [session] =
       mode === 'signup'
-        ? await deps.db.batch([newSession, activateUser(user.id)])
-        : await deps.db.batch([newSession])
+        ? await legacyDb(deps.db).batch([newSession, activateUser(user.id)])
+        : await legacyDb(deps.db).batch([newSession])
     return session
   }, createDBError)
 
