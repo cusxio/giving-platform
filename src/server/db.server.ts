@@ -76,15 +76,6 @@ export const rows = <R>(raw: R): R => raw
 
 export const firstOrNull = <R>(raw: readonly R[]): R | null => raw[0] ?? null
 
-/** For statements that always return a row, such as `insert ... returning`. */
-export function first<R>(raw: readonly R[]): R {
-  const [row] = raw
-  if (row === undefined) {
-    throw new Error('Expected the statement to return a row, but it returned none')
-  }
-  return row
-}
-
 export const nothing = (): undefined => undefined
 
 /**

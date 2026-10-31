@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/neon-http'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type { Db, QueryResult, Sql } from './db.server'
-import { createDb, defineQuery, first, firstOrNull, nothing, rows } from './db.server'
+import { createDb, defineQuery, firstOrNull, nothing, rows } from './db.server'
 import { InfraError } from './infra-error'
 import type { DBPool } from './neon.server'
 import type { User } from './schema.server'
@@ -33,6 +33,15 @@ const fundNames = defineQuery(
       .where(inArray(funds.id, [...ids])),
   rows,
 )
+
+/** A decoder that throws, as a decoder may: the port must turn it into an `InfraError`. */
+function first<R>(raw: readonly R[]): R {
+  const [row] = raw
+  if (row === undefined) {
+    throw new Error('Expected the statement to return a row, but it returned none')
+  }
+  return row
+}
 
 const insertPending = defineQuery(
   'transactions.insertPending',
@@ -80,12 +89,6 @@ describe('decoders', () => {
 
     expect(findUserByEmail('a').decode([])).toBeNull()
     expect(insertPending(1, 100).decode([row, { id: 'T2' }])).toBe(row)
-  })
-
-  it('first rejects a statement that returned nothing', () => {
-    expect.hasAssertions()
-
-    expect(() => insertPending(1, 100).decode([])).toThrow('returned none')
   })
 
   it('rows passes rows through unchanged', () => {
