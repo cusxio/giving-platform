@@ -94,6 +94,35 @@ describe('a mutation wire', () => {
 
     await expect(bare({ context: testContext(null) })).resolves.toStrictEqual({ type: 'SUCCESS' })
   })
+
+  it('answers AUTH_ERROR from a row, and no other value', async () => {
+    expect.hasAssertions()
+
+    const legacy = defineMutation({
+      auth: anyone,
+      event: 'x',
+      input: noInput,
+      run: load,
+      wire: { Missing: () => returning({ type: 'AUTH_ERROR' }) },
+    })
+    expectTypeOf<Awaited<ReturnType<typeof legacy>>>().toEqualTypeOf<
+      ServerErrorResponse | { readonly type: 'AUTH_ERROR' } | { type: 'SUCCESS'; value: string }
+    >()
+
+    defineMutation({
+      auth: anyone,
+      event: 'x',
+      input: noInput,
+      run: load,
+      // @ts-expect-error: a mutation answers a domain error with a code or AUTH_ERROR
+      wire: { Missing: () => returning('v') },
+    })
+
+    await expect(legacy({ context: testContext(null) })).resolves.toStrictEqual({
+      type: 'SUCCESS',
+      value: 'v',
+    })
+  })
 })
 
 describe('a read wire', () => {

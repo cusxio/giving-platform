@@ -39,7 +39,10 @@ interface Thrown {
   readonly log?: Log
   readonly thrown: () => never
 }
-/** A read's answer to a domain error: this value, as if the read succeeded. */
+/**
+ * A read's answer to a domain error: this value, as if the read succeeded. A mutation may answer
+ * only `AUTH_ERROR` this way, for `getCurrentUser` until Phase 4 retires its envelope.
+ */
 interface Returned<V> {
   readonly kind: 'return'
   readonly log?: Log
@@ -93,8 +96,9 @@ type CodesOf<W> = Outcomes<W> extends infer R ? (R extends Business<infer K> ? K
 type ValuesOf<W> = Outcomes<W> extends infer R ? (R extends Returned<infer V> ? V : never) : never
 
 /** Derived from the spec: each member exists only if the procedure can produce it. */
-type MutationWire<T, I, PE, K extends string> =
+type MutationWire<T, I, PE, K extends string, V> =
   | (IsNever<K> extends true ? never : BusinessErrorResponse<K>)
+  | V
   | (IsNever<Extract<PE, Forbidden | SignedOut>> extends true
       ? never
       : AuthErrorResponse<AuthMessage>)
@@ -124,7 +128,7 @@ interface MutationSpec<C, PE extends Refusal, I, T, E extends Tagged, W> extends
   T,
   E
 > {
-  readonly wire: W & Rows<E, I, Business<string>> & NoExtraRows<W, E>
+  readonly wire: W & Rows<E, I, Business<string> | Returned<AuthErrorResponse>> & NoExtraRows<W, E>
 }
 
 interface ReadSpec<C, PE extends Refusal, I, T, E extends Tagged, W> extends Spec<C, PE, I, T, E> {
@@ -310,15 +314,17 @@ function define(kind: Kind, spec: AnySpec): Action<unknown> {
 /**
  * Turns a `Result` workflow into a server-function answer, in the order policy, parse, run.
  * A refused policy is `AUTH_ERROR` (a signed-in caller of `anonymousOnly` is redirected home),
- * invalid input `VALIDATION_ERROR`, a domain error its `wire` row's `BUSINESS_ERROR`, and an
+ * invalid input `VALIDATION_ERROR`, a domain error its `wire` row's answer, and an
  * `InfraError` `SERVER_ERROR`, logged once as `<event>.failed`. A throw is a defect: logged as
  * `<event>.defect`, and the client gets a generic error. A router redirect or `notFound()` passes
  * through.
  */
 export function defineMutation<C, PE extends Refusal, I, T, E extends Tagged, W>(
   spec: MutationSpec<C, PE, I, T, E, W>,
-): Action<MutationWire<T, I, PE, CodesOf<W>>> {
-  return define(MUTATION, spec as unknown as AnySpec) as Action<MutationWire<T, I, PE, CodesOf<W>>>
+): Action<MutationWire<T, I, PE, CodesOf<W>, ValuesOf<W>>> {
+  return define(MUTATION, spec as unknown as AnySpec) as Action<
+    MutationWire<T, I, PE, CodesOf<W>, ValuesOf<W>>
+  >
 }
 
 /**
