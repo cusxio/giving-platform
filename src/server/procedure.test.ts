@@ -244,9 +244,42 @@ describe('a mutation', () => {
       run: () => Promise.resolve(Result.err(noRow)),
       wire: {},
     })
-    const { events } = await call(action, null)
+    const { events, span } = await call(action, null)
 
     expect(events).toMatchObject([{ 'error.type': 'no-row', event: 'm.x.failed', op: 'q.insert' }])
+    expect(events[0]).not.toHaveProperty('err')
+    expect(span.events).toMatchObject([
+      {
+        attributes: { 'exception.message': 'q.insert returned no row', 'exception.type': 'no-row' },
+        name: 'exception',
+      },
+    ])
+  })
+
+  it('labels a system error by its code, without the address in its message', async () => {
+    expect.hasAssertions()
+
+    const refused = Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:5432'), {
+      code: 'ECONNREFUSED',
+    })
+    const action = defineMutation({
+      auth: anyone,
+      event: 'm.x',
+      input: noInput,
+      run: () => Promise.resolve(Result.err(infra('q.find', refused))),
+      wire: {},
+    })
+    const { events, span } = await call(action, null)
+
+    expect(events).toMatchObject([
+      {
+        'error.type': 'ECONNREFUSED',
+        err: { code: 'ECONNREFUSED', message: 'Error ECONNREFUSED', type: 'Error' },
+        event: 'm.x.failed',
+      },
+    ])
+    expect(span.attributes['error.type']).toBe('ECONNREFUSED')
+    expect(JSON.stringify(events)).not.toContain('10.0.0.5')
   })
 
   it('leaves the request span alone on every other outcome', async () => {

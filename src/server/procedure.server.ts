@@ -209,6 +209,10 @@ function loggable(error: unknown, seen = new WeakSet<Error>()): Loggable {
   })
 }
 
+/** The class, or for a plain `Error` with a code, such as Node's `ECONNREFUSED`, the code. */
+const typeOf = (failure: Loggable): string =>
+  failure.name === 'Error' && failure.code !== undefined ? failure.code : failure.name
+
 /** A `SERVER_ERROR` envelope is an HTTP 200, so the request span would otherwise look healthy. */
 function markSpanFailed(failure: Loggable, type: string, message: string) {
   const span = trace.getActiveSpan()
@@ -255,20 +259,20 @@ async function settle(kind: Kind, spec: AnySpec, { context, data }: Invocation):
 
   const { error } = result
   if (InfraError.is(error)) {
-    const cause = loggable(error.cause)
     // `no-row` has no cause to name: the statement succeeded and returned nothing.
-    const type = error.reason === 'no-row' ? error.reason : cause.name
+    const cause = error.reason === 'no-row' ? undefined : loggable(error.cause)
+    const type = cause === undefined ? error.reason : typeOf(cause)
     logger.error(
       {
         'error.type': type,
-        err: cause,
+        ...(cause !== undefined && { err: cause }),
         event: `${event}.failed`,
         op: error.op,
         ...(error.rejected !== undefined && { rejected: loggable(error.rejected).name }),
       },
       error.message,
     )
-    markSpanFailed(cause, type, error.message)
+    markSpanFailed(cause ?? { message: error.message, name: type }, type, error.message)
     return kind.serverError()
   }
 
@@ -289,11 +293,12 @@ function define(kind: Kind, spec: AnySpec): Action<unknown> {
         throw error
       }
       const defect = loggable(error)
+      const type = typeOf(defect)
       invocation.context.deps.logger.error(
-        { 'error.type': defect.name, err: defect, event: `${spec.event}.defect` },
+        { 'error.type': type, err: defect, event: `${spec.event}.defect` },
         'Unhandled defect',
       )
-      markSpanFailed(defect, defect.name, 'Unhandled defect')
+      markSpanFailed(defect, type, 'Unhandled defect')
       // The client would get every own property of the original, its stack and cause included.
       // oxlint-disable-next-line preserve-caught-error
       throw new Error('Internal Server Error')
