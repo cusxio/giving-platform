@@ -1,12 +1,12 @@
-import type { Transaction } from '#/server/schema.server'
+import type { TransactionStatus as Status } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 interface TransactionStatusProps {
   className?: string
-  status: Transaction['status']
+  status: Status
 }
 
-export const transactionStatusStyles: Record<Transaction['status'], string> = {
+export const transactionStatusStyles: Record<Status, string> = {
   failed: cx('bg-base-error text-fg-error'),
   pending: cx('bg-base-warning text-fg-warning'),
   success: cx('bg-base-success text-fg-success'),

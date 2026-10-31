@@ -57,8 +57,6 @@ const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS
 // They keep only the module-entry rules. Each Phase 1 step deletes the entries it fixes, and
 // the list must end empty.
 const LEGACY_FILES: string[] = [
-  'src/components/transaction-icon-status.tsx',
-  'src/components/transaction-status.tsx',
   'src/core/errors.ts',
   'src/features/giving/payment.service.ts',
   'src/features/payment-gateway/eghl.service.test.ts',
