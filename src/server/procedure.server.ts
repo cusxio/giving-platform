@@ -227,14 +227,16 @@ function loggable(error: unknown, seen = new WeakSet<Error>()): Loggable {
   })
 }
 
+/** Classes that say only that something failed, and keep the specific failure in `code`. */
+const GENERIC = new Set(['Error', 'NeonDbError', 'error'])
+
 /**
  * The class, or the code when the class says nothing: a plain `Error` with a code, such as Node's
- * `ECONNREFUSED`, or the pg driver's `error`, whose code is the SQLSTATE.
+ * `ECONNREFUSED`, or a database error with its SQLSTATE, as the pg driver's `error` and neon's
+ * HTTP `NeonDbError` carry it.
  */
 const typeOf = (failure: Loggable): string =>
-  (failure.name === 'Error' || failure.name === 'error') && failure.code !== undefined
-    ? failure.code
-    : failure.name
+  GENERIC.has(failure.name) && failure.code !== undefined ? failure.code : failure.name
 
 /** A `SERVER_ERROR` envelope is an HTTP 200, so the request span would otherwise look healthy. */
 function markSpanFailed(failure: Loggable, type: string, message: string) {

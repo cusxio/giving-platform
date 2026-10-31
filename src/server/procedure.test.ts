@@ -304,13 +304,14 @@ describe('a mutation', () => {
     expect(JSON.stringify(events)).not.toContain('10.0.0.5')
   })
 
-  it('labels a pool driver error, whose name is the generic error, by its SQLSTATE', async () => {
+  // The pg driver names every server error `error`, neon's HTTP driver `NeonDbError`, and both put
+  // the SQLSTATE in `code`.
+  it.each(['error', 'NeonDbError'])('labels a %s by its SQLSTATE', async (name) => {
     expect.hasAssertions()
 
-    // The pg driver names every server error `error` and puts the SQLSTATE in `code`.
     const duplicate = Object.assign(new Error('duplicate key (email)=(donor@give.test)'), {
       code: '23505',
-      name: 'error',
+      name,
     })
     const action = defineMutation({
       auth: anyone,
@@ -322,7 +323,7 @@ describe('a mutation', () => {
     const { events, span } = await call(action, null)
 
     expect(events).toMatchObject([
-      { 'error.type': '23505', err: { code: '23505', type: 'error' }, event: 'm.x.failed' },
+      { 'error.type': '23505', err: { code: '23505', type: name }, event: 'm.x.failed' },
     ])
     expect(span.attributes['error.type']).toBe('23505')
     expect(JSON.stringify(events)).not.toContain('donor@give.test')
@@ -375,7 +376,7 @@ describe('a logged failure', () => {
 
     expect(events).toMatchObject([
       {
-        'error.type': 'NeonDbError',
+        'error.type': '23505',
         err: { code: '23505', query: statement, type: 'NeonDbError' },
         event: 'm.x.failed',
         op: 'users.insert',
