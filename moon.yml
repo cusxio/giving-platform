@@ -114,6 +114,7 @@ tasks:
       - /knip.config.ts
       - /package.json
       - /moon.yml
+      - /.moon/**/*
 
   # ── Build ──────────────────────────────────────────────────
 
