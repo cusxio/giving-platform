@@ -88,6 +88,15 @@ type NoExtraRows<W, E extends Tagged> = {
   ]: `no ${K & string} row: the workflow cannot raise it`
 }
 
+/** A mutation's `returning` row answers `AUTH_ERROR` and no other field, as the wire type says. */
+type OnlyAuthError<W> = {
+  readonly [K in Exclude<keyof W, never>]: W[K] extends (...args: never[]) => Returned<infer V>
+    ? [Exclude<keyof V, keyof AuthErrorResponse>] extends [never]
+      ? W[K]
+      : `the ${K & string} row may answer only { type: 'AUTH_ERROR' }`
+    : W[K]
+}
+
 type AuthMessage = 'You must be logged in to continue.'
 type IsNever<T> = [T] extends [never] ? true : false
 type Outcomes<W> = {
@@ -129,7 +138,10 @@ interface MutationSpec<C, PE extends Refusal, I, T, E extends Tagged, W> extends
   T,
   E
 > {
-  readonly wire: W & Rows<E, I, Business<string> | Returned<AuthErrorResponse>> & NoExtraRows<W, E>
+  readonly wire: W &
+    Rows<E, I, Business<string> | Returned<AuthErrorResponse>> &
+    NoExtraRows<W, E> &
+    OnlyAuthError<W>
 }
 
 interface ReadSpec<C, PE extends Refusal, I, T, E extends Tagged, W> extends Spec<C, PE, I, T, E> {

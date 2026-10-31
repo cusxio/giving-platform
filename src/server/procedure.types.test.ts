@@ -117,6 +117,14 @@ describe('a mutation wire', () => {
       // @ts-expect-error: a mutation answers a domain error with a code or AUTH_ERROR
       wire: { Missing: () => returning('v') },
     })
+    defineMutation({
+      auth: anyone,
+      event: 'x',
+      input: noInput,
+      run: load,
+      // @ts-expect-error: an AUTH_ERROR row carries no other field
+      wire: { Missing: () => returning({ type: 'AUTH_ERROR', userId: 1 }) },
+    })
 
     await expect(legacy({ context: testContext(null) })).resolves.toStrictEqual({
       type: 'SUCCESS',
