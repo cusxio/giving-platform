@@ -309,7 +309,11 @@ describe('requesting a code', () => {
     const { db, deps } = setup('active')
     await request(deps, { email: '  Donor@Example.COM ', mode: 'login' })
 
-    expect(db.calls.slice(0, 2)).toStrictEqual([
+    expect(db.calls.slice(0, 3)).toStrictEqual([
+      {
+        args: [`${EMAIL}|ip:unknown`, 'otp_request', 900, expect.any(Date)],
+        name: 'auth.recordAttempt',
+      },
       { args: [EMAIL, 'otp_request', 900, expect.any(Date)], name: 'auth.recordAttempt' },
       { args: [EMAIL], name: 'account.findUserByEmail' },
     ])
@@ -360,7 +364,7 @@ describe('requesting a code', () => {
     })
   })
 
-  it('counts each request against its address and its email', async () => {
+  it('counts each request against its address, the email from that address, and the email', async () => {
     expect.hasAssertions()
 
     const { attempts, deps, events, sentEmails } = setup('active')
@@ -370,6 +374,7 @@ describe('requesting a code', () => {
     expect(sentEmails).toHaveLength(1)
     expect(Object.fromEntries(attempts)).toStrictEqual({
       'otp_request:donor@example.com': 1,
+      'otp_request:donor@example.com|ip:203.0.113.9': 1,
       'otp_request:ip:203.0.113.9': 1,
     })
     expect(events.find((e) => e.event === 'auth.request_otp.rate_limited')).toBeUndefined()
@@ -512,8 +517,9 @@ describe('verifying a code', () => {
     const { attempts, calls, deps, otp } = await issued('active', 'login')
     await verify(deps, { email: EMAIL, mode: 'login', otp })
 
-    expect(attempts.has(`otp_verify:${EMAIL}`)).toBe(false)
+    expect(attempts.has(`otp_verify:${EMAIL}|ip:unknown`)).toBe(false)
     expect(calls().map((c) => c.name)).toStrictEqual([
+      'auth.recordAttempt',
       'auth.recordAttempt',
       'account.findUserByEmail',
       'auth.findToken',
@@ -577,6 +583,7 @@ describe('verifying a code', () => {
       expect(io.setCookies).toStrictEqual([])
       expect(tokens[0]?.usedAt).toBeNull()
       expect(calls().map((c) => c.name)).toStrictEqual([
+        'auth.recordAttempt',
         'auth.recordAttempt',
         'account.findUserByEmail',
       ])
@@ -685,7 +692,7 @@ describe('verifying a code', () => {
     })
   })
 
-  it('resets only the email count after a verification from an address', async () => {
+  it('resets only the count of the email from the verifying address', async () => {
     expect.hasAssertions()
 
     const { attempts, deps, otp } = await issued('active', 'login')
@@ -693,7 +700,8 @@ describe('verifying a code', () => {
 
     await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
     expect(attempts.get('otp_verify:ip:203.0.113.9')).toBe(1)
-    expect(attempts.has(`otp_verify:${EMAIL}`)).toBe(false)
+    expect(attempts.get(`otp_verify:${EMAIL}`)).toBe(1)
+    expect(attempts.has(`otp_verify:${EMAIL}|ip:203.0.113.9`)).toBe(false)
   })
 
   it('rejects a code that is not six digits without touching the database', async () => {
@@ -788,5 +796,73 @@ describe('verifying a code', () => {
       'auth.verify_otp.success',
     ])
     expect(events[1]).toMatchObject({ email: EMAIL, level: 50, op: 'auth.resetAttempts' })
+  })
+})
+
+const tooMany = (message: string) => ({
+  error: { code: 'RATE_LIMIT_EXCEEDED', message },
+  type: 'BUSINESS_ERROR',
+})
+
+describe('one address against another', () => {
+  const ATTACKER = '203.0.113.66'
+  const VICTIM = '198.51.100.20'
+
+  it('cannot keep the email from receiving a code on another address', async () => {
+    expect.hasAssertions()
+
+    const { deps, sentEmails } = setup('active')
+    fromAddress(ATTACKER)
+    const answers = []
+    for (let i = 0; i < 20; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- requests arrive one after another
+      answers.push(await request(deps, { email: EMAIL, mode: 'login' }))
+    }
+    fromAddress(VICTIM)
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(success)
+    expect(answers.filter((a) => a.type === 'SUCCESS')).toHaveLength(5)
+    expect(answers.at(-1)).toStrictEqual(
+      tooMany('Too many requests. Please try again in 15 minutes.'),
+    )
+    expect(sentEmails).toHaveLength(6)
+  })
+
+  it('cannot keep the email from verifying its code on another address', async () => {
+    expect.hasAssertions()
+
+    const { deps, otp } = await issued('active', 'login')
+    fromAddress(ATTACKER)
+    let last: unknown
+    for (let i = 0; i < 40; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- attempts arrive one after another
+      last = await verify(deps, { email: EMAIL, mode: 'login', otp: '000000' })
+    }
+    fromAddress(VICTIM)
+
+    expect(last).toStrictEqual(tooMany('Too many attempts. Please try again in 5 minutes.'))
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    expect(io.setCookies).toHaveLength(1)
+  })
+
+  it('caps the codes sent to one email across many addresses at fifteen', async () => {
+    expect.hasAssertions()
+
+    const { deps, events, sentEmails } = setup('active')
+    for (const address of ['203.0.113.1', '203.0.113.2', '203.0.113.3']) {
+      fromAddress(address)
+      for (let i = 0; i < 5; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- requests arrive one after another
+        await request(deps, { email: EMAIL, mode: 'login' })
+      }
+    }
+    fromAddress('203.0.113.4')
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(
+      tooMany('Too many requests. Please try again in 15 minutes.'),
+    )
+    expect(sentEmails).toHaveLength(15)
+    expect(events.at(-1)).toMatchObject({ event: 'auth.request_otp.rate_limited' })
+    expect(events.at(-1)).not.toHaveProperty('ip')
   })
 })

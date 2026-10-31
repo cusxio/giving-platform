@@ -93,7 +93,7 @@ function verifyCode(deps: VerifyDeps, input: VerifyOtpInput, ip: null | string) 
 
     const cookie = yield* Result.await(validateOtp(deps, input))
 
-    const reset = await resetOtpVerify(deps, email)
+    const reset = await resetOtpVerify(deps, email, ip)
     if (reset.isErr()) {
       logInfraEvent(deps.logger, reset.error, {
         event: 'auth.verify_otp.rate_limit_reset_failed',

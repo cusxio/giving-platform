@@ -14,18 +14,28 @@ interface Limit {
   readonly windowSeconds: number
 }
 
-const PER_EMAIL: Record<Action, Limit> = {
-  otp_request: { maxAttempts: 5, windowSeconds: 15 * 60 },
-  otp_verify: { maxAttempts: 10, windowSeconds: 5 * 60 },
-}
-
 /**
- * So one address cannot work through many emails. Supabase Auth's per-IP defaults for its OTP and
- * verify endpoints, which leave room for a congregation sharing one network.
+ * Each attempt counts against three keys in turn, and the first one over its limit refuses it:
+ *
+ * - `address`: the client address across all emails, so one address cannot work through many
+ *   emails. Supabase Auth's per-IP defaults, which leave room for a congregation on one network.
+ * - `client`: the email from one address. The strict limit, so a client that floods an inbox or
+ *   guesses codes stops itself without locking out the same email on another address.
+ * - `email`: the email across all addresses, so many addresses together cannot flood one inbox
+ *   or guess one code. It is three times the client limit: one address fills at most two client
+ *   windows inside one email window, so it alone can never use up the email's allowance.
  */
-const PER_ADDRESS: Record<Action, Limit> = {
-  otp_request: { maxAttempts: 30, windowSeconds: 5 * 60 },
-  otp_verify: { maxAttempts: 30, windowSeconds: 5 * 60 },
+const LIMITS: Record<Action, Readonly<Record<'address' | 'client' | 'email', Limit>>> = {
+  otp_request: {
+    address: { maxAttempts: 30, windowSeconds: 5 * 60 },
+    client: { maxAttempts: 5, windowSeconds: 15 * 60 },
+    email: { maxAttempts: 15, windowSeconds: 15 * 60 },
+  },
+  otp_verify: {
+    address: { maxAttempts: 30, windowSeconds: 5 * 60 },
+    client: { maxAttempts: 10, windowSeconds: 5 * 60 },
+    email: { maxAttempts: 30, windowSeconds: 5 * 60 },
+  },
 }
 
 type Checked = Promise<Result<void, InfraError | RateLimitExceededError>>
@@ -53,34 +63,45 @@ async function count(
   })
 }
 
+/** The key of an email from one address. Requests with no address share one key per email. */
+const clientKey = (email: string, ip: null | string) =>
+  `${email.toLowerCase()}|ip:${ip ?? 'unknown'}`
+
 /**
- * Counts the attempt against the client address, when there is one, and then against the email.
- * An address over its limit is refused before the email's count moves.
+ * Counts the attempt against the address, the email from that address, and the email, in that
+ * order. A refused count leaves the later ones unmoved, so a client over its own limit adds
+ * nothing to the email's.
  */
 function check(deps: Pick<Deps, 'db'>, action: Action, email: string, ip: null | string): Checked {
-  return Result.gen(async function* limits() {
+  const limits = LIMITS[action]
+  return Result.gen(async function* limited() {
     if (ip !== null) {
-      yield* Result.await(count(deps, `ip:${ip}`, action, PER_ADDRESS[action], ip))
+      yield* Result.await(count(deps, `ip:${ip}`, action, limits.address, ip))
     }
-    yield* Result.await(count(deps, email.toLowerCase(), action, PER_EMAIL[action], null))
+    yield* Result.await(count(deps, clientKey(email, ip), action, limits.client, ip))
+    yield* Result.await(count(deps, email.toLowerCase(), action, limits.email, null))
     return Result.ok()
   })
 }
 
-/** Counts an OTP request and refuses it past the address's or the email's limit. */
+/** Counts an OTP request and refuses it past the address's, the client's or the email's limit. */
 export function checkOtpRequest(deps: Pick<Deps, 'db'>, email: string, ip: null | string): Checked {
   return check(deps, 'otp_request', email, ip)
 }
 
-/** Counts an OTP verification attempt and refuses it past the address's or the email's limit. */
+/** Counts an OTP verification and refuses it past the address's, the client's or the email's limit. */
 export function checkOtpVerify(deps: Pick<Deps, 'db'>, email: string, ip: null | string): Checked {
   return check(deps, 'otp_verify', email, ip)
 }
 
-/** Clears the verification count after a successful verification. */
+/**
+ * Clears the client's verification count after it verified. The email's count stays, so a
+ * success on one address does not clear what other addresses spent guessing.
+ */
 export function resetOtpVerify(
   deps: Pick<Deps, 'db'>,
   email: string,
+  ip: null | string,
 ): Promise<Result<void, InfraError>> {
-  return deps.db.run(resetAttempts(email.toLowerCase(), 'otp_verify'))
+  return deps.db.run(resetAttempts(clientKey(email, ip), 'otp_verify'))
 }
