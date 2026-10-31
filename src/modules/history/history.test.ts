@@ -2,6 +2,7 @@ import { isNotFound, isRedirect } from '@tanstack/react-router'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type { QueryResult } from '#/server/db.server'
+import { createDriverDb } from '#/server/testing/driver-db'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { errValue, okValue } from '#/server/testing/result'
@@ -92,6 +93,28 @@ describe('a transaction detail', () => {
       okValue(await findOwnTransaction({ db }, { transactionId: transaction.id, viewerId: 2 })),
     ).toStrictEqual([transaction, items])
     expect(db.roundTrips).toStrictEqual([[transactionById.queryName, transactionItemsOf.queryName]])
+  })
+
+  it('lists the fund rows in the order they were added', async () => {
+    expect.hasAssertions()
+
+    const statements: { params: unknown[]; sql: string }[] = []
+    const db = createDriverDb((sql, params) => {
+      statements.push({ params, sql })
+      return Promise.resolve({ rowCount: 0, rows: [] })
+    })
+
+    expect(okValue(await db.run(transactionItemsOf(transaction.id)))).toStrictEqual([])
+    expect(statements).toStrictEqual([
+      {
+        params: [transaction.id],
+        sql: [
+          'select "transaction_items"."amount", "funds"."name" from "transaction_items"',
+          'inner join "funds" on "funds"."id" = "transaction_items"."fund_id"',
+          'where "transaction_items"."transaction_id" = $1 order by "transaction_items"."id" asc',
+        ].join(' '),
+      },
+    ])
   })
 
   it.each([
