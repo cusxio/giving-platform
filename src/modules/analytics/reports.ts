@@ -1,11 +1,12 @@
 import { centsToRinggit } from '#/core/money'
-import type { QueryResult } from '#/server/db.server'
 
-import type { fundTotals } from './analytics.repository.server'
+interface FundTotalRow<CreatedAs> {
+  readonly createdAs: CreatedAs
+  readonly fundName: string
+  readonly totalAmount: number
+}
 
-export type ReportRow = ReturnType<typeof toReportRows>[number]
-
-export function toReportRows(rows: QueryResult<typeof fundTotals>) {
+export function toReportRows<CreatedAs>(rows: readonly FundTotalRow<CreatedAs>[]) {
   return rows.map((row) => ({
     createdAs: row.createdAs,
     fundName: row.fundName,

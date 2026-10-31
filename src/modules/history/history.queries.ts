@@ -6,10 +6,11 @@ import {
   getTransaction,
   getTransactions,
 } from './history.functions'
-import type { Donor, TransactionId } from './history.repository.server'
-import type { OverviewYear } from './overview'
+import type { OverviewInput, TransactionInput } from './history.server'
 
-export function availableYearsQuery(userId: Donor['id'], journey: Donor['journey']) {
+type Journey = OverviewInput['journey']
+
+export function availableYearsQuery(userId: number, journey: Journey) {
   return queryOptions({
     queryKey: ['overview-years', journey, userId],
     queryFn: () => getAvailableYears({ data: { journey } }),
@@ -18,21 +19,21 @@ export function availableYearsQuery(userId: Donor['id'], journey: Donor['journey
   })
 }
 
-export function overviewQuery(userId: Donor['id'], journey: Donor['journey'], year: OverviewYear) {
+export function overviewQuery(userId: number, journey: Journey, year: OverviewInput['year']) {
   return queryOptions({
     queryFn: () => getOverview({ data: { journey, year } }),
     queryKey: ['overview', { journey, userId, year }],
   })
 }
 
-export function transactionsQuery(userId: Donor['id'], journey: Donor['journey'], page = 1) {
+export function transactionsQuery(userId: number, journey: Journey, page = 1) {
   return queryOptions({
     queryFn: () => getTransactions({ data: { journey, page } }),
     queryKey: ['transactions', { journey, page, userId }],
   })
 }
 
-export function transactionQuery(transactionId: TransactionId) {
+export function transactionQuery(transactionId: TransactionInput['transactionId']) {
   return queryOptions({
     queryFn: () => getTransaction({ data: { transactionId } }),
     queryKey: ['transaction', { transactionId }],

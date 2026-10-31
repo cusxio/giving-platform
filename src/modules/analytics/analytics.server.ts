@@ -10,7 +10,6 @@ import {
 } from './analytics.repository.server'
 import type { Insights } from './insights'
 import { summarizeInsights } from './insights'
-import type { ReportRow } from './reports'
 import { toReportRows } from './reports'
 
 type Ctx = Pick<RequestContext, 'deps' | 'user'>
@@ -28,7 +27,7 @@ async function loadInsights(deps: Pick<Deps, 'db'>): Promise<Insights> {
 async function loadReport(
   deps: Pick<Deps, 'db'>,
   input: { readonly endExclusive: Date; readonly start: Date },
-): Promise<ReportRow[]> {
+) {
   return toReportRows(await deps.db.run(fundTotals(input)))
 }
 
@@ -41,7 +40,7 @@ export async function getInsightsProcedure(context: Ctx): Promise<Insights> {
   return loadInsights(context.deps)
 }
 
-export async function getReportsProcedure(context: Ctx, data: ReportsInput): Promise<ReportRow[]> {
+export async function getReportsProcedure(context: Ctx, data: ReportsInput) {
   const { startDateUTC, endDateUTCExclusive } = data
   if (context.user?.role !== 'su') {
     throw notFound()

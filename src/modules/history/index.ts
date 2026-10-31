@@ -4,5 +4,4 @@ export {
   transactionQuery,
   transactionsQuery,
 } from './history.queries'
-export type { Overview } from './overview'
-export type { TransactionRow } from './transactions-page'
+export type { Overview, TransactionRow } from './history.types'

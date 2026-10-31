@@ -15,9 +15,8 @@ import {
   transactionItemsOf,
   transactionsPage,
 } from './history.repository.server'
-import type { Overview, OverviewYear } from './overview'
+import type { OverviewYear } from './overview'
 import { scopeFor, summarizeOverview } from './overview'
-import type { TransactionsPage } from './transactions-page'
 import { PAGE_SIZE, toTransactionsPage } from './transactions-page'
 
 type Ctx = Pick<RequestContext, 'deps' | 'user'>
@@ -49,7 +48,7 @@ type TransactionDetail = readonly [
 async function loadOverview(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly year: OverviewYear },
-): Promise<Overview> {
+) {
   const scope = scopeFor(input.donor, input.year)
   const [recent, timeline, fundItems] = await deps.db.batch([
     recentTransactions(scope),
@@ -66,7 +65,7 @@ function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor): Promise<numbe
 async function loadTransactionsPage(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly page: number },
-): Promise<TransactionsPage> {
+) {
   const [total, txs] = await deps.db.batch([
     countTransactions(input.donor),
     transactionsPage(input.donor, { limit: PAGE_SIZE, offset: PAGE_SIZE * (input.page - 1) }),
@@ -91,7 +90,7 @@ export async function findOwnTransaction(
 
 // Transport adapters. Phase 2 replaces the null-user guard with `requireUser` middleware.
 
-export async function getOverviewProcedure(context: Ctx, data: OverviewInput): Promise<Overview> {
+export async function getOverviewProcedure(context: Ctx, data: OverviewInput) {
   if (!context.user) {
     throw notFound()
   }
@@ -111,10 +110,7 @@ export async function getAvailableYearsProcedure(
   return loadAvailableYears(context.deps, { id: context.user.id, journey: data.journey })
 }
 
-export async function getTransactionsProcedure(
-  context: Ctx,
-  data: TransactionsInput,
-): Promise<TransactionsPage> {
+export async function getTransactionsProcedure(context: Ctx, data: TransactionsInput) {
   const { page = 1, journey } = data
   if (!context.user) {
     throw notFound()

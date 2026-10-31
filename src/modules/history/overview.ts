@@ -1,19 +1,19 @@
 import { TZDate, addYears, clientTz, serverTz, startOfYear } from '#/core/date'
 import { centsToRinggit } from '#/core/money'
-import type { QueryResult } from '#/server/db.server'
-
-import type {
-  Donor,
-  DonorScope,
-  recentTransactions,
-  successFundItems,
-  successTimeline,
-} from './history.repository.server'
 
 /** A Kuala Lumpur calendar year, or every year. */
 export type OverviewYear = 'all' | number
 
-export type Overview = ReturnType<typeof summarizeOverview>
+interface TimelineRow {
+  readonly amount: number
+  readonly createdAt: Date
+}
+
+interface FundItemRow {
+  readonly createdAt: Date
+  readonly fundId: string
+  readonly fundName: string
+}
 
 export function getYearDateRange(year: OverviewYear) {
   if (year === 'all') {
@@ -30,15 +30,16 @@ export function getYearDateRange(year: OverviewYear) {
   }
 }
 
-export function scopeFor(donor: Donor, year: OverviewYear): DonorScope {
+export function scopeFor<Donor>(donor: Donor, year: OverviewYear) {
   const { startDateUTC, endDateUTCExclusive } = getYearDateRange(year)
   return { donor, endExclusive: endDateUTCExclusive, start: startDateUTC }
 }
 
-export function summarizeOverview(
-  recentTransactionRows: QueryResult<typeof recentTransactions>,
-  timelineData: QueryResult<typeof successTimeline>,
-  fundData: QueryResult<typeof successFundItems>,
+/** `recentTransactionRows` passes through untouched, so it keeps the caller's row type. */
+export function summarizeOverview<Recent>(
+  recentTransactionRows: Recent,
+  timelineData: readonly TimelineRow[],
+  fundData: readonly FundItemRow[],
 ) {
   // --- Processing: Summary & Timeline (Single Pass) ---
 

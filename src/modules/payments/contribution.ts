@@ -1,9 +1,6 @@
 import type { Fund } from '#/core/brand/funds'
 import { ringgitToCents } from '#/core/money'
 import type { User } from '#/modules/account/server'
-import type { QueryResult } from '#/server/db.server'
-
-import type { findFundsByName, TransactionId } from './transactions.repository.server'
 
 export interface ContributionItem {
   readonly amountInCents: number
@@ -51,9 +48,9 @@ export function decideDonor(
 
 /** Throws when a fund is missing from `funds`. */
 export function itemsFor(
-  transactionId: TransactionId,
+  transactionId: string,
   items: readonly ContributionItem[],
-  funds: QueryResult<typeof findFundsByName>,
+  funds: readonly { readonly id: string; readonly name: string }[],
 ) {
   const fundIds = new Map(funds.map((f) => [f.name, f.id]))
 

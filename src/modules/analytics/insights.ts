@@ -1,13 +1,28 @@
 import { centsToRinggit } from '#/core/money'
-import type { QueryResult } from '#/server/db.server'
-
-import type { insightsSummary, weeklyCumulativeTotalsByYear } from './analytics.repository.server'
 
 export type Insights = ReturnType<typeof summarizeInsights>
 
+interface SummaryRow {
+  readonly averageAmount: number
+  readonly guestCount: number
+  readonly medianAmount: number
+  readonly noOfContributions: number
+  readonly totalAmount: number
+  readonly userCount: number
+  readonly weekdayCount: number
+  readonly weekendCount: number
+}
+
+interface WeeklyTotalRow {
+  readonly cumulativeAmount: number
+  readonly week: number
+  readonly weeklyAmount: number
+  readonly year: number
+}
+
 export function summarizeInsights(
-  summaryResult: QueryResult<typeof insightsSummary>,
-  weeklyCumulativeTotalsByYearResult: QueryResult<typeof weeklyCumulativeTotalsByYear>,
+  summaryResult: readonly SummaryRow[],
+  weeklyCumulativeTotalsByYearResult: readonly WeeklyTotalRow[],
 ) {
   const [stats] = summaryResult
   const noOfContributions = stats?.noOfContributions ?? 0
