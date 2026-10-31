@@ -56,15 +56,7 @@ const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS
 // Files that break a boundary today because their code has not moved into src/modules yet.
 // They keep only the module-entry rules. Each Phase 1 step deletes the entries it fixes, and
 // the list must end empty.
-const LEGACY_FILES: string[] = [
-  'src/core/errors.ts',
-  'src/features/giving/payment.service.ts',
-  'src/features/payment-gateway/eghl.service.test.ts',
-  'src/features/payment-gateway/eghl.service.ts',
-  'src/routes/api/-eghl.callback.test.ts',
-  'src/routes/api/-eghl.cron.test.ts',
-  'src/routes/api/eghl.cron.ts',
-]
+const LEGACY_FILES: string[] = ['src/core/errors.ts']
 
 export default defineConfig({
   categories: {

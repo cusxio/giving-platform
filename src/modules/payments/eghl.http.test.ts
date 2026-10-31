@@ -4,30 +4,34 @@ import { pino } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ok } from '#/core/result'
-import type { PaymentService } from '#/features/giving/payment.service'
-import { EghlTxnExists, EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
-import type * as Envvars from '#/server/env.server'
+import { createFakeDb } from '#/server/testing/fake-db'
+import { testDeps } from '#/server/testing/test-deps'
 
-const mockedEnv = vi.hoisted(() => ({
-  BASE_URL: 'https://app.give.test',
-  DATABASE_URL: 'postgres://user:pass@db.give.test/db',
-  EGHL_PASSWORD: 'secret-password',
-  EGHL_SERVICE_ID: 'service-123',
-  EGHL_URL: 'https://eghl.test/pay',
+import { handleEghlCallback, handleEghlReturnGet } from './eghl.http.server'
+import { EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+import type { recordOutcome } from './record-outcome.server'
+import { findPendingAmountInCents } from './transactions.repository.server'
+
+type Finalize = (
+  response: Parameters<typeof recordOutcome>[1],
+  status: Parameters<typeof recordOutcome>[2],
+) => ReturnType<typeof recordOutcome>
+
+/** Stands in for recordOutcome, the one writer, so each test sees what would be settled. */
+const finalizePaymentFromCallback = vi.hoisted(() => vi.fn<Finalize>())
+
+vi.mock(import('./record-outcome.server'), () => ({
+  recordOutcome: (_deps, response, status) => finalizePaymentFromCallback(response, status),
 }))
 
-vi.mock<typeof Envvars>(import('#/server/env.server'), () => mockedEnv)
-
-const { Route } = await import('./eghl.callback')
-const { Route: ReturnRoute } = await import('./eghl.return')
-const { EghlService } = await import('#/features/payment-gateway/eghl.service')
+const { eghl } = testDeps().config
 
 const TRANSACTION_ID = 'txn_abc123'
 const AMOUNT_IN_CENTS = 5000
 
 const sha256 = (fields: readonly string[]) =>
   createHash('sha256')
-    .update([mockedEnv.EGHL_PASSWORD, ...fields].join(''))
+    .update([eghl.password, ...fields].join(''))
     .digest('hex')
 
 const signedReply = (fields: Record<string, string>) => {
@@ -57,7 +61,7 @@ const paymentFields = (TxnStatus: string, TxnMessage: string) => ({
   Param7: '',
   PaymentID: TRANSACTION_ID,
   PymtMethod: 'ANY',
-  ServiceID: mockedEnv.EGHL_SERVICE_ID,
+  ServiceID: eghl.serviceId,
   TransactionType: 'SALE',
   TxnID: `CIV${TRANSACTION_ID}`,
   TxnMessage,
@@ -149,55 +153,32 @@ const withGateway = async <T>(gateway: typeof fetch, run: () => Promise<T>) => {
   }
 }
 
-const stubPaymentService = () => ({
-  finalizePaymentFromCallback: vi.fn<PaymentService['finalizePaymentFromCallback']>(() =>
-    Promise.resolve(ok({ finalized: true })),
-  ),
-  findPendingAmountInCents: vi.fn<PaymentService['findPendingAmountInCents']>(() =>
-    Promise.resolve(ok(AMOUNT_IN_CENTS)),
-  ),
-})
-
-const handlerContext = (paymentService: ReturnType<typeof stubPaymentService>) => ({
-  eghlService: new EghlService(),
-  logger: pino({ level: 'silent' }),
-  paymentService,
-})
+const stubPaymentService = () => {
+  finalizePaymentFromCallback.mockReset().mockResolvedValue(ok({ finalized: true }))
+  return testDeps({
+    db: createFakeDb().on(findPendingAmountInCents, () => AMOUNT_IN_CENTS),
+    logger: pino({ level: 'silent' }),
+  })
+}
 
 const postCallback = async (body: string, gateway: typeof fetch = unreachableGateway) => {
-  const paymentService = stubPaymentService()
-  const handlers = Route.options.server?.handlers
-  const handlePost = typeof handlers === 'object' ? handlers.POST : undefined
-  if (handlePost === undefined) {
-    throw new TypeError('callback route has no POST handler')
-  }
+  const deps = stubPaymentService()
   const response = await withGateway(gateway, async () =>
-    handlePost({
-      context: handlerContext(paymentService),
-      request: new Request('https://app.give.test/api/eghl/callback', { body, method: 'POST' }),
-    } as never),
+    handleEghlCallback(
+      deps,
+      new Request('https://app.give.test/api/eghl/callback', { body, method: 'POST' }),
+    ),
   )
-  if (!(response instanceof Response)) {
-    throw new TypeError('callback route did not answer with a Response')
-  }
-  return { finalizePaymentFromCallback: paymentService.finalizePaymentFromCallback, response }
+  return { finalizePaymentFromCallback, response }
 }
 
 const getReturn = async (query: string, gateway: typeof fetch = unreachableGateway) => {
-  const paymentService = stubPaymentService()
-  const handlers = ReturnRoute.options.server?.handlers
-  const handleGet = typeof handlers === 'object' ? handlers.GET : undefined
-  if (handleGet === undefined) {
-    throw new TypeError('return route has no GET handler')
-  }
+  const deps = stubPaymentService()
   // The return route always answers by throwing a redirect.
   await withGateway(gateway, async () =>
-    handleGet({
-      context: handlerContext(paymentService),
-      request: new Request(`https://app.give.test/api/eghl/return?${query}`),
-    } as never),
+    handleEghlReturnGet(deps, new Request(`https://app.give.test/api/eghl/return?${query}`)),
   ).catch((error: unknown) => error)
-  return { finalizePaymentFromCallback: paymentService.finalizePaymentFromCallback }
+  return { finalizePaymentFromCallback }
 }
 
 describe('eGHL callback route', () => {

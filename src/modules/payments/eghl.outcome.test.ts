@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { finalStatusOf, inboundActionOf } from './eghl.finality'
-import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.schema'
+import { finalStatusOf, inboundActionOf } from './eghl.outcome'
+import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 
 describe('eGHL inbound reply action', () => {
   it('settles a successful reply directly', () => {

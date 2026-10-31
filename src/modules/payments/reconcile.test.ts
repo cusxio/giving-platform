@@ -1,31 +1,30 @@
-import { drizzle } from 'drizzle-orm/neon-http'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TransactionRollbackError } from '#/core/errors'
 import { err, ok } from '#/core/result'
-import type { PaymentService } from '#/features/giving/payment.service'
-import type { EghlQueryError } from '#/features/payment-gateway/eghl.errors'
-import type { EghlQueryResponse } from '#/features/payment-gateway/eghl.schema'
-import {
-  EghlQueryTxnStatus,
-  EghlTxnExists,
-  EghlTxnStatus,
-} from '#/features/payment-gateway/eghl.schema'
-import type { EghlService } from '#/features/payment-gateway/eghl.service'
-import type * as Envvars from '#/server/env.server'
+import { createDriverDb } from '#/server/testing/driver-db'
+import { testDeps } from '#/server/testing/test-deps'
 
-const mockedEnv = vi.hoisted(() => ({
-  BASE_URL: 'https://app.give.test',
-  CRON_SECRET: 'cron-secret',
-  DATABASE_URL: 'postgres://user:pass@db.give.test/db',
-  EGHL_PASSWORD: 'secret-password',
-  EGHL_SERVICE_ID: 'service-123',
-  EGHL_URL: 'https://eghl.test/pay',
+import type { EghlQueryError } from './eghl.errors'
+import type { EghlQueryResponse } from './eghl.wire'
+import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+import type { PaymentGateway } from './gateway'
+import { handleReconcile } from './reconcile.server'
+import type { recordOutcome } from './record-outcome.server'
+
+type FinalizeResult = Awaited<ReturnType<typeof recordOutcome>>
+
+const settlement = vi.hoisted(() => ({
+  finalize: (_response: unknown, _status: unknown): Promise<FinalizeResult> => {
+    throw new Error('runCron sets finalize')
+  },
 }))
 
-vi.mock<typeof Envvars>(import('#/server/env.server'), () => mockedEnv)
+vi.mock(import('./record-outcome.server'), () => ({
+  recordOutcome: (_deps, response, status) => settlement.finalize(response, status),
+}))
 
-const { Route } = await import('./eghl.cron')
+const settings = { CRON_SECRET: 'cron-secret', EGHL_SERVICE_ID: testDeps().config.eghl.serviceId }
 
 const { Exists, InternalError, NotFound } = EghlTxnExists
 const { InternalError: QueryInternalError, NotFound: QueryNotFound } = EghlQueryTxnStatus
@@ -61,7 +60,7 @@ interface Statement {
 }
 
 /**
- * A neon-http drizzle client whose driver records each statement. Selects answer with
+ * A neon-http Db whose driver records each statement. Selects answer with
  * `pendingRows`; updates report `updatedRows` affected rows. `failOn` makes a statement kind throw.
  */
 const fakeDb = (
@@ -88,7 +87,7 @@ const fakeDb = (
         : { rowCount: updatedRows, rows: [] },
     )
   }
-  return { db: drizzle({ casing: 'snake_case', client: client as never }), statements }
+  return { db: createDriverDb(client), statements }
 }
 
 const queryReply = (
@@ -106,7 +105,7 @@ const queryReply = (
     PaymentID,
     PymtMethod: 'ANY',
     QueryDesc: 'desc',
-    ServiceID: mockedEnv.EGHL_SERVICE_ID,
+    ServiceID: settings.EGHL_SERVICE_ID,
     TransactionType: 'QUERY',
     TxnExists,
     TxnID: `CIV${PaymentID}`,
@@ -114,12 +113,11 @@ const queryReply = (
     TxnStatus,
   }) as EghlQueryResponse
 
-type QueryResult = Awaited<ReturnType<EghlService['queryTransactionStatus']>>
-type FinalizeResult = Awaited<ReturnType<PaymentService['finalizePaymentFromCallback']>>
+type QueryResult = Awaited<ReturnType<PaymentGateway['queryStatus']>>
 
 /** Stands in for eGHL's status query; a transaction without a reply gets a server error. */
 const gatewayAnswering = (replies: Record<string, QueryResult>) =>
-  vi.fn<EghlService['queryTransactionStatus']>(({ transactionId }) =>
+  vi.fn<PaymentGateway['queryStatus']>(({ transactionId }) =>
     Promise.resolve(replies[transactionId] ?? err<EghlQueryError>({ type: 'EghlServerError' })),
   )
 
@@ -132,7 +130,7 @@ const finalizeBy =
 const notFound = (id: string) => ok(queryReply(id, NotFound, QueryNotFound))
 
 const runCron = async ({
-  authorization = `Bearer ${mockedEnv.CRON_SECRET}`,
+  authorization = `Bearer ${settings.CRON_SECRET}`,
   db,
   finalize = finalizeBy(),
   replies = {},
@@ -142,15 +140,11 @@ const runCron = async ({
   finalize?: (response: EghlQueryResponse) => Promise<FinalizeResult>
   replies?: Record<string, QueryResult>
 }) => {
-  const handlers = Route.options.server?.handlers
-  const handleGet = typeof handlers === 'object' ? handlers.GET : undefined
-  if (handleGet === undefined) {
-    throw new TypeError('cron route has no GET handler')
-  }
   const queryTransactionStatus = gatewayAnswering(replies)
-  const finalizePaymentFromCallback = vi.fn<PaymentService['finalizePaymentFromCallback']>(
-    (response) => finalize(response as EghlQueryResponse),
+  const finalizePaymentFromCallback = vi.fn<typeof settlement.finalize>((response) =>
+    finalize(response as EghlQueryResponse),
   )
+  settlement.finalize = finalizePaymentFromCallback
   const logger = {
     error: vi.fn<(fields: LogFields, message: string) => void>(),
     info: vi.fn<(fields: LogFields, message: string) => void>(),
@@ -163,15 +157,16 @@ const runCron = async ({
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
   let response
   try {
-    response = await handleGet({
-      context: {
+    const base = testDeps()
+    response = await handleReconcile(
+      {
+        config: { ...base.config, cronSecret: settings.CRON_SECRET },
         db,
-        eghlService: { queryTransactionStatus },
-        logger,
-        paymentService: { finalizePaymentFromCallback },
+        eghl: { ...base.eghl, queryStatus: queryTransactionStatus },
+        logger: logger as never,
       },
-      request: new Request('https://app.give.test/api/eghl/cron', { headers }),
-    } as never)
+      new Request('https://app.give.test/api/eghl/cron', { headers }),
+    )
   } finally {
     vi.useRealTimers()
   }
@@ -323,7 +318,7 @@ describe('eGHL cron', () => {
   it.each([
     ['no authorization header', null],
     ['a wrong secret', 'Bearer not-the-secret'],
-    ['the secret without the Bearer scheme', mockedEnv.CRON_SECRET],
+    ['the secret without the Bearer scheme', settings.CRON_SECRET],
   ])('answers 401 without touching the database for %s', async (_case, authorization) => {
     expect.hasAssertions()
 

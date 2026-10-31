@@ -5,7 +5,7 @@ import {
   EghlQueryResponseSchema,
   EghlTxnExists,
   EghlTxnStatus,
-} from './eghl.schema'
+} from './eghl.wire'
 
 const paymentFields = {
   Amount: '50.00',

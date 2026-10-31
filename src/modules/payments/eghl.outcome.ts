@@ -1,7 +1,7 @@
 import { assertExhaustive } from '#/core/assert-exhaustive'
 
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
-import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.schema'
+import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
+import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 
 export type EghlFinalStatus = 'failed' | 'success'
 

@@ -1,7 +1,8 @@
+import type { InferInsertModel } from 'drizzle-orm'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 
-import { clientTz } from '#/core/date'
-import { defineQuery, firstOrNull, rows } from '#/server/db.server'
+import { clientTz, now } from '#/core/date'
+import { defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { User } from '#/server/schema.server'
 import { savedPaymentMethods } from '#/server/schema.server'
 
@@ -35,4 +36,50 @@ export const findSavedCard = defineQuery(
       .where(and(eq(savedPaymentMethods.userId, userId), eq(savedPaymentMethods.token, token)))
       .limit(1),
   firstOrNull,
+)
+
+type NewSavedCard = Pick<
+  InferInsertModel<typeof savedPaymentMethods>,
+  'cardExp' | 'cardHolder' | 'cardNoMask' | 'cardType' | 'token' | 'userId'
+>
+
+/** Saves the card a user just paid with. A card the user already saved gets the new token. */
+export const upsertSavedCard = defineQuery(
+  'payments.upsertSavedCard',
+  (db, card: NewSavedCard) =>
+    db
+      .insert(savedPaymentMethods)
+      .values({
+        cardExp: card.cardExp,
+        cardHolder: card.cardHolder,
+        cardNoMask: card.cardNoMask,
+        cardType: card.cardType,
+        lastUsedAt: now(),
+        token: card.token,
+        tokenType: 'OCP',
+        userId: card.userId,
+      })
+      .onConflictDoUpdate({
+        set: {
+          token: sql`excluded.token`, // Token might rotate
+          lastUsedAt: now(),
+        },
+        target: [
+          savedPaymentMethods.userId,
+          savedPaymentMethods.cardNoMask,
+          savedPaymentMethods.cardExp,
+        ],
+      }),
+  nothing,
+)
+
+/** Marks the user's saved card as just used. */
+export const touchSavedCard = defineQuery(
+  'payments.touchSavedCard',
+  (db, userId: User['id'], token: string) =>
+    db
+      .update(savedPaymentMethods)
+      .set({ lastUsedAt: now() })
+      .where(and(eq(savedPaymentMethods.userId, userId), eq(savedPaymentMethods.token, token))),
+  nothing,
 )
