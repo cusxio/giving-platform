@@ -184,14 +184,19 @@ interface Loggable {
   readonly stack?: string
 }
 
-function loggable(error: unknown): Loggable {
+function loggable(error: unknown, seen = new WeakSet<Error>()): Loggable {
   const view = Object.create(null) as Loggable
+  if (error instanceof Error && seen.has(error)) {
+    return Object.assign(view, { message: 'cause cycle', name: 'Circular' })
+  }
   if (error instanceof DrizzleQueryError) {
-    return Object.assign(loggable(error.cause), { query: error.query })
+    seen.add(error)
+    return Object.assign(loggable(error.cause, seen), { query: error.query })
   }
   if (!(error instanceof Error)) {
     return Object.assign(view, { message: typeof error, name: typeof error })
   }
+  seen.add(error)
   const { code } = error as { code?: unknown }
   if (typeof code === 'string') {
     return Object.assign(view, { code, message: `${error.name} ${code}`, name: error.name })
@@ -200,7 +205,7 @@ function loggable(error: unknown): Loggable {
     message: error.message,
     name: error.name,
     stack: error.stack?.split('\nCaused by: ')[0],
-    ...(error.cause !== undefined && { cause: loggable(error.cause) }),
+    ...(error.cause !== undefined && { cause: loggable(error.cause, seen) }),
   })
 }
 

@@ -347,6 +347,27 @@ describe('a logged failure', () => {
     expect(JSON.stringify(span.events)).not.toContain(email)
   })
 
+  it('logs a failure whose cause chain loops back on itself', async () => {
+    expect.hasAssertions()
+
+    const outer = new Error('outer')
+    const inner = new Error('inner', { cause: outer })
+    outer.cause = inner
+    const action = defineMutation({
+      auth: anyone,
+      event: 'm.x',
+      input: noInput,
+      run: () => Promise.resolve(Result.err(infra('q.find', outer))),
+      wire: {},
+    })
+    const { events, settled } = await call(action, null)
+
+    expect(settled).toStrictEqual(answered({ type: 'SERVER_ERROR' }))
+    expect(events).toMatchObject([
+      { err: { message: 'outer: inner: cause cycle' }, event: 'm.x.failed' },
+    ])
+  })
+
   it('names the error a transaction rolled back for when the rollback failed', async () => {
     expect.hasAssertions()
 
