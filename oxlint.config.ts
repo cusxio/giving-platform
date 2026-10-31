@@ -18,7 +18,7 @@ const MODULE_ENTRY_ONLY: ImportPattern = {
 }
 const NO_RELATIVE_INTO_MODULES: ImportPattern = {
   message: 'Reach a module through its #/modules/<name> entry, not a relative path.',
-  regex: String.raw`(^|/)\.\./(.*/)?modules/`,
+  regex: String.raw`(^|/)\.\.?/(.*/)?modules/`,
 }
 const FLAT_MODULES: ImportPattern = {
   message:
@@ -43,6 +43,16 @@ const SERVER_CODE_IN_CLIENT: ImportPattern = {
 const NO_REPOSITORY_IN_FUNCTIONS: ImportPattern = {
   message: 'A server function calls a *.server.ts workflow, never a repository.',
   regex: String.raw`\.repository\.server$`,
+}
+const NO_REPOSITORY_IN_CLIENT: ImportPattern = {
+  message:
+    'Client-reachable module files never import a repository, even types. Put shared types in <name>.types.ts or a pure domain file.',
+  regex: String.raw`\.repository\.server$`,
+}
+const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
+  message:
+    'Client code never imports src/server. Only entry-server.tsx and entry-start.tsx (behind import.meta.env.SSR) may.',
+  regex: String.raw`^\./server/`,
 }
 
 const restrictImports = (
@@ -215,7 +225,30 @@ export default defineConfig({
       rules: restrictImports(...OUTSIDE_PLATFORM, SERVER_CODE_IN_CLIENT),
     },
     { files: ['src/routes/api/**'], rules: restrictImports(...OUTSIDE_PLATFORM) },
-    { files: ['src/modules/**'], rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES) },
+    {
+      files: ['src/*.{ts,tsx}'],
+      rules: restrictImports(
+        ...OUTSIDE_PLATFORM,
+        SERVER_CODE_IN_CLIENT,
+        RELATIVE_SERVER_CODE_IN_CLIENT,
+      ),
+    },
+    {
+      files: ['src/entry-server.tsx', 'src/entry-start.tsx'],
+      rules: restrictImports(...OUTSIDE_PLATFORM),
+    },
+    {
+      files: ['src/modules/**'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_CLIENT),
+    },
+    {
+      files: [
+        'src/modules/**/*.server.ts',
+        'src/modules/*/server.ts',
+        'src/modules/**/*.test.{ts,tsx}',
+      ],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
     {
       files: ['src/modules/**/*.repository.server.ts'],
       rules: restrictImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
