@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { generateOtp } from './utils'
+import { generateOtp } from './otp-code.server'
 
 describe('one-time passcodes', () => {
   it('are always six digits without a leading zero', () => {

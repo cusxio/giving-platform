@@ -2,7 +2,8 @@ import { addSeconds, differenceInDays, now } from '#/core/date'
 import { createParseError } from '#/core/errors'
 import type { Result } from '#/core/result'
 import { err, ok, trySync } from '#/core/result'
-import { constantTimeEqual, hashToken } from '#/server/crypto.server'
+import { constantTimeEqual, createTokenHasher } from '#/server/crypto.server'
+import { SESSION_SECRET } from '#/server/env.server'
 import { logger } from '#/server/logger.server'
 import type { Session, User } from '#/server/schema.server'
 
@@ -10,6 +11,8 @@ import { SESSION_MAX_AGE_SECONDS } from './constants'
 import type { VerificationError } from './session.errors'
 import type { SessionRepository } from './session.repository'
 import { clearSessionCookie, cookieValueSchema, serializeSessionCookie } from './utils'
+
+const hashToken = createTokenHasher(SESSION_SECRET)
 
 export class SessionService {
   readonly #sessionRepository: SessionRepository

@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
-import type { AnyDBOrTransaction, DB } from '#/server/neon.server'
+import type { DB } from '#/server/neon.server'
 import type { Session } from '#/server/schema.server'
 import { sessions, users } from '#/server/schema.server'
 
@@ -10,13 +10,6 @@ export class SessionRepository {
   readonly #db: DB
   constructor(db: DB) {
     this.#db = db
-  }
-
-  createSessionQuery(
-    input: Pick<Session, 'expiresAt' | 'tokenHash' | 'userId'>,
-    db: AnyDBOrTransaction = this.#db,
-  ) {
-    return db.insert(sessions).values(input).returning()
   }
 
   async deleteSessionById(sessionId: Session['id']) {

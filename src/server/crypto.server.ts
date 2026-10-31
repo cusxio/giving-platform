@@ -1,9 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-import { SESSION_SECRET } from '#/server/env.server'
-
-export function hashToken(token: string) {
-  return createHmac('sha256', SESSION_SECRET).update(token).digest('hex')
+/** HMAC-SHA256 of a token, hex encoded. Session and OTP tokens are stored only as this hash. */
+export function createTokenHasher(secret: string): (token: string) => string {
+  return (token) => createHmac('sha256', secret).update(token).digest('hex')
 }
 
 // timingSafeEqual throws on inputs of different lengths, and some inputs (such as a

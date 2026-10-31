@@ -6,9 +6,8 @@ import { useState } from 'react'
 import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import { currentUserQuery } from '#/modules/account'
-
-import type { RequestOtpResponse, VerifyOtpResponse } from '../../auth.mutations'
-import { useRequestOtpMutation, useVerifyOtpMutation } from '../../auth.mutations'
+import type { RequestOtpResponse, VerifyOtpResponse } from '#/modules/auth'
+import { useRequestOtpMutation, useVerifyOtpMutation } from '#/modules/auth'
 
 const fallback = 'Something unexpected has occurred. Please try again later.'
 

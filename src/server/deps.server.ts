@@ -1,6 +1,6 @@
 import type { Logger } from 'pino'
 
-import { hashToken } from '#/server/crypto.server'
+import { createTokenHasher } from '#/server/crypto.server'
 import type { Db } from '#/server/db.server'
 import { createDb } from '#/server/db.server'
 import {
@@ -11,6 +11,7 @@ import {
   EGHL_URL,
   MAILERSEND_API_KEY,
   MAILERSEND_ROOT_DOMAIN,
+  SESSION_SECRET,
 } from '#/server/env.server'
 import { logger as rootLogger } from '#/server/logger.server'
 import type { MailConfig, Mailer } from '#/server/mailer.server'
@@ -55,6 +56,7 @@ const config: ServerConfig = {
 }
 const db = createDb(neonHttp, neonPool)
 const mailer = createMailer(config.mail, rootLogger)
+const hashToken = createTokenHasher(SESSION_SECRET)
 
 export function createDeps(logger: Logger): Deps {
   return { config, db, hashToken, logger, mailer }

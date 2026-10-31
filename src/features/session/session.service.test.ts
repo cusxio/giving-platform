@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
 import { ok } from '#/core/result'
-import { hashToken } from '#/server/crypto.server'
+import { createTokenHasher } from '#/server/crypto.server'
 import type { Session, User } from '#/server/schema.server'
 
 import type { SessionRepository } from './session.repository'
@@ -10,6 +10,8 @@ import { SessionService } from './session.service'
 import { clearSessionCookie } from './utils'
 
 vi.mock(import('#/server/env.server'), () => ({ SESSION_SECRET: 'test-session-secret' }))
+
+const hashToken = createTokenHasher('test-session-secret')
 
 type FakeUser = Pick<User, 'id' | 'journey' | 'role' | 'status'>
 

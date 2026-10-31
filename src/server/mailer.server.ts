@@ -30,11 +30,7 @@ export function createMailer(mailConfig: MailConfig, logger: Logger): Mailer {
   }
 }
 
-/**
- * Connects per send, as the legacy `EmailService` always has: it acquires the transport
- * outside its error mapping, so it needs the two stages apart. Private once auth uses `Mailer`.
- */
-export async function openMailTransport(mailConfig: MailConfig, logger: Logger): Promise<Mailer> {
+async function openMailTransport(mailConfig: MailConfig, logger: Logger): Promise<Mailer> {
   return mailConfig.apiKey === undefined
     ? openTestTransport(logger)
     : openMailerSendTransport(mailConfig.apiKey, mailConfig.rootDomain)

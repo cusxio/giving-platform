@@ -85,7 +85,8 @@ vi.mock(import('#/features/session/session.repository'), async () => {
   return { SessionRepository: FakeSessionRepository as unknown as typeof SessionRepository }
 })
 
-const { hashToken } = await import('./crypto.server')
+const { createTokenHasher } = await import('./crypto.server')
+const hashToken = createTokenHasher('test-session-secret')
 const { requestContext } = await import('./request-context.server')
 
 const SESSION_ID = 'session'.padEnd(21, '0')

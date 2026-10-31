@@ -38,3 +38,8 @@ interface InvalidRequestError {
 interface NotExistsError {
   readonly type: 'NotExistsError'
 }
+
+export interface SendEmailError {
+  readonly error: unknown
+  readonly type: 'SendEmailError'
+}

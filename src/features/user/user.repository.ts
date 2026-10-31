@@ -1,6 +1,5 @@
 import { eq, sql } from 'drizzle-orm'
 
-import { now } from '#/core/date'
 import { createDBError } from '#/core/errors'
 import { ok, tryAsync } from '#/core/result'
 import type { AnyDBOrTransaction, DB } from '#/server/neon.server'
@@ -54,12 +53,5 @@ export class UserRepository {
 
     const [user] = result.value
     return ok(user ?? null)
-  }
-
-  markUserAsActiveByIdQuery(userId: User['id'], db: AnyDBOrTransaction = this.#db) {
-    return db
-      .update(users)
-      .set({ emailVerifiedAt: now(), status: 'active' })
-      .where(eq(users.id, userId))
   }
 }
