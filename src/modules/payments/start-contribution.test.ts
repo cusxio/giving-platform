@@ -1,10 +1,10 @@
-import { pino } from 'pino'
 import { describe, expect, it } from 'vitest'
 
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
 import type { Db } from '#/server/db.server'
 import type { FakeDb } from '#/server/testing/fake-db'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { testDeps } from '#/server/testing/test-deps'
 
 import { findSavedCard } from './saved-cards.repository.server'
@@ -14,27 +14,6 @@ import {
   insertPendingTransaction,
   insertTransactionItems,
 } from './transactions.repository.server'
-
-interface LogLine {
-  readonly err?: { readonly message: string; readonly type: string }
-  readonly error_type?: string
-  readonly event?: string
-  readonly level: number
-  readonly reason?: string
-}
-
-function recordingLogger() {
-  const events: LogLine[] = []
-  const logger = pino(
-    { level: 'debug' },
-    {
-      write: (line: string) => {
-        events.push(JSON.parse(line) as LogLine)
-      },
-    },
-  )
-  return { events, logger }
-}
 
 /** Notes whether each transaction committed or rolled back, which the fake does not model. */
 function recordingTransactions(db: FakeDb) {

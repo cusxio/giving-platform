@@ -1,9 +1,9 @@
-import { pino } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
 import type { QueryResult } from '#/server/db.server'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { testDeps } from '#/server/testing/test-deps'
 
 import { clearSessionCookie } from './session-cookie.server'
@@ -28,25 +28,6 @@ const SESSION_ID = 'session'.padEnd(21, '0')
 const RAW_TOKEN = 'token'.padEnd(21, '0')
 const CLEARED =
   '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax'
-
-interface LogLine {
-  readonly event?: string
-  readonly level: number
-  readonly reason?: string
-}
-
-function recordingLogger() {
-  const events: LogLine[] = []
-  const logger = pino(
-    { level: 'debug' },
-    {
-      write: (line: string) => {
-        events.push(JSON.parse(line) as LogLine)
-      },
-    },
-  )
-  return { events, logger }
-}
 
 function fail(): never {
   throw new Error('connection terminated')

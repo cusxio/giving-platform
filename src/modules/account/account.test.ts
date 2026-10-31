@@ -1,8 +1,8 @@
-import { pino } from 'pino'
 import { describe, expect, it } from 'vitest'
 
 import { hasGuestTransaction } from '#/modules/payments/server'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { testDeps } from '#/server/testing/test-deps'
 
 import {
@@ -99,24 +99,6 @@ describe('the welcome data', () => {
     await expect(loadWelcome({ db }, 2)).resolves.toBeNull()
   })
 })
-
-interface LogLine {
-  readonly event?: string
-  readonly level: number
-}
-
-function recordingLogger() {
-  const events: LogLine[] = []
-  const logger = pino(
-    { level: 'debug' },
-    {
-      write: (line: string) => {
-        events.push(JSON.parse(line) as LogLine)
-      },
-    },
-  )
-  return { events, logger }
-}
 
 describe('updating the profile', () => {
   it('trims the names and saves the given fields', async () => {
