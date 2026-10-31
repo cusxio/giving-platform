@@ -304,6 +304,30 @@ describe('a mutation', () => {
     expect(JSON.stringify(events)).not.toContain('10.0.0.5')
   })
 
+  it('labels a pool driver error, whose name is the generic error, by its SQLSTATE', async () => {
+    expect.hasAssertions()
+
+    // The pg driver names every server error `error` and puts the SQLSTATE in `code`.
+    const duplicate = Object.assign(new Error('duplicate key (email)=(donor@give.test)'), {
+      code: '23505',
+      name: 'error',
+    })
+    const action = defineMutation({
+      auth: anyone,
+      event: 'm.x',
+      input: noInput,
+      run: () => Promise.resolve(Result.err(infra('q.insert', duplicate))),
+      wire: {},
+    })
+    const { events, span } = await call(action, null)
+
+    expect(events).toMatchObject([
+      { 'error.type': '23505', err: { code: '23505', type: 'error' }, event: 'm.x.failed' },
+    ])
+    expect(span.attributes['error.type']).toBe('23505')
+    expect(JSON.stringify(events)).not.toContain('donor@give.test')
+  })
+
   it('leaves the request span alone on every other outcome', async () => {
     expect.hasAssertions()
 

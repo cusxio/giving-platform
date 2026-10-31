@@ -214,9 +214,14 @@ function loggable(error: unknown, seen = new WeakSet<Error>()): Loggable {
   })
 }
 
-/** The class, or for a plain `Error` with a code, such as Node's `ECONNREFUSED`, the code. */
+/**
+ * The class, or the code when the class says nothing: a plain `Error` with a code, such as Node's
+ * `ECONNREFUSED`, or the pg driver's `error`, whose code is the SQLSTATE.
+ */
 const typeOf = (failure: Loggable): string =>
-  failure.name === 'Error' && failure.code !== undefined ? failure.code : failure.name
+  (failure.name === 'Error' || failure.name === 'error') && failure.code !== undefined
+    ? failure.code
+    : failure.name
 
 /** A `SERVER_ERROR` envelope is an HTTP 200, so the request span would otherwise look healthy. */
 function markSpanFailed(failure: Loggable, type: string, message: string) {
