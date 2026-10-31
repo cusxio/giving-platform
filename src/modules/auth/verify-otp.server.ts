@@ -7,7 +7,6 @@ import { Compile } from 'typebox/compile'
 import type { User } from '#/modules/account/server'
 import { activateUser, findUserByEmail } from '#/modules/account/server'
 import { anonymousOnly } from '#/server/authorize.server'
-import { clientIp } from '#/server/client-ip.server'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { Deps } from '#/server/deps.server'
 import { required } from '#/server/infra-error'
@@ -16,7 +15,7 @@ import { parseWith } from '#/server/input.server'
 import { business, defineMutation, logInfraEvent } from '#/server/procedure.server'
 
 import { InvalidOtpError, InvalidRequestError } from './auth.errors'
-import { checkOtpVerify, resetOtpVerify } from './rate-limit.server'
+import { checkOtpVerify, limitedAddress, resetOtpVerify } from './rate-limit.server'
 import { SESSION_MAX_AGE_SECONDS, serializeSessionCookie } from './session-cookie.server'
 import { createSession } from './sessions.repository.server'
 import { claimTokenIfUnused, findToken } from './tokens.repository.server'
@@ -123,7 +122,11 @@ export const verifyOtpAction = defineMutation({
   event: 'auth.verify_otp',
   input: verifyOtpInput,
   run: async ({ deps }, input) => {
-    const verified = await verifyCode(deps, input, clientIp(getRequest().headers))
+    const verified = await verifyCode(
+      deps,
+      input,
+      limitedAddress(deps.logger, getRequest().headers),
+    )
     if (verified.isErr()) {
       return Result.err(verified.error)
     }

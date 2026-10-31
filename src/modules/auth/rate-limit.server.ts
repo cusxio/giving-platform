@@ -1,6 +1,7 @@
 import { Result } from 'better-result'
 
 import { now } from '#/core/date'
+import { clientIp } from '#/server/client-ip.server'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
 
@@ -61,6 +62,29 @@ async function count(
       new RateLimitExceededError({ ip, retryAfterSeconds: Math.max(0, retryAfterSeconds) }),
     )
   })
+}
+
+/** Long enough for any address, so a header holding something else is cut short in the log. */
+const LOGGED_HEADER_LENGTH = 64
+
+/**
+ * The address the limits count against. A request without a usable one skips the per-address
+ * limit, so it is logged: on Vercel the header is always set, and its absence means a change in
+ * front of the app.
+ */
+export function limitedAddress(logger: Deps['logger'], headers: Headers): null | string {
+  const ip = clientIp(headers)
+  if (ip === null) {
+    const header = headers.get('x-real-ip')
+    logger.warn(
+      {
+        event: 'auth.rate_limit.no_client_address',
+        ...(header !== null && { x_real_ip: header.slice(0, LOGGED_HEADER_LENGTH) }),
+      },
+      'No usable client address; the per-address limit is skipped',
+    )
+  }
+  return ip
 }
 
 /** The key of an email from one address. Requests with no address share one key per email. */

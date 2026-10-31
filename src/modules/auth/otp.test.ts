@@ -38,6 +38,8 @@ vi.mock(import('@tanstack/react-start/server'), () => ({
 }))
 
 const EMAIL = 'donor@example.com'
+/** Vercel sets x-real-ip on every request; most tests arrive from this address. */
+const ADDRESS = '198.51.100.1'
 
 type UserRow = NonNullable<QueryResult<typeof findUserByEmail>>
 type TokenRow = NonNullable<QueryResult<typeof findToken>>
@@ -74,7 +76,7 @@ function fromAddress(ip: string) {
 }
 
 function setup(existing?: Status) {
-  io.request = new Request('https://app.give.test/')
+  fromAddress(ADDRESS)
   const users = new Map<UserRow['email'], UserRow>()
   if (existing) {
     users.set(EMAIL, userRow(EMAIL, 1, existing))
@@ -309,9 +311,9 @@ describe('requesting a code', () => {
     const { db, deps } = setup('active')
     await request(deps, { email: '  Donor@Example.COM ', mode: 'login' })
 
-    expect(db.calls.slice(0, 3)).toStrictEqual([
+    expect(db.calls.slice(1, 4)).toStrictEqual([
       {
-        args: [`${EMAIL}|ip:unknown`, 'otp_request', 900, expect.any(Date)],
+        args: [`${EMAIL}|ip:${ADDRESS}`, 'otp_request', 900, expect.any(Date)],
         name: 'auth.recordAttempt',
       },
       { args: [EMAIL, 'otp_request', 900, expect.any(Date)], name: 'auth.recordAttempt' },
@@ -517,8 +519,9 @@ describe('verifying a code', () => {
     const { attempts, calls, deps, otp } = await issued('active', 'login')
     await verify(deps, { email: EMAIL, mode: 'login', otp })
 
-    expect(attempts.has(`otp_verify:${EMAIL}|ip:unknown`)).toBe(false)
+    expect(attempts.has(`otp_verify:${EMAIL}|ip:${ADDRESS}`)).toBe(false)
     expect(calls().map((c) => c.name)).toStrictEqual([
+      'auth.recordAttempt',
       'auth.recordAttempt',
       'auth.recordAttempt',
       'account.findUserByEmail',
@@ -583,6 +586,7 @@ describe('verifying a code', () => {
       expect(io.setCookies).toStrictEqual([])
       expect(tokens[0]?.usedAt).toBeNull()
       expect(calls().map((c) => c.name)).toStrictEqual([
+        'auth.recordAttempt',
         'auth.recordAttempt',
         'auth.recordAttempt',
         'account.findUserByEmail',
@@ -864,5 +868,39 @@ describe('one address against another', () => {
     expect(sentEmails).toHaveLength(15)
     expect(events.at(-1)).toMatchObject({ event: 'auth.request_otp.rate_limited' })
     expect(events.at(-1)).not.toHaveProperty('ip')
+  })
+})
+
+describe('a request without a usable client address', () => {
+  it('logs that the per-address limit was skipped, and still counts the email', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, events } = setup('active')
+    io.request = new Request('https://app.give.test/')
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(success)
+    expect(events[0]).toMatchObject({
+      event: 'auth.rate_limit.no_client_address',
+      level: 40,
+      msg: 'No usable client address; the per-address limit is skipped',
+    })
+    expect(events[0]).not.toHaveProperty('x_real_ip')
+    expect([...attempts.keys()]).toStrictEqual([
+      `otp_request:${EMAIL}|ip:unknown`,
+      `otp_request:${EMAIL}`,
+    ])
+  })
+
+  it('logs at most 64 characters of an unparseable header', async () => {
+    expect.hasAssertions()
+
+    const { deps, events, otp } = await issued('active', 'login')
+    io.request = new Request('https://app.give.test/', {
+      headers: { 'x-real-ip': `203.0.113.7, ${'x'.repeat(200)}` },
+    })
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    const logged = events.find((e) => e.event === 'auth.rate_limit.no_client_address')
+    expect(logged).toMatchObject({ level: 40, x_real_ip: `203.0.113.7, ${'x'.repeat(51)}` })
   })
 })

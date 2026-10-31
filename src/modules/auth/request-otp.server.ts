@@ -9,7 +9,6 @@ import { config } from '#/core/brand'
 import type { User } from '#/modules/account/server'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
 import { anonymousOnly } from '#/server/authorize.server'
-import { clientIp } from '#/server/client-ip.server'
 import type { Deps } from '#/server/deps.server'
 import { infra } from '#/server/infra-error'
 import type { Parsed } from '#/server/input.server'
@@ -20,7 +19,7 @@ import { AlreadyExistsError, NotExistsError } from './auth.errors'
 import EmailVerification from './emails/email-verification'
 import Login from './emails/login'
 import { generateOtp } from './otp-code.server'
-import { checkOtpRequest } from './rate-limit.server'
+import { checkOtpRequest, limitedAddress } from './rate-limit.server'
 import { createToken } from './tokens.repository.server'
 
 type OtpDeps = Pick<Deps, 'db' | 'hashToken' | 'logger' | 'mailer'>
@@ -110,7 +109,8 @@ export const requestOtpAction = defineMutation({
   auth: anonymousOnly,
   event: 'auth.request_otp',
   input: requestOtpInput,
-  run: ({ deps }, input) => requestCode(deps, input, clientIp(getRequest().headers)),
+  run: ({ deps }, input) =>
+    requestCode(deps, input, limitedAddress(deps.logger, getRequest().headers)),
   wire: {
     AlreadyExistsError: (_error, { email }) =>
       business('ALREADY_EXISTS', {
