@@ -362,17 +362,35 @@ describe('a transactions page', () => {
     expect(db.calls[1]?.args).toStrictEqual([donor, { limit: 20, offset: 0 }])
   })
 
-  it('refuses a page that is not an integer, without reading', async () => {
+  it.each([1.5, 1e21, -1e21, Number.MAX_SAFE_INTEGER + 1])(
+    'refuses page %d, which is not a safe integer, without reading',
+    async (page) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const db = pageDb()
+
+      await expect(
+        getTransactionsAction({ context: testContext(MEMBER, { db, logger }), data: { page } }),
+      ).rejects.toThrow(new Error('Invalid input'))
+      expect(events).toMatchObject([{ event: 'history.transactions.validation_failed' }])
+      expect(db.calls).toStrictEqual([])
+    },
+  )
+
+  it('reads the last safe page', async () => {
     expect.hasAssertions()
 
-    const { events, logger } = recordingLogger()
     const db = pageDb()
 
-    await expect(
-      getTransactionsAction({ context: testContext(MEMBER, { db, logger }), data: { page: 1.5 } }),
-    ).rejects.toThrow(new Error('Invalid input'))
-    expect(events).toMatchObject([{ event: 'history.transactions.validation_failed' }])
-    expect(db.calls).toStrictEqual([])
+    await getTransactionsAction({
+      context: testContext(MEMBER, { db }),
+      data: { page: Number.MAX_SAFE_INTEGER },
+    })
+    expect(db.calls[1]?.args).toStrictEqual([
+      donor,
+      { limit: 20, offset: 20 * (Number.MAX_SAFE_INTEGER - 1) },
+    ])
   })
 
   it('redirects a signed-out caller to login without reading', async () => {

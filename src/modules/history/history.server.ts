@@ -91,7 +91,9 @@ export const getAvailableYearsAction = defineRead({
   wire: {},
 })
 
-const transactionsInput = parseWith(Compile(Type.Object({ page: Type.Optional(Type.Integer()) })))
+// A page past the safe integers would reach the database as an imprecise offset.
+const page = Type.Integer({ maximum: Number.MAX_SAFE_INTEGER, minimum: Number.MIN_SAFE_INTEGER })
+const transactionsInput = parseWith(Compile(Type.Object({ page: Type.Optional(page) })))
 export type TransactionsInput = Parsed<typeof transactionsInput>
 
 export const getTransactionsAction = defineRead({
