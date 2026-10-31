@@ -2,6 +2,7 @@ import { addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import type { Deps } from '#/server/deps.server'
 import { legacyDb } from '#/server/legacy-db.server'
 
+import type { EghlQueryError } from './eghl.errors'
 import { finalStatusOf } from './eghl.outcome'
 import { EghlTxnExists } from './eghl.wire'
 import { recordOutcome } from './record-outcome.server'
@@ -21,6 +22,17 @@ const LOG_EVENTS = {
   SYNCING_STATUS: 'eghl.cron.syncing_status',
   UNAUTHORIZED: 'eghl.cron.unauthorized',
 }
+
+/** How a failed status query is logged: its tag, and the error behind it when there is one. */
+const queryFailureFields = (error: EghlQueryError) =>
+  error.match<EghlQueryError, { err?: unknown; error_type: string }>({
+    EghlFetchError: ({ _tag, cause }) => ({ err: cause, error_type: _tag }),
+    EghlQueryMismatchError: ({ _tag }) => ({ error_type: _tag }),
+    EghlQueryResponseError: ({ _tag }) => ({ error_type: _tag }),
+    EghlServerError: ({ _tag }) => ({ error_type: _tag }),
+    EghlVerificationError: ({ _tag }) => ({ error_type: _tag }),
+    ParseError: ({ _tag, cause }) => ({ err: cause, error_type: _tag }),
+  })
 
 /** The cron job: settles pending transactions from the gateway's own status. */
 export async function handleReconcile(
@@ -63,11 +75,10 @@ export async function handleReconcile(
       transactionId: pendingTransaction.transactionId,
     })
 
-    if (!result.ok) {
+    if (result.isErr()) {
       logger.error(
         {
-          err: 'error' in result.error ? result.error.error : undefined,
-          error_type: result.error.type,
+          ...queryFailureFields(result.error),
           event: LOG_EVENTS.QUERY_FAILED,
           transaction_id: pendingTransaction.transactionId,
         },

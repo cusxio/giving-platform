@@ -6,12 +6,48 @@ import { ok, tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
 import { legacyDb } from '#/server/legacy-db.server'
 
+import type { EghlReplyError } from './eghl.errors'
 import { finalStatusOf, inboundActionOf } from './eghl.outcome'
 import type { EghlPaymentResponse } from './eghl.wire'
 import { recordOutcome } from './record-outcome.server'
 import { findPendingAmountInCents } from './transactions.repository.server'
 
 type SettlementDeps = Pick<Deps, 'db' | 'eghl' | 'logger'>
+
+/**
+ * Logs why `route` refused a reply. The status says whose fault it is: 400 for the reply, 500
+ * when its body could not be read, so the gateway sends it again.
+ */
+function refuseReply(
+  logger: Deps['logger'],
+  route: 'callback' | 'return',
+  error: EghlReplyError,
+): 400 | 500 {
+  return error.match<EghlReplyError, 400 | 500>({
+    EghlInvalidMethodError: () => {
+      logger.warn({ event: `eghl.${route}.method_invalid` }, 'Invalid HTTP method received')
+      return 400
+    },
+    EghlServerError: () => {
+      logger.error({ event: `eghl.${route}.read_failed` }, 'Failed to read request body')
+      return 500
+    },
+    EghlVerificationError: () => {
+      logger.error(
+        { event: `eghl.${route}.verification_failed` },
+        'Signature verification failed (Potential tampering)',
+      )
+      return 400
+    },
+    ParseError: ({ _tag, cause }) => {
+      logger.warn(
+        { err: cause, error_type: _tag, event: `eghl.${route}.validation_failed` },
+        `${route === 'callback' ? 'Callback' : 'Return'} payload validation failed`,
+      )
+      return 400
+    },
+  })
+}
 
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
 async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentResponse) {
@@ -55,10 +91,10 @@ async function confirmByQuery(
   }
 
   const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
-  if (!queryResult.ok) {
+  if (queryResult.isErr()) {
     logger.warn(
       {
-        error_type: queryResult.error.type,
+        error_type: queryResult.error._tag,
         event: 'eghl.settlement.query_failed',
         transaction_id: transactionId,
       },
@@ -92,39 +128,10 @@ export async function handleEghlCallback(deps: SettlementDeps, request: Request)
 
   const responseResult = await eghl.readReply(request)
 
-  if (!responseResult.ok) {
-    const { type } = responseResult.error
-    switch (type) {
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: responseResult.error.error,
-            error_type: responseResult.error.type,
-            event: 'eghl.callback.validation_failed',
-          },
-          'Callback payload validation failed',
-        )
-        return badRequest
-      }
-      case 'EghlVerificationError': {
-        logger.error(
-          { event: 'eghl.callback.verification_failed' },
-          'Signature verification failed (Potential tampering)',
-        )
-        return badRequest
-      }
-      case 'EghlInvalidMethodError': {
-        logger.warn({ event: 'eghl.callback.method_invalid' }, 'Invalid HTTP method received')
-        return badRequest
-      }
-      case 'EghlServerError': {
-        logger.error({ event: 'eghl.callback.read_failed' }, 'Failed to read request body')
-        return internalError
-      }
-      default: {
-        assertExhaustive(responseResult.error)
-      }
-    }
+  if (responseResult.isErr()) {
+    return refuseReply(logger, 'callback', responseResult.error) === 400
+      ? badRequest
+      : internalError
   }
 
   const eghlResponse = responseResult.value
@@ -175,41 +182,8 @@ export async function handleEghlReturnGet(deps: SettlementDeps, request: Request
 
   const responseResult = await eghl.readReply(request)
 
-  if (!responseResult.ok) {
-    const { type } = responseResult.error
-
-    switch (type) {
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: responseResult.error.error,
-            error_type: responseResult.error.type,
-            event: 'eghl.return.validation_failed',
-          },
-          'Return payload validation failed',
-        )
-        break
-      }
-      case 'EghlVerificationError': {
-        logger.error(
-          { event: 'eghl.return.verification_failed' },
-          'Signature verification failed (Potential tampering)',
-        )
-        break
-      }
-      case 'EghlInvalidMethodError': {
-        logger.warn({ event: 'eghl.return.method_invalid' }, 'Invalid HTTP method received')
-        break
-      }
-      case 'EghlServerError': {
-        logger.error({ event: 'eghl.return.read_failed' }, 'Failed to read request body')
-        break
-      }
-      default: {
-        assertExhaustive(responseResult.error)
-      }
-    }
-
+  if (responseResult.isErr()) {
+    refuseReply(logger, 'return', responseResult.error)
     return errorRedirect
   }
 
@@ -260,41 +234,8 @@ export async function handleEghlReturnPost(deps: SettlementDeps, request: Reques
 
   const responseResult = await eghl.readReply(request)
 
-  if (!responseResult.ok) {
-    const { type } = responseResult.error
-
-    switch (type) {
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: responseResult.error.error,
-            error_type: responseResult.error.type,
-            event: 'eghl.return.validation_failed',
-          },
-          'Return payload validation failed',
-        )
-        break
-      }
-      case 'EghlVerificationError': {
-        logger.error(
-          { event: 'eghl.return.verification_failed' },
-          'Signature verification failed (Potential tampering)',
-        )
-        break
-      }
-      case 'EghlInvalidMethodError': {
-        logger.warn({ event: 'eghl.return.method_invalid' }, 'Invalid HTTP method received')
-        break
-      }
-      case 'EghlServerError': {
-        logger.error({ event: 'eghl.return.read_failed' }, 'Failed to read request body')
-        break
-      }
-      default: {
-        assertExhaustive(responseResult.error)
-      }
-    }
-
+  if (responseResult.isErr()) {
+    refuseReply(logger, 'return', responseResult.error)
     return errorRedirect
   }
 

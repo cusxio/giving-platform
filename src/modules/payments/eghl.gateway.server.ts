@@ -1,18 +1,25 @@
 import { createHash } from 'node:crypto'
 
+import { Result } from 'better-result'
 import queryString from 'query-string'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { createParseError } from '#/core/errors'
 import { centsToRinggit } from '#/core/money'
-import type { Result } from '#/core/result'
-import { err, ok, tryAsync, trySync } from '#/core/result'
 import { constantTimeEqual } from '#/server/crypto.server'
 
-import type { EghlCallbackError, EghlFetchError, EghlQueryError } from './eghl.errors'
+import type { EghlReplyError } from './eghl.errors'
+import {
+  EghlFetchError,
+  EghlInvalidMethodError,
+  EghlQueryMismatchError,
+  EghlQueryResponseError,
+  EghlServerError,
+  EghlVerificationError,
+  ParseError,
+} from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
-import type { PaymentGateway, PaymentRequest, StatusQuery } from './gateway'
+import type { PaymentGateway, PaymentRequest } from './gateway'
 
 export interface EghlConfig {
   /** Origin the gateway calls back and returns the donor to. */
@@ -27,7 +34,22 @@ const QUERY_TIMEOUT_MS = 8000
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
-const toFetchError = (error: unknown): EghlFetchError => ({ error, type: 'EghlFetchError' })
+async function readBody(request: Request): Promise<Result<string, EghlReplyError>> {
+  if (request.method === 'GET') {
+    return Result.ok(new URL(request.url).search)
+  }
+  if (request.method === 'POST') {
+    return Result.tryPromise({ catch: () => new EghlServerError(), try: () => request.text() })
+  }
+  return Result.err(new EghlInvalidMethodError())
+}
+
+const fieldsOf = (raw: string) =>
+  Result.try({ catch: () => new EghlServerError(), try: () => queryString.parse(raw) })
+
+const parseFailed = (cause: unknown) => new ParseError({ cause })
+
+const fetchFailed = (cause: unknown) => new EghlFetchError({ cause })
 
 type SignedReply = Pick<
   EghlQueryResponse,
@@ -128,130 +150,74 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
     },
 
     // A callback or return reply always carries HashValue2.
-    async readReply(request: Request): Promise<Result<EghlPaymentResponse, EghlCallbackError>> {
-      let raw: string
+    readReply: (request) =>
+      Result.gen(async function* readReply() {
+        const raw = yield* Result.await(readBody(request))
+        const fields = yield* fieldsOf(raw)
+        const reply = yield* Result.try({
+          catch: parseFailed,
+          try: () => EghlPaymentResponseSchema.Parse(fields),
+        })
+        return matchesHashValue2(reply) ? Result.ok(reply) : Result.err(new EghlVerificationError())
+      }),
 
-      if (request.method === 'GET') {
-        raw = new URL(request.url).search
-      } else if (request.method === 'POST') {
-        const bodyResult = await tryAsync(
-          () => request.text(),
-          () => ({ type: 'EghlServerError' }),
-        )
+    queryStatus: ({ transactionId, amountInCents }) =>
+      Result.gen(async function* queryStatus() {
+        const amount = centsToRinggit(amountInCents)
 
-        if (!bodyResult.ok) {
-          return bodyResult
+        const requestParams = {
+          Amount: amount.toFixed(2),
+          CurrencyCode: 'MYR',
+          PaymentID: transactionId,
+          PymtMethod: 'ANY',
+          ServiceID: config.serviceId,
+          TransactionType: 'QUERY',
         }
-        raw = bodyResult.value
-      } else {
-        return err({ type: 'EghlInvalidMethodError' })
-      }
 
-      const qsResult = trySync(
-        () => queryString.parse(raw),
-        () => ({ type: 'EghlServerError' }),
-      )
-      if (!qsResult.ok) {
-        return qsResult
-      }
+        const hashKeyFields = [
+          config.password,
+          requestParams.ServiceID,
+          requestParams.PaymentID,
+          requestParams.Amount,
+          requestParams.CurrencyCode,
+        ].join('')
 
-      const parseResult = trySync(
-        () => EghlPaymentResponseSchema.Parse(qsResult.value),
-        createParseError,
-      )
-      if (!parseResult.ok) {
-        return parseResult
-      }
+        const HashValue = sha256(hashKeyFields)
 
-      const eghlResponse = parseResult.value
-
-      if (!matchesHashValue2(eghlResponse)) {
-        return err({ type: 'EghlVerificationError' })
-      }
-
-      return ok(eghlResponse)
-    },
-
-    async queryStatus(query: StatusQuery): Promise<Result<EghlQueryResponse, EghlQueryError>> {
-      const { transactionId, amountInCents } = query
-      const amount = centsToRinggit(amountInCents)
-
-      const requestParams = {
-        Amount: amount.toFixed(2),
-        CurrencyCode: 'MYR',
-        PaymentID: transactionId,
-        PymtMethod: 'ANY',
-        ServiceID: config.serviceId,
-        TransactionType: 'QUERY',
-      }
-
-      const hashKeyFields = [
-        config.password,
-        requestParams.ServiceID,
-        requestParams.PaymentID,
-        requestParams.Amount,
-        requestParams.CurrencyCode,
-      ].join('')
-
-      const HashValue = sha256(hashKeyFields)
-
-      const queryResult = await tryAsync(
-        () =>
-          fetch(config.url, {
-            body: new URLSearchParams({ ...requestParams, HashValue }),
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            method: 'POST',
-            signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
+        const response = yield* Result.await(
+          Result.tryPromise({
+            catch: fetchFailed,
+            try: () =>
+              fetch(config.url, {
+                body: new URLSearchParams({ ...requestParams, HashValue }),
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                method: 'POST',
+                signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
+              }),
           }),
-        toFetchError,
-      )
+        )
+        const responseText = yield* Result.await(
+          Result.tryPromise({ catch: fetchFailed, try: () => response.text() }),
+        )
+        if (!response.ok) {
+          return Result.err(new EghlQueryResponseError())
+        }
 
-      if (!queryResult.ok) {
-        return queryResult
-      }
+        const fields = yield* fieldsOf(responseText)
+        const reply = yield* Result.try({
+          catch: parseFailed,
+          try: () => EghlQueryResponseSchema.Parse(fields),
+        })
 
-      const response = queryResult.value
+        if (!verifyQueryResponse(reply)) {
+          return Result.err(new EghlVerificationError())
+        }
 
-      const textResult = await tryAsync(() => response.text(), toFetchError)
-      if (!textResult.ok) {
-        return textResult
-      }
+        if (reply.PaymentID !== requestParams.PaymentID || reply.Amount !== requestParams.Amount) {
+          return Result.err(new EghlQueryMismatchError())
+        }
 
-      const responseText = textResult.value
-      if (!response.ok) {
-        return err({ message: responseText, type: 'EghlQueryResponseError' })
-      }
-
-      const qsResult = trySync(
-        () => queryString.parse(responseText),
-        () => ({ type: 'EghlServerError' }),
-      )
-      if (!qsResult.ok) {
-        return qsResult
-      }
-
-      const parseResult = trySync(
-        () => EghlQueryResponseSchema.Parse(qsResult.value),
-        createParseError,
-      )
-      if (!parseResult.ok) {
-        return parseResult
-      }
-
-      const eghlResponse = parseResult.value
-
-      if (!verifyQueryResponse(eghlResponse)) {
-        return err({ type: 'EghlVerificationError' })
-      }
-
-      if (
-        eghlResponse.PaymentID !== requestParams.PaymentID ||
-        eghlResponse.Amount !== requestParams.Amount
-      ) {
-        return err({ type: 'EghlQueryMismatchError' })
-      }
-
-      return ok(eghlResponse)
-    },
+        return Result.ok(reply)
+      }),
   }
 }

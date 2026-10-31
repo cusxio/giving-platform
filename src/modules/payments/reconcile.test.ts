@@ -1,3 +1,4 @@
+import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TransactionRollbackError } from '#/core/errors'
@@ -5,7 +6,7 @@ import { err, ok } from '#/core/result'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { testDeps } from '#/server/testing/test-deps'
 
-import type { EghlQueryError } from './eghl.errors'
+import { EghlServerError } from './eghl.errors'
 import type { EghlQueryResponse } from './eghl.wire'
 import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 import type { PaymentGateway } from './gateway'
@@ -118,7 +119,7 @@ type QueryResult = Awaited<ReturnType<PaymentGateway['queryStatus']>>
 /** Stands in for eGHL's status query; a transaction without a reply gets a server error. */
 const gatewayAnswering = (replies: Record<string, QueryResult>) =>
   vi.fn<PaymentGateway['queryStatus']>(({ transactionId }) =>
-    Promise.resolve(replies[transactionId] ?? err<EghlQueryError>({ type: 'EghlServerError' })),
+    Promise.resolve(replies[transactionId] ?? Result.err(new EghlServerError())),
   )
 
 /** Finalizes every reply as a fresh settlement unless `outcomes` names its PaymentID. */
@@ -127,7 +128,7 @@ const finalizeBy =
   (response: EghlQueryResponse) =>
     Promise.resolve(outcomes[response.PaymentID] ?? ok({ finalized: true }))
 
-const notFound = (id: string) => ok(queryReply(id, NotFound, QueryNotFound))
+const notFound = (id: string) => Result.ok(queryReply(id, NotFound, QueryNotFound))
 
 const runCron = async ({
   authorization = `Bearer ${settings.CRON_SECRET}`,
@@ -243,7 +244,7 @@ describe('eGHL cron', () => {
       txn_still_pending: queryReply('txn_still_pending', Exists, EghlTxnStatus.Pending),
       txn_success: queryReply('txn_success', Exists, EghlTxnStatus.Success),
     }
-    const replies = Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, ok(r)]))
+    const replies = Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, Result.ok(r)]))
     const { db, statements } = fakeDb(rows, { updatedRows: 1 })
 
     const run = await runCron({

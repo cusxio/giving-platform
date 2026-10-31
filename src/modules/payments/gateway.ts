@@ -1,6 +1,6 @@
-import type { Result } from '#/core/result'
+import type { Result } from 'better-result'
 
-import type { EghlCallbackError, EghlQueryError } from './eghl.errors'
+import type { EghlQueryError, EghlReplyError } from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
 
 /**
@@ -11,7 +11,7 @@ export interface PaymentGateway {
   /** The gateway page that takes the donor's payment for a pending transaction. */
   readonly paymentRequestUrl: (request: PaymentRequest) => string
   /** Reads a callback or return request and checks its signature. */
-  readonly readReply: (request: Request) => Promise<Result<EghlPaymentResponse, EghlCallbackError>>
+  readonly readReply: (request: Request) => Promise<Result<EghlPaymentResponse, EghlReplyError>>
   /** Asks the gateway, server to server, where a transaction stands. */
   readonly queryStatus: (query: StatusQuery) => Promise<Result<EghlQueryResponse, EghlQueryError>>
 }
@@ -26,7 +26,7 @@ export interface PaymentRequest {
   readonly transactionId: string
 }
 
-export interface StatusQuery {
+interface StatusQuery {
   readonly amountInCents: number
   readonly transactionId: string
 }

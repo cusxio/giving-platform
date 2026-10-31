@@ -5,9 +5,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ok } from '#/core/result'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { testDeps } from '#/server/testing/test-deps'
 
-import { handleEghlCallback, handleEghlReturnGet } from './eghl.http.server'
+import { handleEghlCallback, handleEghlReturnGet, handleEghlReturnPost } from './eghl.http.server'
 import { EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 import type { recordOutcome } from './record-outcome.server'
 import { findPendingAmountInCents } from './transactions.repository.server'
@@ -153,11 +154,11 @@ const withGateway = async <T>(gateway: typeof fetch, run: () => Promise<T>) => {
   }
 }
 
-const stubPaymentService = () => {
+const stubPaymentService = (logger = pino({ level: 'silent' })) => {
   finalizePaymentFromCallback.mockReset().mockResolvedValue(ok({ finalized: true }))
   return testDeps({
     db: createFakeDb().on(findPendingAmountInCents, () => AMOUNT_IN_CENTS),
-    logger: pino({ level: 'silent' }),
+    logger,
   })
 }
 
@@ -348,4 +349,75 @@ describe('eGHL return route', () => {
 
     expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
   })
+})
+
+/** A POST whose body stream fails as it is read. */
+const unreadableRequest = (url: string) =>
+  new Request(url, {
+    body: new ReadableStream({
+      start(controller) {
+        controller.error(new Error('connection reset'))
+      },
+    }),
+    duplex: 'half',
+    method: 'POST',
+  } as RequestInit)
+
+const CALLBACK_URL = 'https://app.give.test/api/eghl/callback'
+const RETURN_URL = 'https://app.give.test/api/eghl/return'
+const post = (url: string, body: string) => new Request(url, { body, method: 'POST' })
+
+describe('refusing a reply', () => {
+  it.each([
+    ['a tampered signature', post(CALLBACK_URL, tamperedSuccessBody()), 400, 'verification_failed'],
+    [
+      'fields that fail the schema',
+      post(CALLBACK_URL, 'PaymentID=txn_abc123'),
+      400,
+      'validation_failed',
+    ],
+    [
+      'a method other than GET or POST',
+      new Request(CALLBACK_URL, { method: 'PUT' }),
+      400,
+      'method_invalid',
+    ],
+    ['a body that cannot be read', unreadableRequest(CALLBACK_URL), 500, 'read_failed'],
+  ])(
+    'answers the callback with %s by its status and logs why',
+    async (_case, request, status, why) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const response = await handleEghlCallback(stubPaymentService(logger), request)
+
+      expect(response.status).toBe(status)
+      expect(events.map(({ event }) => event)).toStrictEqual([
+        'eghl.callback.received',
+        `eghl.callback.${why}`,
+      ])
+      expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    ['a tampered signature', post(RETURN_URL, tamperedSuccessBody()), 'verification_failed'],
+    ['fields that fail the schema', post(RETURN_URL, 'PaymentID=txn_abc123'), 'validation_failed'],
+    ['a body that cannot be read', unreadableRequest(RETURN_URL), 'read_failed'],
+  ])(
+    'sends the donor of a return with %s to the error page and logs why',
+    async (_case, request, why) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const response = await handleEghlReturnPost(stubPaymentService(logger), request)
+
+      expect(response).toMatchObject({ options: { replace: true, to: '/uh-oh' } })
+      expect(events.map(({ event }) => event)).toStrictEqual([
+        'eghl.return.received',
+        `eghl.return.${why}`,
+      ])
+      expect(finalizePaymentFromCallback).not.toHaveBeenCalled()
+    },
+  )
 })
