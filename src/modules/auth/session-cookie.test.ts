@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { clearSessionCookie, serializeSessionCookie } from './utils'
+import { clearSessionCookie, serializeSessionCookie } from './session-cookie.server'
 
 describe('session cookie', () => {
   it('sets a lax, secure, http-only session cookie that expires with the session', () => {

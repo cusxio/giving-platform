@@ -2,7 +2,8 @@ import { stringifySetCookie } from 'cookie'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
-import { SESSION_COOKIE_NAME } from './constants'
+export const SESSION_COOKIE_NAME = '__session'
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30
 
 export function clearSessionCookie() {
   return serializeSessionCookie({ cookieValue: '', expiresAt: new Date(0) })

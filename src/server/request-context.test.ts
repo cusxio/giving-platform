@@ -4,25 +4,18 @@ import type { getGlobalStartContext } from '@tanstack/react-start'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
-import type { SessionRepository } from '#/features/session/session.repository'
+import type * as AuthServer from '#/modules/auth/server'
 import type * as Envvars from '#/server/env.server'
-import type { User } from '#/server/schema.server'
 
+import { createTokenHasher } from './crypto.server'
 import type { Deps } from './deps.server'
 import type { RequestContext } from './request-context.server'
 
 const io = vi.hoisted(() => ({
+  check: { session: null, user: null } as AuthServer.SessionCheck,
   cookie: undefined as string | undefined,
-  dbDown: false,
   logs: [] as Record<string, unknown>[],
-  setCookies: [] as string[],
-  store: new Map<
-    string,
-    {
-      session: { expiresAt: Date; id: string; tokenHash: string }
-      user: { id: number; journey: 'start_fresh'; role: 'user'; status: string }
-    }
-  >(),
+  verified: [] as { cookie: string; logger: unknown }[],
 }))
 
 vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
@@ -37,14 +30,7 @@ vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
   SESSION_SECRET: 'test-session-secret',
 }))
 
-vi.mock(import('@tanstack/react-start/server'), () => ({
-  getCookie: () => io.cookie,
-  setResponseHeader: (name, value) => {
-    if (name === 'Set-Cookie') {
-      io.setCookies.push(...[value].flat())
-    }
-  },
-}))
+vi.mock(import('@tanstack/react-start/server'), () => ({ getCookie: () => io.cookie }))
 
 vi.mock(import('#/server/logger.server'), async () => {
   const { pino: createLogger } = await import('pino')
@@ -57,57 +43,27 @@ vi.mock(import('#/server/logger.server'), async () => {
   return { logger: createLogger(sink) }
 })
 
-vi.mock(import('#/features/session/session.repository'), async () => {
-  const result = await import('#/core/result')
-  const dbError = result.err({ error: new Error('db down'), type: 'DBQueryError' as const })
-  const FakeSessionRepository = class {
-    deleteSessionById(id: string) {
-      io.store.delete(id)
-      return Promise.resolve(result.ok())
-    }
-    extendSession(id: string, expiresAt: Date) {
-      const row = io.store.get(id)
-      if (row) {
-        row.session.expiresAt = expiresAt
-      }
-      return Promise.resolve(result.ok(row?.session ?? null))
-    }
-    findSessionByIdWithUser(id: string) {
-      if (io.dbDown) {
-        return Promise.resolve(dbError)
-      }
-      const row = io.store.get(id)
-      return Promise.resolve(
-        result.ok(row ? { session: { ...row.session }, user: { ...row.user } } : null),
-      )
-    }
-  }
-  return { SessionRepository: FakeSessionRepository as unknown as typeof SessionRepository }
-})
+vi.mock<typeof AuthServer>(import('#/modules/auth/server'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  verifySessionCookie: (deps, cookie) => {
+    io.verified.push({ cookie, logger: deps.logger })
+    return Promise.resolve(io.check)
+  },
+}))
 
-const { createTokenHasher } = await import('./crypto.server')
-const hashToken = createTokenHasher('test-session-secret')
+const { logger: rootLogger } = await import('./logger.server')
 const { requestContext } = await import('./request-context.server')
 
-const SESSION_ID = 'session'.padEnd(21, '0')
-const RAW_TOKEN = 'token'.padEnd(21, '0')
-const COOKIE = `${SESSION_ID}.${RAW_TOKEN}`
-
-function seed(status: User['status'], expiresInDays: number) {
-  io.store.set(SESSION_ID, {
-    session: {
-      expiresAt: addDays(now(), expiresInDays),
-      id: SESSION_ID,
-      tokenHash: hashToken(RAW_TOKEN),
-    },
-    user: { id: 42, journey: 'start_fresh', role: 'user', status },
-  })
+const COOKIE = `${'session'.padEnd(21, '0')}.${'token'.padEnd(21, '0')}`
+const SIGNED_IN: AuthServer.SessionCheck = {
+  session: { expiresAt: addDays(now(), 20), id: 'session'.padEnd(21, '0'), tokenHash: 'hash' },
+  user: { id: 42, journey: 'start_fresh', role: 'user' },
 }
 
 async function handle(cookie?: string) {
   io.cookie = cookie
-  io.setCookies = []
   io.logs = []
+  io.verified = []
   const { server } = requestContext.options
   if (server === undefined) {
     throw new TypeError('requestContext has no server function')
@@ -131,82 +87,45 @@ async function handle(cookie?: string) {
   if (context === undefined) {
     throw new TypeError('requestContext did not call next with a context')
   }
-  return { context, logs: io.logs, setCookies: io.setCookies }
+  return { context, logs: io.logs, verified: io.verified }
 }
 
-const cleared = (cookie: string | undefined) =>
-  cookie?.startsWith('__session=;') === true && cookie.includes('Expires=Thu, 01 Jan 1970')
-
 describe('the request context middleware', () => {
-  it('treats a request without a cookie as anonymous and leaves cookies alone', async () => {
+  it('treats a request without a cookie as anonymous without verifying anything', async () => {
     expect.hasAssertions()
 
-    const { context, setCookies } = await handle()
+    io.check = SIGNED_IN
+    const { context, verified } = await handle()
 
     expect(context).toMatchObject({ session: null, user: null })
-    expect(setCookies).toStrictEqual([])
+    expect(verified).toStrictEqual([])
   })
 
-  it('passes a valid session through without touching the cookie', async () => {
+  it('verifies the session cookie with the root logger and passes the result through', async () => {
     expect.hasAssertions()
 
-    seed('active', 20)
-    const { context, setCookies } = await handle(COOKIE)
+    io.check = SIGNED_IN
+    const { context, verified } = await handle(COOKIE)
 
-    expect(context.user).toMatchObject({ id: 42, journey: 'start_fresh', role: 'user' })
-    expect(context.session).toMatchObject({ id: SESSION_ID, tokenHash: hashToken(RAW_TOKEN) })
-    expect(setCookies).toStrictEqual([])
+    expect(verified).toHaveLength(1)
+    expect(verified[0]?.cookie).toBe(COOKIE)
+    expect(verified[0]?.logger).toBe(rootLogger)
+    expect(context).toMatchObject(SIGNED_IN)
   })
 
-  it('extends a session within a week of expiry and sends the refreshed cookie', async () => {
+  it('leaves a rejected cookie anonymous', async () => {
     expect.hasAssertions()
 
-    seed('active', 3)
-    const { context, setCookies } = await handle(COOKIE)
-
-    expect(setCookies).toHaveLength(1)
-    expect(setCookies[0]).toMatch(new RegExp(`^__session=${COOKIE};`, 'u'))
-    expect(context.session?.expiresAt.getTime()).toBeGreaterThan(addDays(now(), 29).getTime())
-  })
-
-  it('rejects the session of a suspended user, deletes it and clears the cookie', async () => {
-    expect.hasAssertions()
-
-    seed('suspended', 20)
-    const { context, logs, setCookies } = await handle(COOKIE)
+    io.check = { session: null, user: null }
+    const { context } = await handle(COOKIE)
 
     expect(context).toMatchObject({ session: null, user: null })
-    expect(io.store.has(SESSION_ID)).toBe(false)
-    expect(setCookies).toHaveLength(1)
-    expect(cleared(setCookies[0])).toBe(true)
-    expect(logs).toContainEqual(
-      expect.objectContaining({
-        event: 'session.verify.invalid',
-        reason: 'SessionUserInactiveError',
-      }),
-    )
-  })
-
-  it.each([
-    ['malformed', 'not-a-session', 'session.verify.validation_failed'],
-    ['unreadable from the db', COOKIE, 'session.verify.db_error'],
-  ])('clears a cookie that is %s', async (_label, cookie, event) => {
-    expect.hasAssertions()
-
-    seed('active', 20)
-    io.dbDown = event === 'session.verify.db_error'
-    const { context, logs, setCookies } = await handle(cookie)
-    io.dbDown = false
-
-    expect(context).toMatchObject({ session: null, user: null })
-    expect(cleared(setCookies[0])).toBe(true)
-    expect(logs).toContainEqual(expect.objectContaining({ event }))
   })
 
   it('scopes the logger to the signed-in user and hands it out on both keys', async () => {
     expect.hasAssertions()
 
-    seed('active', 20)
+    io.check = SIGNED_IN
     const { context } = await handle(COOKIE)
     io.logs = []
     context.deps.logger.info({ event: 'probe' }, 'probe')
@@ -230,7 +149,7 @@ describe('the request context middleware', () => {
       },
       mail: { apiKey: undefined, rootDomain: undefined },
     })
-    expect(context.deps.hashToken(RAW_TOKEN)).toBe(hashToken(RAW_TOKEN))
+    expect(context.deps.hashToken('raw')).toBe(createTokenHasher('test-session-secret')('raw'))
   })
 
   it('types context.deps on every handler through Register', () => {

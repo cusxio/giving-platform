@@ -14,8 +14,6 @@ import type {
   SuccessResponse,
   ValidationErrorResponse,
 } from '#/core/wire'
-import { SESSION_MAX_AGE_SECONDS } from '#/features/session/constants'
-import { serializeSessionCookie } from '#/features/session/utils'
 import type { User } from '#/modules/account/server'
 import { activateUser, findUserByEmail } from '#/modules/account/server'
 import { constantTimeEqual } from '#/server/crypto.server'
@@ -24,6 +22,7 @@ import type { RequestContext } from '#/server/request-context.server'
 
 import type { AuthValidateOtpError } from './auth.errors'
 import { checkOtpVerify, resetOtpVerify } from './rate-limit.server'
+import { SESSION_MAX_AGE_SECONDS, serializeSessionCookie } from './session-cookie.server'
 import { createSession } from './sessions.repository.server'
 import { claimTokenIfUnused, findToken } from './tokens.repository.server'
 
