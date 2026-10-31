@@ -260,7 +260,7 @@ describe('eGHL cron', () => {
     expect(run).toMatchObject({
       body: 'ok',
       errors: [
-        { error_type: 'EghlServerError', event: 'eghl.cron.query_failed' },
+        { 'error.type': 'EghlServerError', event: 'eghl.cron.query_failed' },
         {
           event: 'eghl.cron.failed',
           op: 'payments.insertPayment',

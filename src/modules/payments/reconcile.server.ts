@@ -23,13 +23,13 @@ const LOG_EVENTS = {
 
 /** How a failed status query is logged: its tag, and the error behind it when there is one. */
 const queryFailureFields = (error: EghlQueryError) =>
-  error.match<EghlQueryError, { err?: unknown; error_type: string }>({
-    EghlFetchError: ({ _tag, cause }) => ({ err: cause, error_type: _tag }),
-    EghlQueryMismatchError: ({ _tag }) => ({ error_type: _tag }),
-    EghlQueryResponseError: ({ _tag }) => ({ error_type: _tag }),
-    EghlServerError: ({ _tag }) => ({ error_type: _tag }),
-    EghlVerificationError: ({ _tag }) => ({ error_type: _tag }),
-    ParseError: ({ _tag, cause }) => ({ err: cause, error_type: _tag }),
+  error.match<EghlQueryError, { 'error.type': string; err?: unknown }>({
+    EghlFetchError: ({ _tag, cause }) => ({ 'error.type': _tag, err: cause }),
+    EghlQueryMismatchError: ({ _tag }) => ({ 'error.type': _tag }),
+    EghlQueryResponseError: ({ _tag }) => ({ 'error.type': _tag }),
+    EghlServerError: ({ _tag }) => ({ 'error.type': _tag }),
+    EghlVerificationError: ({ _tag }) => ({ 'error.type': _tag }),
+    ParseError: ({ _tag, cause }) => ({ 'error.type': _tag, err: cause }),
   })
 
 /** The cron job: settles pending transactions from the gateway's own status. */

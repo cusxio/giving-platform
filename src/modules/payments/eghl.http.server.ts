@@ -41,7 +41,7 @@ function refuseReply(
     },
     ParseError: ({ _tag, cause }) => {
       logger.warn(
-        { err: cause, error_type: _tag, event: `eghl.${route}.validation_failed` },
+        { 'error.type': _tag, err: cause, event: `eghl.${route}.validation_failed` },
         `${route === 'callback' ? 'Callback' : 'Return'} payload validation failed`,
       )
       return 400
@@ -93,7 +93,7 @@ async function confirmByQuery(
   if (queryResult.isErr()) {
     logger.warn(
       {
-        error_type: queryResult.error._tag,
+        'error.type': queryResult.error._tag,
         event: 'eghl.settlement.query_failed',
         transaction_id: transactionId,
       },

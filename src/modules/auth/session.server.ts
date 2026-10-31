@@ -189,7 +189,7 @@ export async function verifySessionCookie(
     })
   } else if (ParseError.is(error)) {
     logger.warn(
-      { err: error.cause, error_type: error._tag, event: 'session.verify.validation_failed' },
+      { 'error.type': error._tag, err: error.cause, event: 'session.verify.validation_failed' },
       'Cookie format is invalid',
     )
   } else {

@@ -372,6 +372,26 @@ const RETURN_URL = 'https://app.give.test/api/eghl/return'
 const post = (url: string, body: string) => new Request(url, { body, method: 'POST' })
 
 describe('refusing a reply', () => {
+  it('names the failure under error.type', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const deps = stubPaymentService(logger)
+    await handleEghlCallback(deps, post(CALLBACK_URL, 'PaymentID=txn_abc123'))
+    await withGateway(unreachableGateway, async () =>
+      handleEghlCallback(
+        deps,
+        post(CALLBACK_URL, signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed')),
+      ),
+    )
+
+    expect(events.filter((e) => e.level >= 40)).toMatchObject([
+      { 'error.type': 'ParseError', event: 'eghl.callback.validation_failed' },
+      { 'error.type': 'EghlFetchError', event: 'eghl.settlement.query_failed' },
+    ])
+    expect(events.some((e) => 'error_type' in e)).toBe(false)
+  })
+
   it.each([
     ['a tampered signature', post(CALLBACK_URL, tamperedSuccessBody()), 400, 'verification_failed'],
     [

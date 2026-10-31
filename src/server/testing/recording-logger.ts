@@ -5,7 +5,7 @@ import { pino } from 'pino'
 export interface LogLine {
   readonly [field: string]: unknown
   readonly err?: { readonly message: string; readonly type: string }
-  readonly error_type?: string
+  readonly 'error.type'?: string
   readonly event?: string
   readonly level: number
   readonly reason?: string

@@ -280,7 +280,7 @@ describe('the session cookie on the response', () => {
     [
       'malformed',
       'not-a-session',
-      { error_type: 'ParseError', event: 'session.verify.validation_failed', level: 40 },
+      { 'error.type': 'ParseError', event: 'session.verify.validation_failed', level: 40 },
     ],
     [
       'unreadable from the db',
