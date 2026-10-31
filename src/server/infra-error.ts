@@ -5,7 +5,6 @@ import { TaggedError } from 'better-result'
  * No caller can act on it, so workflows pass it up unchanged and the boundary logs it once.
  * `op` is the failing query's name or a dotted label such as `db.transaction`.
  */
-// oxlint-disable-next-line unicorn/throw-new-error -- TaggedError('Tag') builds a class, it throws nothing
 export class InfraError extends TaggedError('InfraError')<{
   cause: unknown
   message: string

@@ -106,7 +106,8 @@ export default defineConfig({
     'eslint/capitalized-comments': 'off',
     'eslint/id-length': 'off',
     'eslint/new-cap': 'off',
-    'eslint/no-underscore-dangle': ['error', { allow: ['__error'] }],
+    // `_tag` is the discriminant of better-result's tagged errors.
+    'eslint/no-underscore-dangle': ['error', { allow: ['__error', '_tag'] }],
 
     // JavaScript/ESLint correctness tweaks.
     'eslint/init-declarations': 'off',
@@ -218,6 +219,17 @@ export default defineConfig({
           },
         ],
       },
+    },
+    {
+      // `class X extends TaggedError('X')` calls a class factory, which the rule reads as `Error()`.
+      files: [
+        'src/modules/**/*.errors.ts',
+        'src/server/authorize.server.ts',
+        'src/server/infra-error.ts',
+        'src/server/input.server.ts',
+        '**/*.test.ts',
+      ],
+      rules: { 'unicorn/throw-new-error': 'off' },
     },
     { files: ['src/server/**'], rules: restrictImports(...EVERYWHERE) },
     {
