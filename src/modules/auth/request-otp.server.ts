@@ -1,3 +1,4 @@
+import { getRequest } from '@tanstack/react-start/server'
 import { Result } from 'better-result'
 import { createElement } from 'react'
 import { render, toPlainText } from 'react-email'
@@ -8,6 +9,7 @@ import { config } from '#/core/brand'
 import type { User } from '#/modules/account/server'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
 import { anonymousOnly } from '#/server/authorize.server'
+import { clientIp } from '#/server/client-ip.server'
 import type { Deps } from '#/server/deps.server'
 import { infra } from '#/server/infra-error'
 import type { Parsed } from '#/server/input.server'
@@ -71,9 +73,9 @@ async function sendOtp(deps: OtpDeps, user: User, mode: RequestOtpInput['mode'])
  * Emails a login code to an active user, and a signup code to a new email or a guest. A signup
  * for a suspended or deleted account answers as if a code was sent, and sends none.
  */
-function requestCode(deps: OtpDeps, { email, mode }: RequestOtpInput) {
+function requestCode(deps: OtpDeps, { email, mode }: RequestOtpInput, ip: null | string) {
   return Result.gen(async function* request() {
-    yield* Result.await(checkOtpRequest(deps, email))
+    yield* Result.await(checkOtpRequest(deps, email, ip))
     deps.logger.info({ email, event: 'auth.request_otp.attempt', mode }, 'Initiating OTP request')
 
     let user: User
@@ -108,7 +110,7 @@ export const requestOtpAction = defineMutation({
   auth: anonymousOnly,
   event: 'auth.request_otp',
   input: requestOtpInput,
-  run: ({ deps }, input) => requestCode(deps, input),
+  run: ({ deps }, input) => requestCode(deps, input, clientIp(getRequest().headers)),
   wire: {
     AlreadyExistsError: (_error, { email }) =>
       business('ALREADY_EXISTS', {
@@ -122,12 +124,12 @@ export const requestOtpAction = defineMutation({
         fields: { email, reason: 'not_found' },
         msg: 'Login blocked: User does not exist',
       }),
-    RateLimitExceededError: ({ retryAfterSeconds }, { email }) =>
+    RateLimitExceededError: ({ ip, retryAfterSeconds }, { email }) =>
       business(
         'RATE_LIMIT_EXCEEDED',
         {
           event: 'auth.request_otp.rate_limited',
-          fields: { email, retry_after_seconds: retryAfterSeconds },
+          fields: { email, ...(ip !== null && { ip }), retry_after_seconds: retryAfterSeconds },
           msg: 'Rate limit exceeded for OTP request',
         },
         `Too many requests. Please try again in ${Math.ceil(retryAfterSeconds / 60)} minutes.`,

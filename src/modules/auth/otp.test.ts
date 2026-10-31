@@ -23,9 +23,13 @@ import { claimTokenIfUnused, createToken, findToken } from './tokens.repository.
 import type { VerifyOtpInput } from './verify-otp.server'
 import { verifyOtpAction } from './verify-otp.server'
 
-const io = vi.hoisted(() => ({ setCookies: [] as string[] }))
+const io = vi.hoisted(() => ({
+  request: new Request('https://app.give.test/'),
+  setCookies: [] as string[],
+}))
 
 vi.mock(import('@tanstack/react-start/server'), () => ({
+  getRequest: () => io.request,
   setResponseHeader: (name, value) => {
     if (name === 'Set-Cookie') {
       io.setCookies.push(...[value].flat())
@@ -64,7 +68,13 @@ function userRow(email: string, id: number, status: Status): UserRow {
   }
 }
 
+/** Later calls arrive with Vercel's client-address header. */
+function fromAddress(ip: string) {
+  io.request = new Request('https://app.give.test/', { headers: { 'x-real-ip': ip } })
+}
+
 function setup(existing?: Status) {
+  io.request = new Request('https://app.give.test/')
   const users = new Map<UserRow['email'], UserRow>()
   if (existing) {
     users.set(EMAIL, userRow(EMAIL, 1, existing))
@@ -324,6 +334,45 @@ describe('requesting a code', () => {
     })
     expect(sentEmails).toHaveLength(5)
     expect(events.at(-1)).toMatchObject({ event: 'auth.request_otp.rate_limited', level: 40 })
+  })
+
+  it('refuses a request from an address over its limit before counting the email', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, events, sentEmails } = setup('active')
+    fromAddress('203.0.113.9')
+    attempts.set('otp_request:ip:203.0.113.9', 30)
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual({
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many requests. Please try again in 5 minutes.',
+      },
+      type: 'BUSINESS_ERROR',
+    })
+    expect(sentEmails).toStrictEqual([])
+    expect(attempts.has(`otp_request:${EMAIL}`)).toBe(false)
+    expect(events.at(-1)).toMatchObject({
+      email: EMAIL,
+      event: 'auth.request_otp.rate_limited',
+      ip: '203.0.113.9',
+      level: 40,
+    })
+  })
+
+  it('counts each request against its address and its email', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, events, sentEmails } = setup('active')
+    fromAddress('203.0.113.9')
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(success)
+    expect(sentEmails).toHaveLength(1)
+    expect(Object.fromEntries(attempts)).toStrictEqual({
+      'otp_request:donor@example.com': 1,
+      'otp_request:ip:203.0.113.9': 1,
+    })
+    expect(events.find((e) => e.event === 'auth.request_otp.rate_limited')).toBeUndefined()
   })
 
   it('rejects an invalid email without touching the database', async () => {
@@ -612,6 +661,39 @@ describe('verifying a code', () => {
       type: 'BUSINESS_ERROR',
     })
     expect(events.at(-1)).toMatchObject({ event: 'auth.verify_otp.rate_limited', level: 40 })
+  })
+
+  it('refuses an attempt from an address over its limit without claiming the code', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, events, otp, tokens } = await issued('active', 'login')
+    fromAddress('2001:db8:1:2::9')
+    attempts.set('otp_verify:ip:2001:db8:1:2::/64', 30)
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual({
+      error: {
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'Too many attempts. Please try again in 5 minutes.',
+      },
+      type: 'BUSINESS_ERROR',
+    })
+    expect(io.setCookies).toStrictEqual([])
+    expect(tokens[0]?.usedAt).toBeNull()
+    expect(events.at(-1)).toMatchObject({
+      event: 'auth.verify_otp.rate_limited',
+      ip: '2001:db8:1:2::/64',
+    })
+  })
+
+  it('resets only the email count after a verification from an address', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, otp } = await issued('active', 'login')
+    fromAddress('203.0.113.9')
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    expect(attempts.get('otp_verify:ip:203.0.113.9')).toBe(1)
+    expect(attempts.has(`otp_verify:${EMAIL}`)).toBe(false)
   })
 
   it('rejects a code that is not six digits without touching the database', async () => {

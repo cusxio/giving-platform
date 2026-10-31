@@ -1,4 +1,4 @@
-import { setResponseHeader } from '@tanstack/react-start/server'
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
 import { Result } from 'better-result'
 import { nanoid } from 'nanoid'
 import { Type } from 'typebox'
@@ -7,6 +7,7 @@ import { Compile } from 'typebox/compile'
 import type { User } from '#/modules/account/server'
 import { activateUser, findUserByEmail } from '#/modules/account/server'
 import { anonymousOnly } from '#/server/authorize.server'
+import { clientIp } from '#/server/client-ip.server'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { Deps } from '#/server/deps.server'
 import { required } from '#/server/infra-error'
@@ -84,10 +85,10 @@ function validateOtp(deps: VerifyDeps, { email, mode, otp }: VerifyOtpInput) {
 }
 
 /** Checks the attempt count and the code, and answers the new session's cookie. */
-function verifyCode(deps: VerifyDeps, input: VerifyOtpInput) {
+function verifyCode(deps: VerifyDeps, input: VerifyOtpInput, ip: null | string) {
   const { email, mode } = input
   return Result.gen(async function* verify() {
-    yield* Result.await(checkOtpVerify(deps, email))
+    yield* Result.await(checkOtpVerify(deps, email, ip))
     deps.logger.info({ email, event: 'auth.verify_otp.attempt', mode }, 'Attempting to verify code')
 
     const cookie = yield* Result.await(validateOtp(deps, input))
@@ -122,7 +123,7 @@ export const verifyOtpAction = defineMutation({
   event: 'auth.verify_otp',
   input: verifyOtpInput,
   run: async ({ deps }, input) => {
-    const verified = await verifyCode(deps, input)
+    const verified = await verifyCode(deps, input, clientIp(getRequest().headers))
     if (verified.isErr()) {
       return Result.err(verified.error)
     }
@@ -132,12 +133,12 @@ export const verifyOtpAction = defineMutation({
   wire: {
     InvalidOtpError: (_error, { email }) => invalid(email, 'wrong_code'),
     InvalidRequestError: (_error, { email }) => invalid(email, 'expired_or_missing'),
-    RateLimitExceededError: ({ retryAfterSeconds }, { email }) =>
+    RateLimitExceededError: ({ ip, retryAfterSeconds }, { email }) =>
       business(
         'RATE_LIMIT_EXCEEDED',
         {
           event: 'auth.verify_otp.rate_limited',
-          fields: { email, retry_after_seconds: retryAfterSeconds },
+          fields: { email, ...(ip !== null && { ip }), retry_after_seconds: retryAfterSeconds },
           msg: 'Rate limit exceeded for OTP verification',
         },
         `Too many attempts. Please try again in ${Math.ceil(retryAfterSeconds / 60)} minutes.`,

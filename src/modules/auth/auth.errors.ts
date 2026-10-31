@@ -1,7 +1,8 @@
 import { TaggedError } from 'better-result'
 
-/** Too many attempts in the window. */
+/** Too many attempts in the window. `ip` is the client address whose limit refused the call. */
 export class RateLimitExceededError extends TaggedError('RateLimitExceededError')<{
+  ip: null | string
   retryAfterSeconds: number
 }> {}
 
