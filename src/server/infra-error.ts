@@ -1,4 +1,4 @@
-import { TaggedError } from 'better-result'
+import { Result, TaggedError } from 'better-result'
 
 /**
  * The one infrastructure failure: a database call failed, or returned less than the code needs.
@@ -18,3 +18,16 @@ export class InfraError extends TaggedError('InfraError')<{
 /** `op` failed with `cause`, as the driver or the decoder threw it. */
 export const infra = (op: string, cause: unknown): InfraError =>
   new InfraError({ cause, message: `${op} failed`, op, reason: 'failed' })
+
+/** The row a statement with `RETURNING` gave back, or a `no-row` failure of `op` when it gave none. */
+export const required = <T>(row: T | null, op: string): Result<T, InfraError> =>
+  row === null
+    ? Result.err(
+        new InfraError({
+          cause: undefined,
+          message: `${op} returned no row`,
+          op,
+          reason: 'no-row',
+        }),
+      )
+    : Result.ok(row)
