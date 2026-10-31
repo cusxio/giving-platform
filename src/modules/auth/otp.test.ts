@@ -932,6 +932,26 @@ describe('one code against many addresses', () => {
     ])
   })
 
+  it('counts guesses that name no client address against the code too', async () => {
+    expect.hasAssertions()
+
+    const { deps, otp } = await issued('active', 'login')
+    await guess(deps, [
+      ['203.0.113.1', WRONG],
+      ['2001:db8:5:6::1', WRONG],
+    ])
+    io.request = new Request('https://app.give.test/')
+    const wrong = { email: EMAIL, mode: 'login', otp: WRONG }
+    await verify(deps, wrong)
+    await verify(deps, wrong)
+    await verify(deps, wrong)
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(
+      invalidCode,
+    )
+    expect(io.setCookies).toStrictEqual([])
+  })
+
   it('accepts the right code on its fifth check', async () => {
     expect.hasAssertions()
 
