@@ -280,15 +280,18 @@ function define(kind: Kind, spec: AnySpec): Action<unknown> {
     try {
       outcome = await settle(kind, spec, invocation)
     } catch (error) {
-      if (!isRedirect(error) && !isNotFound(error)) {
-        const defect = loggable(error)
-        invocation.context.deps.logger.error(
-          { 'error.type': defect.name, err: defect, event: `${spec.event}.defect` },
-          'Unhandled defect',
-        )
-        markSpanFailed(defect, defect.name, 'Unhandled defect')
+      if (isRedirect(error) || isNotFound(error)) {
+        throw error
       }
-      throw error
+      const defect = loggable(error)
+      invocation.context.deps.logger.error(
+        { 'error.type': defect.name, err: defect, event: `${spec.event}.defect` },
+        'Unhandled defect',
+      )
+      markSpanFailed(defect, defect.name, 'Unhandled defect')
+      // The client would get every own property of the original, its stack and cause included.
+      // oxlint-disable-next-line preserve-caught-error
+      throw new Error('Internal Server Error')
     }
     return outcome.kind === 'throw' ? outcome.thrown() : outcome.value
   }
@@ -299,7 +302,8 @@ function define(kind: Kind, spec: AnySpec): Action<unknown> {
  * A refused policy is `AUTH_ERROR` (a signed-in caller of `anonymousOnly` is redirected home),
  * invalid input `VALIDATION_ERROR`, a domain error its `wire` row's `BUSINESS_ERROR`, and an
  * `InfraError` `SERVER_ERROR`, logged once as `<event>.failed`. A throw is a defect: logged as
- * `<event>.defect` and rethrown untouched.
+ * `<event>.defect`, and the client gets a generic error. A router redirect or `notFound()` passes
+ * through.
  */
 export function defineMutation<C, PE extends Refusal, I, T, E extends Tagged, W>(
   spec: MutationSpec<C, PE, I, T, E, W>,

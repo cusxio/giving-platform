@@ -1,6 +1,6 @@
 import { SpanStatusCode } from '@opentelemetry/api'
 import { isNotFound, isRedirect, notFound } from '@tanstack/react-router'
-import { Panic, Result, TaggedError } from 'better-result'
+import { Result, TaggedError } from 'better-result'
 import { DrizzleQueryError } from 'drizzle-orm'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
@@ -339,7 +339,7 @@ describe('a logged failure', () => {
     })
     const { events, settled, span } = await call(action, null)
 
-    expect(Panic.is(thrownBy(settled))).toBe(true)
+    expect(thrownBy(settled)).toStrictEqual(new Error('Internal Server Error'))
     expect(events).toMatchObject([
       { 'error.type': 'Panic', err: { type: 'Panic' }, event: 'r.x.defect', level: ERROR },
     ])
@@ -485,7 +485,7 @@ describe('a read', () => {
 })
 
 describe('a throw from a workflow', () => {
-  it('is a defect: logged, recorded on the span, and rethrown as the same object', async () => {
+  it('is a defect: logged and recorded on the span, and the client gets a generic error', async () => {
     expect.hasAssertions()
 
     const bug = new TypeError('bug')
@@ -498,7 +498,9 @@ describe('a throw from a workflow', () => {
     })
     const { events, settled, span } = await call(action, null)
 
-    expect(thrownBy(settled)).toBe(bug)
+    const thrown = thrownBy(settled)
+    expect(thrown).toStrictEqual(new Error('Internal Server Error'))
+    expect(Object.getOwnPropertyNames(thrown)).toStrictEqual(['stack', 'message'])
     expect(events).toMatchObject([{ err: { message: 'bug' }, event: 'm.x.defect', level: ERROR }])
     expect(span.status.code).toBe(SpanStatusCode.ERROR)
     expect(span.attributes['error.type']).toBe('TypeError')
@@ -520,8 +522,8 @@ describe('a throw from a workflow', () => {
     })
     const { events, settled } = await call(action, null)
 
-    expect(Panic.is(thrownBy(settled))).toBe(true)
-    expect(events).toMatchObject([{ event: 'r.x.defect', level: ERROR }])
+    expect(thrownBy(settled)).toStrictEqual(new Error('Internal Server Error'))
+    expect(events).toMatchObject([{ err: { type: 'Panic' }, event: 'r.x.defect', level: ERROR }])
   })
 
   it('passes a redirect or notFound through unlogged', async () => {
