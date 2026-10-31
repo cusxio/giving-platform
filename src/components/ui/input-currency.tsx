@@ -1,18 +1,37 @@
 import type { FormInputProps } from '@ariakit/react'
 import { FormInput } from '@ariakit/react'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { CurrencyInputProps } from 'react-currency-input-field'
 import { CurrencyInput } from 'react-currency-input-field'
 
 import { createCurrencyFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
+type ValueChange = NonNullable<CurrencyInputProps['onValueChange']>
+
 export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' | 'name'> {
-  onValueChange: NonNullable<CurrencyInputProps['onValueChange']>
+  /** The largest amount the field takes. A keystroke that would pass it is ignored. */
+  max: number
+  onValueChange: ValueChange
 }
 
+/** Whether the field's clean value, such as `1234.5`, is at most `max`. Empty fits. */
+export const fitsMax = (value: string | undefined, max: number) =>
+  !(Number.parseFloat(value ?? '') > max)
+
+/** Characters of the largest amount with its cents, such as `5000000.00`. */
+export const maxLengthFor = (max: number) => `${Math.trunc(max)}.00`.length
+
 export function InputCurrency(props: InputCurrencyProps) {
-  const { name, onValueChange, autoComplete } = props
+  const { autoComplete, max, name, onValueChange } = props
+  const handleValueChange: ValueChange = useCallback(
+    (value, ...rest) => {
+      if (fitsMax(value, max)) {
+        onValueChange(value, ...rest)
+      }
+    },
+    [max, onValueChange],
+  )
   const currency = useMemo(
     () =>
       createCurrencyFormatter({ showSymbol: true })
@@ -61,9 +80,9 @@ export function InputCurrency(props: InputCurrencyProps) {
           <CurrencyInput
             allowNegativeValue={false}
             inputMode="numeric"
-            max={10_000_000}
-            maxLength={8}
-            onValueChange={onValueChange}
+            max={max}
+            maxLength={maxLengthFor(max)}
+            onValueChange={handleValueChange}
             placeholder="0.00"
             type="text"
             {...rest}
