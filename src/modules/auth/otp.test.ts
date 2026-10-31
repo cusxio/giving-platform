@@ -513,6 +513,30 @@ describe('verifying a code', () => {
     expect(events.at(-1)).toMatchObject({ event: 'auth.verify_otp.invalid', reason: 'wrong_code' })
   })
 
+  it.each(['suspended', 'deleted'] as const)(
+    'rejects a login code issued before the user was %s, without claiming it or a cookie',
+    async (status) => {
+      expect.hasAssertions()
+
+      const { calls, deps, events, otp, setStatus, tokens } = await issued('active', 'login')
+      setStatus(EMAIL, status)
+
+      await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(
+        invalidCode,
+      )
+      expect(io.setCookies).toStrictEqual([])
+      expect(tokens[0]?.usedAt).toBeNull()
+      expect(calls().map((c) => c.name)).toStrictEqual([
+        'auth.recordAttempt',
+        'account.findUserByEmail',
+      ])
+      expect(events.at(-1)).toMatchObject({
+        event: 'auth.verify_otp.invalid',
+        reason: 'expired_or_missing',
+      })
+    },
+  )
+
   it('rejects a signup code entered in the login form', async () => {
     expect.hasAssertions()
 

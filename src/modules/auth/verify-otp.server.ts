@@ -34,9 +34,9 @@ const verifyOtpInput = parseWith(
 )
 export type VerifyOtpInput = Parsed<typeof verifyOtpInput>
 
-/** Who may use a code of each mode. */
+/** A login code signs in an active account; a signup code activates a guest. */
 const mayUse = (user: User, mode: VerifyOtpInput['mode']) =>
-  mode === 'login' || user.status === 'guest'
+  user.status === (mode === 'login' ? 'active' : 'guest')
 
 /**
  * Claims the user's newest unused code when it matches, then creates a session (and activates a
