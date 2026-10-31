@@ -1,5 +1,5 @@
 import { SpanStatusCode } from '@opentelemetry/api'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
 import type { Db, QueryResult } from '#/server/db.server'
@@ -8,7 +8,8 @@ import { recordingLogger } from '#/server/testing/recording-logger'
 import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
-import { endSession, logoutProcedure, verifySessionCookie } from './session.server'
+import type { hasSession, logout } from './auth.functions'
+import { endSession, hasSessionAction, logoutAction, verifySessionCookie } from './session.server'
 import {
   deleteSessionById,
   extendSession,
@@ -333,7 +334,7 @@ describe('logging out', () => {
     const session = { expiresAt: addDays(now(), 20), id: SESSION_ID, tokenHash: 'hash' }
 
     await expect(
-      logoutProcedure({ deps: testDeps({ db, logger }), session }),
+      logoutAction({ context: { deps: testDeps({ db, logger }), session } }),
     ).rejects.toMatchObject({ options: { replace: true, to: '/auth/login' } })
     expect(db.calls).toStrictEqual([{ args: [SESSION_ID], name: 'auth.deleteSessionById' }])
     expect(events.map((e) => e.event)).toStrictEqual(['auth.logout.processing'])
@@ -349,7 +350,7 @@ describe('logging out', () => {
     const session = { expiresAt: addDays(now(), 20), id: SESSION_ID, tokenHash: 'hash' }
 
     await expect(
-      logoutProcedure({ deps: testDeps({ db, logger }), session }),
+      logoutAction({ context: { deps: testDeps({ db, logger }), session } }),
     ).rejects.toMatchObject({ options: { replace: true, to: '/auth/login' } })
     expect(events.at(-1)).toMatchObject({ event: 'auth.logout.failed', level: 50 })
     expect(io.setCookies).toStrictEqual([CLEARED])
@@ -366,6 +367,7 @@ describe('logging out', () => {
       ['auth.logout.processing', 30],
       ['auth.logout.failed', 50],
     ])
+    expect(events.at(-1)).toMatchObject({ 'error.type': 'Error', op: 'auth.deleteSessionById' })
   })
 
   it('clears the cookie of a caller without a session without touching the database', async () => {
@@ -376,10 +378,24 @@ describe('logging out', () => {
     const { events, logger } = recordingLogger()
 
     await expect(
-      logoutProcedure({ deps: testDeps({ db, logger }), session: null }),
+      logoutAction({ context: { deps: testDeps({ db, logger }), session: null } }),
     ).rejects.toMatchObject({ options: { replace: true, to: '/auth/login' } })
     expect(db.calls).toStrictEqual([])
     expect(events).toStrictEqual([])
     expect(io.setCookies).toStrictEqual([CLEARED])
+  })
+})
+
+describe('the session check for the login pages', () => {
+  it('answers only whether the request has a session', () => {
+    expect.hasAssertions()
+
+    expectTypeOf<Awaited<ReturnType<typeof hasSession>>>().toEqualTypeOf<boolean>()
+    expectTypeOf<Awaited<ReturnType<typeof logout>>>().toEqualTypeOf<never>()
+
+    const session = { expiresAt: addDays(now(), 20), id: SESSION_ID, tokenHash: 'hash' }
+
+    expect(hasSessionAction({ context: { deps: testDeps(), session } })).toBe(true)
+    expect(hasSessionAction({ context: { deps: testDeps(), session: null } })).toBe(false)
   })
 })

@@ -3,13 +3,10 @@ import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
 import { Result } from 'better-result'
 
 import { addSeconds, differenceInDays, now } from '#/core/date'
-import { createDBError } from '#/core/errors'
-import { tryAsync } from '#/core/result'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
 import { InfraError } from '#/server/infra-error'
-import { legacyDb } from '#/server/legacy-db.server'
 import { logInfraEvent } from '#/server/procedure.server'
 import type { RequestContext } from '#/server/request-context.server'
 
@@ -215,23 +212,26 @@ export async function endSession(
 
   logger.info({ event: 'auth.logout.processing', session_id: sessionId }, 'Processing user logout')
 
-  const result = await tryAsync(
-    () => legacyDb(deps.db).run(deleteSessionById(sessionId)),
-    createDBError,
-  )
-
-  if (!result.ok) {
-    logger.error(
-      { err: result.error.error, error_type: result.error.type, event: 'auth.logout.failed' },
-      'Failed to delete session from DB',
-    )
+  const deleted = await deps.db.run(deleteSessionById(sessionId))
+  if (deleted.isErr()) {
+    logInfraEvent(logger, deleted.error, {
+      event: 'auth.logout.failed',
+      level: 'error',
+      msg: 'Failed to delete session from DB',
+    })
   }
 }
 
-export async function logoutProcedure(
-  context: Pick<RequestContext, 'deps' | 'session'>,
-): Promise<never> {
-  if (context.session) {
+interface SessionInvocation {
+  readonly context: Pick<RequestContext, 'deps' | 'session'>
+}
+
+/** Whether the request carries a valid session. Nothing else about it leaves the server. */
+export const hasSessionAction = ({ context }: SessionInvocation) => context.session !== null
+
+/** Ends the session, if there is one, clears the cookie and sends the browser to login. */
+export async function logoutAction({ context }: SessionInvocation): Promise<never> {
+  if (context.session !== null) {
     await endSession(context.deps, context.session.id)
   }
 

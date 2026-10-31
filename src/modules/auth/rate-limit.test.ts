@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createFakeDb } from '#/server/testing/fake-db'
+import { errValue } from '#/server/testing/result'
 
 import { checkOtpRequest, checkOtpVerify, resetOtpVerify } from './rate-limit.server'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
@@ -22,10 +23,9 @@ describe('the OTP rate limits', () => {
 
     const db = attemptsDb(5, new Date())
 
-    await expect(checkOtpRequest({ db }, 'Donor@Example.com')).resolves.toStrictEqual({
-      ok: true,
-      value: { allowed: true, remaining: 0 },
-    })
+    const checked = await checkOtpRequest({ db }, 'Donor@Example.com')
+
+    expect(checked.isOk()).toBe(true)
     expect(db.calls).toStrictEqual([
       {
         args: ['donor@example.com', 'otp_request', 900, expect.any(Date)],
@@ -39,23 +39,22 @@ describe('the OTP rate limits', () => {
 
     const db = attemptsDb(6, new Date(Date.now() - 60_000))
 
-    await expect(checkOtpRequest({ db }, 'donor@example.com')).resolves.toStrictEqual({
-      error: { retryAfterSeconds: 840, type: 'RateLimitExceededError' },
-      ok: false,
+    expect(errValue(await checkOtpRequest({ db }, 'donor@example.com'))).toMatchObject({
+      _tag: 'RateLimitExceededError',
+      retryAfterSeconds: 840,
     })
   })
 
   it('allows ten verification attempts in five minutes', async () => {
     expect.hasAssertions()
 
-    await expect(
-      checkOtpVerify({ db: attemptsDb(10, new Date()) }, 'd@x.test'),
-    ).resolves.toMatchObject({ ok: true })
-    await expect(
-      checkOtpVerify({ db: attemptsDb(11, new Date()) }, 'd@x.test'),
-    ).resolves.toMatchObject({
-      error: { retryAfterSeconds: 300, type: 'RateLimitExceededError' },
-      ok: false,
+    const tenth = await checkOtpVerify({ db: attemptsDb(10, new Date()) }, 'd@x.test')
+    const eleventh = await checkOtpVerify({ db: attemptsDb(11, new Date()) }, 'd@x.test')
+
+    expect(tenth.isOk()).toBe(true)
+    expect(errValue(eleventh)).toMatchObject({
+      _tag: 'RateLimitExceededError',
+      retryAfterSeconds: 300,
     })
   })
 
@@ -64,22 +63,22 @@ describe('the OTP rate limits', () => {
 
     const db = createFakeDb().on(recordAttempt, () => null)
 
-    await expect(checkOtpVerify({ db }, 'd@x.test')).resolves.toStrictEqual({
-      ok: true,
-      value: { allowed: true, remaining: 9 },
-    })
+    const checked = await checkOtpVerify({ db }, 'd@x.test')
+
+    expect(checked.isOk()).toBe(true)
   })
 
-  it('reports a failed count as a database error', async () => {
+  it('reports a failed count as an infrastructure error', async () => {
     expect.hasAssertions()
 
     const db = createFakeDb().on(recordAttempt, () => {
       throw new Error('connection terminated')
     })
 
-    await expect(checkOtpRequest({ db }, 'd@x.test')).resolves.toMatchObject({
-      error: { type: 'DBQueryError' },
-      ok: false,
+    expect(errValue(await checkOtpRequest({ db }, 'd@x.test'))).toMatchObject({
+      _tag: 'InfraError',
+      op: 'auth.recordAttempt',
+      reason: 'failed',
     })
   })
 
@@ -88,10 +87,9 @@ describe('the OTP rate limits', () => {
 
     const db = createFakeDb().on(resetAttempts, () => {})
 
-    await expect(resetOtpVerify({ db }, 'D@X.test')).resolves.toStrictEqual({
-      ok: true,
-      value: undefined,
-    })
+    const reset = await resetOtpVerify({ db }, 'D@X.test')
+
+    expect(reset.isOk()).toBe(true)
     expect(db.calls).toStrictEqual([
       { args: ['d@x.test', 'otp_verify'], name: 'auth.resetAttempts' },
     ])

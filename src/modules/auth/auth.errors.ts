@@ -1,50 +1,24 @@
 import { TaggedError } from 'better-result'
 
-import type { DBEmptyReturnErrorResult, DBQueryErrorResult } from '#/core/errors'
+/** Too many attempts in the window. */
+export class RateLimitExceededError extends TaggedError('RateLimitExceededError')<{
+  retryAfterSeconds: number
+}> {}
 
-export type AuthLoginError = DBEmptyReturnErrorResult | DBQueryErrorResult | NotExistsError
+/** A signup for an email whose account is already active. */
+export class AlreadyExistsError extends TaggedError('AlreadyExistsError') {}
 
-export type AuthSignUpError =
-  | AlreadyExistsError
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
-  | InactiveAccountError
+/** A login for an email with no active account. */
+export class NotExistsError extends TaggedError('NotExistsError') {}
 
-export type AuthValidateOtpError =
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
-  | InvalidOtpError
-  | InvalidRequestError
+/** The code does not match the newest one issued. */
+export class InvalidOtpError extends TaggedError('InvalidOtpError') {}
 
-export interface RateLimitExceededError {
-  readonly retryAfterSeconds: number
-  readonly type: 'RateLimitExceededError'
-}
-
-interface AlreadyExistsError {
-  readonly type: 'AlreadyExistsError'
-}
-
-interface InactiveAccountError {
-  readonly type: 'InactiveAccountError'
-}
-
-interface InvalidOtpError {
-  readonly type: 'InvalidOtpError'
-}
-
-interface InvalidRequestError {
-  readonly type: 'InvalidRequestError'
-}
-
-interface NotExistsError {
-  readonly type: 'NotExistsError'
-}
-
-export interface SendEmailError {
-  readonly error: unknown
-  readonly type: 'SendEmailError'
-}
+/**
+ * No usable code: none issued, expired, already claimed, issued for the other mode, or held by an
+ * account that may not use it.
+ */
+export class InvalidRequestError extends TaggedError('InvalidRequestError') {}
 
 /** The cookie is not `<sessionId>.<rawToken>` with two 21-character parts. */
 export class ParseError extends TaggedError('ParseError')<{ cause: unknown }> {}

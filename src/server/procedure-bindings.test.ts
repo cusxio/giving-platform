@@ -5,13 +5,8 @@ import type { ESTree } from 'vite'
 import { parseSync } from 'vite'
 import { describe, expect, it } from 'vitest'
 
-/** Modules whose server functions still call `*Procedure` adapters. Each wave removes its own. */
-const NOT_YET_MIGRATED = new Set(['auth'])
-
 const root = path.resolve(import.meta.dirname, '../..')
-const functionFiles = globSync('src/modules/*/*.functions.ts', { cwd: root }).filter(
-  (file) => !NOT_YET_MIGRATED.has(file.split('/')[2] ?? ''),
-)
+const functionFiles = globSync('src/modules/*/*.functions.ts', { cwd: root })
 
 const isCall = (node: ESTree.Node | null | undefined): node is ESTree.CallExpression =>
   node?.type === 'CallExpression'
