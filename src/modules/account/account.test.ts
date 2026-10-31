@@ -3,6 +3,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type { AuthErrorResponse, ServerErrorResponse, ValidationErrorResponse } from '#/core/wire'
 import { hasGuestTransaction } from '#/modules/payments/server'
+import { createDriverDb } from '#/server/testing/driver-db'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { errValue, okValue } from '#/server/testing/result'
@@ -24,7 +25,7 @@ import {
 import type { UserSettings } from './user-settings.repository.server'
 import { findSettingsByUserId, upsertPrivacyMode } from './user-settings.repository.server'
 import type { User } from './users.repository.server'
-import { findUserById, updateUserById } from './users.repository.server'
+import { findUserById, updateUserById, upsertGuestUser } from './users.repository.server'
 
 const DEBUG = 20
 const INFO = 30
@@ -435,5 +436,35 @@ describe('updating privacy mode', () => {
     ).resolves.toStrictEqual(signedOut)
     expect(db.calls).toStrictEqual([])
     expect(events).toMatchObject([{ event: 'user.update_privacy.unauthorized', level: WARN }])
+  })
+})
+
+describe('the guest upsert', () => {
+  it('fills in only the names a guest lacks, and changes no registered account', async () => {
+    expect.hasAssertions()
+
+    const statements: { params: unknown[]; sql: string }[] = []
+    const db = createDriverDb((sql, params) => {
+      statements.push({ params, sql })
+      return Promise.resolve({ rowCount: 0, rows: [] })
+    })
+
+    expect(
+      okValue(
+        await db.run(
+          upsertGuestUser({ email: 'guest@give.test', firstName: 'Gia', lastName: 'Guest' }),
+        ),
+      ),
+    ).toBeNull()
+    expect(statements).toStrictEqual([
+      {
+        params: ['guest@give.test', 'Gia', 'Guest', 'user', 'guest', expect.any(String), 'guest'],
+        sql: [
+          'insert into "users" ("id", "email", "email_verified_at", "first_name", "last_name", "role", "status", "journey", "created_at", "updated_at") values (default, $1, default, $2, $3, $4, $5, default, default, default)',
+          'on conflict ("email") do update set "first_name" = coalesce("users"."first_name", excluded.first_name), "last_name" = coalesce("users"."last_name", excluded.last_name), "updated_at" = $6 where "users"."status" = $7',
+          'returning "id", "email", "email_verified_at", "first_name", "last_name", "role", "status", "journey", "created_at", "updated_at"',
+        ].join(' '),
+      },
+    ])
   })
 })

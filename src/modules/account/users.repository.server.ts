@@ -28,7 +28,10 @@ export const updateUserById = defineQuery(
   firstOrNull,
 )
 
-/** Inserts a guest. On an email conflict the row's names, role and status are overwritten. */
+/**
+ * Inserts a guest, or returns the guest who has the email, filling in only the names it lacks.
+ * Null when a registered account has the email; that row is left exactly as it is.
+ */
 export const upsertGuestUser = defineQuery(
   'account.upsertGuestUser',
   (db, input: Pick<UserInsert, 'email' | 'firstName' | 'lastName'>) =>
@@ -37,11 +40,10 @@ export const upsertGuestUser = defineQuery(
       .values({ ...input, role: 'user', status: 'guest' })
       .onConflictDoUpdate({
         set: {
-          firstName: sql`excluded.first_name`,
-          lastName: sql`excluded.last_name`,
-          role: sql`excluded.role`,
-          status: sql`excluded.status`,
+          firstName: sql`coalesce(${users.firstName}, excluded.first_name)`,
+          lastName: sql`coalesce(${users.lastName}, excluded.last_name)`,
         },
+        setWhere: eq(users.status, 'guest'),
         target: users.email,
       })
       .returning(),

@@ -37,14 +37,20 @@ interface DonorDetails {
   readonly lastName: string
 }
 
+/**
+ * The guest's id. No row means the email was registered after the owner lookup, such as by a
+ * signup finishing in between, so the guest is refused as if the lookup had seen it.
+ */
 async function upsertGuest(tx: Executor, donor: DonorDetails) {
   const guest = await tx.run(upsertGuestUser(donor))
-  return guest.andThen((row) => required(row, upsertGuestUser.queryName)).map((row) => row.id)
+  return guest.andThen((row) =>
+    row === null ? Result.err(new GuestEmailExists()) : Result.ok(row.id),
+  )
 }
 
 /**
- * Records a pending transaction and its items in one pool transaction, creating or updating the
- * guest account when no one is signed in. Any `Err` rolls the whole of it back.
+ * Records a pending transaction and its items in one pool transaction, creating the guest
+ * account when no one is signed in. Any `Err` rolls the whole of it back.
  */
 export function createPendingContribution(
   deps: Pick<Deps, 'db'>,

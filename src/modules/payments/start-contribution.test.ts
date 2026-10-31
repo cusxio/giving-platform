@@ -236,6 +236,29 @@ describe('starting a contribution as a guest', () => {
     })
   })
 
+  it('refuses an email registered after the lookup saw a guest, and rolls back', async () => {
+    expect.hasAssertions()
+
+    const fake = contributionDb(userRow(41, 'donor@give.test', 'guest')).on(
+      upsertGuestUser,
+      () => null,
+    )
+    const result = await start(fake, null, input())
+
+    expect(result.response).toStrictEqual({
+      error: { code: 'EMAIL_EXISTS' },
+      type: 'BUSINESS_ERROR',
+    })
+    expect(result.calls).toStrictEqual(['account.findUserByEmail', 'account.upsertGuestUser'])
+    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.events.at(-1)).toMatchObject({
+      email: 'donor@give.test',
+      event: 'giving.start_contribution.blocked',
+      level: WARN,
+      reason: 'email_exists',
+    })
+  })
+
   it('may not charge a saved card, before any query', async () => {
     expect.hasAssertions()
 
@@ -496,12 +519,6 @@ describe('the pending contribution transaction', () => {
       fake: () => contributionDb(null).on(upsertGuestUser, fail),
       op: upsertGuestUser.queryName,
       reason: 'failed',
-    },
-    {
-      case: 'creating the guest returns no row',
-      fake: () => contributionDb(null).on(upsertGuestUser, () => null),
-      op: upsertGuestUser.queryName,
-      reason: 'no-row',
     },
     {
       case: 'inserting the transaction returns no row',
