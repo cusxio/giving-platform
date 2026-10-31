@@ -14,6 +14,7 @@ import type { Forbidden, Policy, Refusal, SignedOut } from '#/server/authorize.s
 import type { Deps } from '#/server/deps.server'
 import { InfraError } from '#/server/infra-error'
 import type { InvalidInput, Parser } from '#/server/input.server'
+import { markRecorded } from '#/server/opentelemetry/recorded-errors.server'
 import type { RequestContext } from '#/server/request-context.server'
 
 interface Tagged {
@@ -301,6 +302,7 @@ function logDefect(logger: Deps['logger'], event: string, error: unknown) {
   const type = typeOf(defect)
   logger.error({ 'error.type': type, err: defect, event: `${event}.defect` }, 'Unhandled defect')
   markSpanFailed(defect, type, 'Unhandled defect')
+  markRecorded(error)
 }
 
 /**

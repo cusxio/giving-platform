@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest'
 import { anyone } from '#/server/authorize.server'
 import { infra } from '#/server/infra-error'
 import { noInput } from '#/server/input.server'
-import { defineMutation } from '#/server/procedure.server'
+import { defineMutation, logDefects } from '#/server/procedure.server'
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { recordSpans } from '#/server/testing/spans'
 import { testContext } from '#/server/testing/test-context'
 
@@ -49,5 +50,44 @@ describe('the request span', () => {
     await expect(
       statusOf(() => Promise.resolve(new Response('no', { status: 503 }))),
     ).resolves.toBe(SpanStatusCode.ERROR)
+  })
+})
+
+async function spanOfThrow(handle: () => Promise<Response>) {
+  const exporter = recordSpans()
+  const handler = handle as unknown as ReturnType<typeof createStartHandler>
+  const traced = createTracedHandler(handler, { flush: () => Promise.resolve() })
+  await expect(traced(new Request('https://give.test/api/eghl/callback'))).rejects.toThrow('bug')
+  const [span] = exporter.getFinishedSpans()
+  return {
+    exceptions: span?.events.filter((e) => e.name === 'exception').length,
+    status: span?.status,
+  }
+}
+
+describe('a thrown defect', () => {
+  it('is recorded on the span once when a route logged it', async () => {
+    expect.hasAssertions()
+
+    const { logger } = recordingLogger()
+    const span = await spanOfThrow(() =>
+      logDefects(logger, 'eghl.callback', () => Promise.reject(new Error('bug'))),
+    )
+
+    expect(span).toStrictEqual({
+      exceptions: 1,
+      status: { code: SpanStatusCode.ERROR, message: 'Unhandled defect' },
+    })
+  })
+
+  it('is recorded by the handler when nothing logged it', async () => {
+    expect.hasAssertions()
+
+    const span = await spanOfThrow(() => Promise.reject(new Error('bug')))
+
+    expect(span).toStrictEqual({
+      exceptions: 1,
+      status: { code: SpanStatusCode.ERROR, message: 'bug' },
+    })
   })
 })

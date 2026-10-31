@@ -9,6 +9,7 @@ import {
 } from '@opentelemetry/api'
 import type { createStartHandler } from '@tanstack/react-start/server'
 
+import { isRecorded } from '#/server/opentelemetry/recorded-errors.server'
 import type { PlatformRequest } from '#/server/platform-request.server'
 
 import type { Telemetry } from './sdk.server'
@@ -55,12 +56,14 @@ export function createTracedHandler<T extends ReturnType<typeof createStartHandl
           return response
         } catch (error) {
           span.setAttribute('http.response.status_code', 500)
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: error instanceof Error ? error.message : String(error),
-          })
-
-          span.recordException(error as Error)
+          // A route's defect logger already recorded it, without the parameters a driver message holds.
+          if (!isRecorded(error)) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: error instanceof Error ? error.message : String(error),
+            })
+            span.recordException(error as Error)
+          }
 
           throw error
         } finally {
