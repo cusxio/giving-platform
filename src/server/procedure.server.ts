@@ -283,6 +283,33 @@ export function logInfraFailure(
   })
 }
 
+/** Logs a throw that is not control flow once, as `<event>.defect`, and fails the request span. */
+function logDefect(logger: Deps['logger'], event: string, error: unknown) {
+  const defect = loggable(error)
+  const type = typeOf(defect)
+  logger.error({ 'error.type': type, err: defect, event: `${event}.defect` }, 'Unhandled defect')
+  markSpanFailed(defect, type, 'Unhandled defect')
+}
+
+/**
+ * Runs an HTTP route's handler and logs a defect it throws, as the runner does for a procedure,
+ * then rethrows it for the framework's 500. A router redirect or `notFound()` passes through.
+ */
+export async function logDefects<T>(
+  logger: Deps['logger'],
+  event: string,
+  handler: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await handler()
+  } catch (error) {
+    if (!isRedirect(error) && !isNotFound(error)) {
+      logDefect(logger, event, error)
+    }
+    throw error
+  }
+}
+
 type AnySpec = Spec<unknown, Refusal, unknown, unknown, Tagged> & {
   readonly wire: Readonly<Record<string, (error: never, input: never) => Outcome>>
 }
@@ -341,13 +368,7 @@ function define(kind: Kind, spec: AnySpec): Action<unknown> {
       if (isRedirect(error) || isNotFound(error)) {
         throw error
       }
-      const defect = loggable(error)
-      const type = typeOf(defect)
-      invocation.context.deps.logger.error(
-        { 'error.type': type, err: defect, event: `${spec.event}.defect` },
-        'Unhandled defect',
-      )
-      markSpanFailed(defect, type, 'Unhandled defect')
+      logDefect(invocation.context.deps.logger, spec.event, error)
       // The client would get every own property of the original, its stack and cause included.
       // oxlint-disable-next-line preserve-caught-error
       throw new Error('Internal Server Error')

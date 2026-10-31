@@ -1,6 +1,6 @@
 import { addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import type { Deps } from '#/server/deps.server'
-import { logInfraFailure } from '#/server/procedure.server'
+import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlQueryError } from './eghl.errors'
 import { finalStatusOf } from './eghl.outcome'
@@ -32,11 +32,9 @@ const queryFailureFields = (error: EghlQueryError) =>
     ParseError: ({ _tag, cause }) => ({ 'error.type': _tag, err: cause }),
   })
 
-/** The cron job: settles pending transactions from the gateway's own status. */
-export async function handleReconcile(
-  deps: Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>,
-  request: Request,
-) {
+type ReconcileDeps = Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>
+
+async function reconcile(deps: ReconcileDeps, request: Request) {
   const { config, db, eghl, logger } = deps
   const authHeader = request.headers.get('authorization')
 
@@ -190,3 +188,7 @@ export async function handleReconcile(
 
   return new Response('ok', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
 }
+
+/** The cron job: settles pending transactions from the gateway's own status. */
+export const handleReconcile = (deps: ReconcileDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.cron', () => reconcile(deps, request))

@@ -4,7 +4,7 @@ import { Result } from 'better-result'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
-import { logInfraFailure } from '#/server/procedure.server'
+import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlReplyError } from './eghl.errors'
 import { finalStatusOf, inboundActionOf } from './eghl.outcome'
@@ -118,7 +118,7 @@ async function confirmByQuery(
   return recordOutcome(deps, queryResult.value, finalStatus)
 }
 
-export async function handleEghlCallback(deps: SettlementDeps, request: Request) {
+async function callback(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
   const internalError = Response.json({ message: 'Internal Server Error' }, { status: 500 })
   const badRequest = Response.json({ message: 'Bad Request' }, { status: 400 })
@@ -166,7 +166,7 @@ export async function handleEghlCallback(deps: SettlementDeps, request: Request)
 
 // The GET and POST returns differ in their processing log and in how a failed write redirects,
 // so they stay two functions.
-export async function handleEghlReturnGet(deps: SettlementDeps, request: Request) {
+async function returnGet(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
 
   logger.info({ event: 'eghl.return.received', method: 'GET' }, 'Received eGHL return redirect')
@@ -212,7 +212,7 @@ export async function handleEghlReturnGet(deps: SettlementDeps, request: Request
   })
 }
 
-export async function handleEghlReturnPost(deps: SettlementDeps, request: Request) {
+async function returnPost(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
 
   logger.info({ event: 'eghl.return.received', method: 'POST' }, 'Received eGHL return redirect')
@@ -259,3 +259,12 @@ export async function handleEghlReturnPost(deps: SettlementDeps, request: Reques
     to: '/transaction/receipt/$transactionId',
   })
 }
+
+export const handleEghlCallback = (deps: SettlementDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.callback', () => callback(deps, request))
+
+export const handleEghlReturnGet = (deps: SettlementDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.return', () => returnGet(deps, request))
+
+export const handleEghlReturnPost = (deps: SettlementDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.return', () => returnPost(deps, request))

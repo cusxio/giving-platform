@@ -1,8 +1,11 @@
+import { SpanStatusCode } from '@opentelemetry/api'
 import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
 import { infra } from '#/server/infra-error'
 import { createDriverDb } from '#/server/testing/driver-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
+import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
 import { EghlServerError } from './eghl.errors'
@@ -322,6 +325,69 @@ describe('eGHL cron', () => {
         sampleIds: ['txn_a', 'txn_b'],
       },
     ])
+  })
+
+  it('answers 200 for a run where one settlement failed, and fails the request span', async () => {
+    expect.hasAssertions()
+
+    const { db } = fakeDb([pending('txn_a', 40), pending('txn_b', 40)])
+    const { settled, span } = await inRequestSpan(() =>
+      runCron({
+        db,
+        finalize: finalizeBy({
+          txn_a: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
+        }),
+        replies: {
+          txn_a: Result.ok(queryReply('txn_a', Exists, EghlTxnStatus.Success)),
+          txn_b: Result.ok(queryReply('txn_b', Exists, EghlTxnStatus.Success)),
+        },
+      }),
+    )
+
+    expect(settled).toMatchObject({
+      status: 'fulfilled',
+      value: { stats: { errors: 1, finalized: 1, found: 2, marked_failed: 0 }, status: 200 },
+    })
+    expect(span.status).toStrictEqual({
+      code: SpanStatusCode.ERROR,
+      message: 'payments.insertPayment failed',
+    })
+  })
+
+  it('logs a thrown defect once as eghl.cron.defect, fails the span and rethrows it', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const { db } = fakeDb([pending('txn_a', 40)])
+    const bug = new TypeError('settlement bug')
+    settlement.finalize = () => Promise.reject(bug)
+    const base = testDeps()
+    const reply = Result.ok(queryReply('txn_a', Exists, EghlTxnStatus.Success))
+
+    const { settled, span } = await inRequestSpan(() =>
+      handleReconcile(
+        {
+          config: { ...base.config, cronSecret: settings.CRON_SECRET },
+          db,
+          eghl: { ...base.eghl, queryStatus: () => Promise.resolve(reply) },
+          logger,
+        },
+        new Request('https://app.give.test/api/eghl/cron', {
+          headers: { authorization: `Bearer ${settings.CRON_SECRET}` },
+        }),
+      ),
+    )
+
+    expect(settled).toStrictEqual({ reason: bug, status: 'rejected' })
+    expect(events.filter(({ level }) => level >= 50)).toMatchObject([
+      {
+        'error.type': 'TypeError',
+        err: { message: 'settlement bug', type: 'TypeError' },
+        event: 'eghl.cron.defect',
+        msg: 'Unhandled defect',
+      },
+    ])
+    expect(span.status.code).toBe(SpanStatusCode.ERROR)
   })
 
   it('answers 500 without querying eGHL when the pending select fails', async () => {

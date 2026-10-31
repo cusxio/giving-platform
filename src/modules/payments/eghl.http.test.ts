@@ -558,3 +558,64 @@ describe('failing to record a settlement', () => {
     },
   )
 })
+
+type TestDeps = ReturnType<typeof stubPaymentService>
+const successBody = () => signedCallbackBody(EghlTxnStatus.Success, 'Transaction Successful')
+
+describe('a defect while settling', () => {
+  const bug = new TypeError('settlement bug')
+
+  it.each([
+    [
+      'callback',
+      'eghl.callback',
+      (deps: TestDeps) => handleEghlCallback(deps, post(CALLBACK_URL, successBody())),
+    ],
+    [
+      'GET return',
+      'eghl.return',
+      (deps: TestDeps) => handleEghlReturnGet(deps, new Request(`${RETURN_URL}?${successBody()}`)),
+    ],
+    [
+      'POST return',
+      'eghl.return',
+      (deps: TestDeps) => handleEghlReturnPost(deps, post(RETURN_URL, successBody())),
+    ],
+  ])(
+    'is logged once by the %s route, fails the span and is rethrown',
+    async (_route, event, run) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const deps = stubPaymentService(logger)
+      finalizePaymentFromCallback.mockRejectedValue(bug)
+
+      const { settled, span } = await inRequestSpan(() => run(deps))
+
+      expect(settled).toStrictEqual({ reason: bug, status: 'rejected' })
+      expect(events.filter(({ level }) => level >= 50)).toMatchObject([
+        { 'error.type': 'TypeError', err: { message: 'settlement bug' }, event: `${event}.defect` },
+      ])
+      expect(span.status.code).toBe(SpanStatusCode.ERROR)
+    },
+  )
+
+  it('lets the return route redirect a settled donor without logging a defect', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const { settled, span } = await inRequestSpan(() =>
+      handleEghlReturnGet(
+        stubPaymentService(logger),
+        new Request(`${RETURN_URL}?${successBody()}`),
+      ),
+    )
+
+    expect(settled).toMatchObject({
+      reason: { options: { to: '/transaction/receipt/$transactionId' } },
+      status: 'rejected',
+    })
+    expect(events.some(({ event }) => event?.endsWith('.defect') === true)).toBe(false)
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
+  })
+})
