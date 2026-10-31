@@ -11,6 +11,8 @@ export class InfraError extends TaggedError('InfraError')<{
   op: string
   /** `no-row` is a statement that should have returned a row and did not. */
   reason: 'failed' | 'no-row'
+  /** The error a transaction's work returned when the rollback that followed it failed. */
+  rejected?: unknown
 }> {}
 
 /** `op` failed with `cause`, as the driver or the decoder threw it. */

@@ -2,8 +2,7 @@ import { Result } from 'better-result'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 
-import { infra } from '#/server/infra-error'
-import type { InfraError } from '#/server/infra-error'
+import { InfraError, infra } from '#/server/infra-error'
 import type { DB, DBPool, DBPoolTransaction } from '#/server/neon.server'
 
 /**
@@ -151,53 +150,45 @@ function sequentialExecutor(sql: Sql): Executor {
   }
 }
 
-/** Carries a throw from `work` past the pool, so it is rethrown as it was thrown. */
-class ThrownError extends Error {
-  readonly thrown: unknown
-
-  constructor(thrown: unknown) {
-    super('transaction work threw')
-    this.name = 'ThrownError'
-    this.thrown = thrown
-  }
-}
-
 /** Thrown for an `Err`, because the pool rolls back only when its callback throws. */
-class RolledBackError extends Error {
-  constructor() {
-    super('transaction work returned Err')
-    this.name = 'RolledBackError'
-  }
-}
+const ROLLBACK = new Error('transaction work returned Err')
 
 async function transact<T, E>(
   pool: DBPool,
   work: (tx: Executor) => Promise<Result<T, E>>,
 ): Promise<Result<T, E | InfraError>> {
-  let rejected: Result<T, E> | undefined
+  let outcome: Result<T, E> | undefined
+  let threw: { readonly error: unknown } | undefined
   try {
     return await pool.transaction(async (tx) => {
-      let outcome: Result<T, E>
       try {
         outcome = await work(sequentialExecutor(tx))
       } catch (error) {
-        throw new ThrownError(error)
+        threw = { error }
+        throw error
       }
       if (outcome.isErr()) {
-        rejected = outcome
-        throw new RolledBackError()
+        throw ROLLBACK
       }
       return outcome
     })
   } catch (error) {
-    if (error instanceof ThrownError) {
-      // oxlint-disable-next-line typescript/only-throw-error -- the work's own throw, unchanged
-      throw error.thrown
+    if (threw !== undefined) {
+      // oxlint-disable-next-line typescript/only-throw-error -- the work's own throw, unchanged, even when the rollback after it failed
+      throw threw.error
     }
-    if (error instanceof RolledBackError && rejected !== undefined) {
-      return rejected
+    if (error === ROLLBACK && outcome !== undefined) {
+      return outcome
     }
-    return Result.err(infra('db.transaction', error))
+    return Result.err(
+      new InfraError({
+        cause: error,
+        message: 'db.transaction failed',
+        op: 'db.transaction',
+        reason: 'failed',
+        rejected: outcome !== undefined && outcome.isErr() ? outcome.error : undefined,
+      }),
+    )
   }
 }
 

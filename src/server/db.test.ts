@@ -171,7 +171,7 @@ function httpOver(
 const http = httpOver(() => Promise.resolve({ rowCount: 0, rows: [] }))
 
 /** A pool whose transaction logs begin, commit and rollback around `work`, like drizzle's. */
-function recordingPool(tx: Sql, { failCommit = false } = {}) {
+function recordingPool(tx: Sql, { failCommit = false, failRollback = false } = {}) {
   const log: string[] = []
   const pool = {
     transaction: async (work: (handle: Sql) => Promise<unknown>) => {
@@ -185,6 +185,9 @@ function recordingPool(tx: Sql, { failCommit = false } = {}) {
         return result
       } catch (error) {
         log.push('rollback')
+        if (failRollback) {
+          throw new Error('rollback failed', { cause: error })
+        }
         throw error
       }
     },
@@ -319,6 +322,28 @@ describe('a db transaction', () => {
     expect(error).toMatchObject({ op: 'db.transaction', reason: 'failed' })
     expect(error.cause).toStrictEqual(new Error('commit failed'))
     expect(log).toStrictEqual(['begin', 'rollback'])
+  })
+
+  it('keeps the Err that caused a rollback when the rollback fails', async () => {
+    expect.hasAssertions()
+
+    const { pool } = recordingPool(http, { failRollback: true })
+    const refused = new Error('refused by the work')
+    const error = errValue(
+      await createDb(http, pool).transaction(() => Promise.resolve(Result.err(refused))),
+    )
+
+    expect(error).toMatchObject({ op: 'db.transaction', reason: 'failed', rejected: refused })
+    expect(error.cause).toMatchObject({ message: 'rollback failed' })
+  })
+
+  it('rethrows a throw from the work even when the rollback after it fails', async () => {
+    expect.hasAssertions()
+
+    const { pool } = recordingPool(http, { failRollback: true })
+    const bug = new TypeError('a bug in the work')
+
+    await expect(createDb(http, pool).transaction(() => Promise.reject(bug))).rejects.toBe(bug)
   })
 
   it('answers a failed begin with an InfraError without running the work', async () => {
