@@ -2,7 +2,7 @@ import { SpanStatusCode } from '@opentelemetry/api'
 import { describe, expect, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
-import type { QueryResult } from '#/server/db.server'
+import type { Db, QueryResult } from '#/server/db.server'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { inRequestSpan } from '#/server/testing/spans'
@@ -15,9 +15,13 @@ import {
   findSessionByIdWithUser,
 } from './sessions.repository.server'
 
-const io = vi.hoisted(() => ({ setCookies: [] as string[] }))
+const io = vi.hoisted(() => ({
+  request: new Request('https://app.give.test/'),
+  setCookies: [] as string[],
+}))
 
 vi.mock(import('@tanstack/react-start/server'), () => ({
+  getRequest: () => io.request,
   setResponseHeader: (name, value) => {
     if (name === 'Set-Cookie') {
       io.setCookies.push(...[value].flat())
@@ -65,6 +69,7 @@ function setup(status: FakeUser['status'], expiresInDays = 30) {
       return session ? { session: { ...session }, user: { ...user } } : null
     })
 
+  io.request = new Request('https://app.give.test/')
   io.setCookies = []
 
   return {
@@ -77,10 +82,24 @@ function setup(status: FakeUser['status'], expiresInDays = 30) {
   }
 }
 
-const backgroundWork = () =>
+const nextTask = () =>
   new Promise((resolve) => {
     setTimeout(resolve, 0)
   })
+
+/** A database whose session extension waits for `release`, like a slow write. */
+function slowExtension(db: Db) {
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const slow: Db = {
+    ...db,
+    run: (query) =>
+      query.name === extendSession.queryName ? held.then(() => db.run(query)) : db.run(query),
+  }
+  return { db: slow, release }
+}
 
 describe('verifying a session cookie', () => {
   it('accepts a valid cookie for an active user', async () => {
@@ -143,7 +162,6 @@ describe('the session cookie on the response', () => {
 
     const { cookieValue, deps, events, sessions } = setup('active', 3)
     const check = await verifySessionCookie(deps, cookieValue)
-    await backgroundWork()
 
     expect(io.setCookies).toHaveLength(1)
     expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
@@ -158,12 +176,55 @@ describe('the session cookie on the response', () => {
     const { cookieValue, db, deps, events } = setup('active', 3)
     db.on(extendSession, fail)
     await verifySessionCookie(deps, cookieValue)
-    await backgroundWork()
 
     expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
     expect(events).toMatchObject([
       { event: 'session.extend.background_failed', level: 40, op: 'auth.extendSession' },
     ])
+  })
+
+  it('hands the extension to the platform, so the response does not wait for the write', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, deps, events, sessions } = setup('active', 3)
+    const before = sessions.get(SESSION_ID)?.expiresAt
+    const { db, release } = slowExtension(deps.db)
+    const kept: Promise<unknown>[] = []
+    io.request = Object.assign(new Request('https://app.give.test/'), {
+      waitUntil: (work: Promise<unknown>) => {
+        kept.push(work)
+      },
+    })
+    const check = await verifySessionCookie({ ...deps, db }, cookieValue)
+
+    expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
+    expect(kept).toHaveLength(1)
+    expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(before)
+
+    release()
+    await Promise.all(kept)
+
+    expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(check.session?.expiresAt)
+    expect(events.map((e) => e.event)).toStrictEqual(['session.extend.background_success'])
+  })
+
+  it('waits for the extension where the platform has no waitUntil', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, deps, sessions } = setup('active', 3)
+    const { db, release } = slowExtension(deps.db)
+    let answered = false
+    const pending = verifySessionCookie({ ...deps, db }, cookieValue).finally(() => {
+      answered = true
+    })
+    await nextTask()
+
+    expect(answered).toBe(false)
+
+    release()
+    const check = await pending
+
+    expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(check.session?.expiresAt)
   })
 
   it('rejects the session of a suspended user, deletes it and clears the cookie', async () => {
@@ -256,10 +317,7 @@ describe('the request span', () => {
 
     const { cookieValue, db, deps } = setup('active', 3)
     db.on(extendSession, fail)
-    const { span } = await inRequestSpan(async () => {
-      await verifySessionCookie(deps, cookieValue)
-      await backgroundWork()
-    })
+    const { span } = await inRequestSpan(() => verifySessionCookie(deps, cookieValue))
 
     expect(span.status.code).toBe(SpanStatusCode.UNSET)
   })

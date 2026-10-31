@@ -1,5 +1,5 @@
 import { redirect } from '@tanstack/react-router'
-import { setResponseHeader } from '@tanstack/react-start/server'
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
 import { Result } from 'better-result'
 
 import { addSeconds, differenceInDays, now } from '#/core/date'
@@ -50,6 +50,22 @@ export type SessionCheck =
 
 type SessionDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 
+// Nitro's Vercel runtime attaches the platform's `waitUntil` to the incoming request.
+type PlatformRequest = Request & { waitUntil?: (promise: Promise<unknown>) => void }
+
+/**
+ * Lets `work` finish after the response is sent. A serverless platform may freeze the function
+ * once it responds, so `work` goes to its `waitUntil`, and is awaited where there is none.
+ */
+async function afterResponse(work: Promise<void>): Promise<void> {
+  const request = getRequest() as PlatformRequest
+  if (request.waitUntil === undefined) {
+    await work
+    return
+  }
+  request.waitUntil(work)
+}
+
 /** Extends the session in the database. A failure is only logged: the cookie is refreshed anyway. */
 async function extendInBackground(
   deps: SessionDeps,
@@ -74,7 +90,7 @@ async function extendInBackground(
 
 /**
  * Checks a `<sessionId>.<rawToken>` cookie against the stored hash. Deletes the session of a
- * user who is no longer active, and extends one within a week of expiry in the background.
+ * user who is no longer active, and extends one within a week of expiry after the response.
  */
 async function resolveSession(
   deps: SessionDeps,
@@ -133,12 +149,14 @@ async function resolveSession(
     user,
   }
 
-  extendInBackground(deps, extended).catch((error: unknown) => {
-    logger.error(
-      { err: error, event: 'session.extend.background_crash', session_id: session.id },
-      'Critical error during background session extension',
-    )
-  })
+  await afterResponse(
+    extendInBackground(deps, extended).catch((error: unknown) => {
+      logger.error(
+        { err: error, event: 'session.extend.background_crash', session_id: session.id },
+        'Critical error during background session extension',
+      )
+    }),
+  )
 
   return Result.ok({
     ...extended,
