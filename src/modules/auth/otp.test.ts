@@ -15,6 +15,7 @@ import { MEMBER, testContext } from '#/server/testing/test-context'
 import { testDeps } from '#/server/testing/test-deps'
 
 import type { requestOtp, verifyOtp } from './auth.functions'
+import { clientKey } from './rate-limit.server'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 import type { RequestOtpInput } from './request-otp.server'
 import { requestOtpAction } from './request-otp.server'
@@ -313,7 +314,7 @@ describe('requesting a code', () => {
 
     expect(db.calls.slice(1, 4)).toStrictEqual([
       {
-        args: [`${EMAIL}|ip:${ADDRESS}`, 'otp_request', 900, expect.any(Date)],
+        args: [clientKey(EMAIL, ADDRESS), 'otp_request', 900, expect.any(Date)],
         name: 'auth.recordAttempt',
       },
       { args: [EMAIL, 'otp_request', 900, expect.any(Date)], name: 'auth.recordAttempt' },
@@ -376,7 +377,7 @@ describe('requesting a code', () => {
     expect(sentEmails).toHaveLength(1)
     expect(Object.fromEntries(attempts)).toStrictEqual({
       'otp_request:donor@example.com': 1,
-      'otp_request:donor@example.com|ip:203.0.113.9': 1,
+      [`otp_request:${clientKey('donor@example.com', '203.0.113.9')}`]: 1,
       'otp_request:ip:203.0.113.9': 1,
     })
     expect(events.find((e) => e.event === 'auth.request_otp.rate_limited')).toBeUndefined()
@@ -393,6 +394,22 @@ describe('requesting a code', () => {
     })
     expect(db.calls).toStrictEqual([])
     expect(logged(events)).toStrictEqual(['auth.request_otp.validation_failed'])
+  })
+
+  it('rejects an email longer than the column holds, on request and verify', async () => {
+    expect.hasAssertions()
+
+    const { db, deps } = setup()
+    const email = `${'d'.repeat(64)}@${'x'.repeat(60)}.${'y'.repeat(60)}.${'z'.repeat(60)}.www.test`
+
+    await expect(request(deps, { email, mode: 'login' })).resolves.toStrictEqual({
+      errors: [{ message: 'must not have more than 254 characters', path: '/email' }],
+      type: 'VALIDATION_ERROR',
+    })
+    await expect(verify(deps, { email, mode: 'login', otp: '123456' })).resolves.toMatchObject({
+      type: 'VALIDATION_ERROR',
+    })
+    expect(db.calls).toStrictEqual([])
   })
 
   it('redirects a signed-in caller home', async () => {
@@ -519,7 +536,7 @@ describe('verifying a code', () => {
     const { attempts, calls, deps, otp } = await issued('active', 'login')
     await verify(deps, { email: EMAIL, mode: 'login', otp })
 
-    expect(attempts.has(`otp_verify:${EMAIL}|ip:${ADDRESS}`)).toBe(false)
+    expect(attempts.has(`otp_verify:${clientKey(EMAIL, ADDRESS)}`)).toBe(false)
     expect(calls().map((c) => c.name)).toStrictEqual([
       'auth.recordAttempt',
       'auth.recordAttempt',
@@ -706,7 +723,7 @@ describe('verifying a code', () => {
     await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
     expect(attempts.get('otp_verify:ip:203.0.113.9')).toBe(1)
     expect(attempts.get(`otp_verify:${EMAIL}`)).toBe(1)
-    expect(attempts.has(`otp_verify:${EMAIL}|ip:203.0.113.9`)).toBe(false)
+    expect(attempts.has(`otp_verify:${clientKey(EMAIL, '203.0.113.9')}`)).toBe(false)
   })
 
   it('rejects a code that is not six digits without touching the database', async () => {
@@ -961,7 +978,7 @@ describe('a request without a usable client address', () => {
     })
     expect(events[0]).not.toHaveProperty('x_real_ip')
     expect([...attempts.keys()]).toStrictEqual([
-      `otp_request:${EMAIL}|ip:unknown`,
+      `otp_request:${clientKey(EMAIL, null)}`,
       `otp_request:${EMAIL}`,
     ])
   })

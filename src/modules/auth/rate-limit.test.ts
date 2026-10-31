@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { errValue } from '#/server/testing/result'
 
-import { checkOtpRequest, checkOtpVerify, resetOtpVerify } from './rate-limit.server'
+import { checkOtpRequest, checkOtpVerify, clientKey, resetOtpVerify } from './rate-limit.server'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 
 interface Counts {
@@ -18,7 +18,7 @@ function attemptsDb({ address = 1, client = 1, email = 1 }: Counts, windowStarte
     let attemptCount = email
     if (identifier.startsWith('ip:')) {
       attemptCount = address
-    } else if (identifier.includes('|ip:')) {
+    } else if (identifier.startsWith('client:')) {
       attemptCount = client
     }
     return { action, attemptCount, id: 1, identifier, lastAttemptAt: currentTime, windowStartedAt }
@@ -45,7 +45,7 @@ describe('the OTP rate limits', () => {
         name: 'auth.recordAttempt',
       },
       {
-        args: ['d@x.test|ip:203.0.113.7', 'otp_request', 900, expect.any(Date)],
+        args: [clientKey('d@x.test', '203.0.113.7'), 'otp_request', 900, expect.any(Date)],
         name: 'auth.recordAttempt',
       },
       { args: ['d@x.test', 'otp_request', 900, expect.any(Date)], name: 'auth.recordAttempt' },
@@ -61,7 +61,7 @@ describe('the OTP rate limits', () => {
 
     expect(db.calls).toStrictEqual([
       {
-        args: ['donor@example.com|ip:unknown', 'otp_verify', 300, expect.any(Date)],
+        args: [clientKey('donor@example.com', null), 'otp_verify', 300, expect.any(Date)],
         name: 'auth.recordAttempt',
       },
       {
@@ -88,7 +88,7 @@ describe('the OTP rate limits', () => {
       ip: '203.0.113.7',
       retryAfterSeconds: 840,
     })
-    expect(keys(db)).toStrictEqual(['ip:203.0.113.7', 'd@x.test|ip:203.0.113.7'])
+    expect(keys(db)).toStrictEqual(['ip:203.0.113.7', clientKey('d@x.test', '203.0.113.7')])
   })
 
   it('allows ten verification attempts for an email from one address in five minutes', async () => {
@@ -158,6 +158,19 @@ describe('the OTP rate limits', () => {
     },
   )
 
+  it('keys an email from an address within the identifier column, whatever their length', () => {
+    expect.hasAssertions()
+
+    const longest = clientKey(
+      `${'d'.repeat(64)}@${'x'.repeat(185)}.test`,
+      'ffff:ffff:ffff:ffff::/64',
+    )
+
+    expect(longest).toMatch(/^client:[0-9a-f]{64}$/u)
+    expect(clientKey('D@X.test', null)).toBe(clientKey('d@x.test', null))
+    expect(clientKey('d@x.test', '203.0.113.7')).not.toBe(clientKey('d@x.test', '203.0.113.8'))
+  })
+
   it('treats a missing row as the first attempt', async () => {
     expect.hasAssertions()
 
@@ -191,7 +204,7 @@ describe('the OTP rate limits', () => {
 
     expect(reset.isOk()).toBe(true)
     expect(db.calls).toStrictEqual([
-      { args: ['d@x.test|ip:203.0.113.7', 'otp_verify'], name: 'auth.resetAttempts' },
+      { args: [clientKey('d@x.test', '203.0.113.7'), 'otp_verify'], name: 'auth.resetAttempts' },
     ])
   })
 })

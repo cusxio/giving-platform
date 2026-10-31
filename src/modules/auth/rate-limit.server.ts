@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { Result } from 'better-result'
 
 import { now } from '#/core/date'
@@ -88,9 +90,14 @@ export function limitedAddress(logger: Deps['logger'], headers: Headers): null |
   return ip
 }
 
-/** The key of an email from one address. Requests with no address share one key per email. */
-const clientKey = (email: string, ip: null | string) =>
-  `${email.toLowerCase()}|ip:${ip ?? 'unknown'}`
+/**
+ * The key of an email from one address. Requests with no address share one key per email. It is
+ * hashed because an email and an address together can pass the identifier's 255 characters.
+ */
+export const clientKey = (email: string, ip: null | string) =>
+  `client:${createHash('sha256')
+    .update(`${email.toLowerCase()}|ip:${ip ?? 'unknown'}`)
+    .digest('hex')}`
 
 /**
  * Counts the attempt against the address, the email from that address, and the email, in that

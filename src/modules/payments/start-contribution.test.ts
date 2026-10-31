@@ -421,6 +421,12 @@ describe('a contribution that is not recorded', () => {
       case: `RM ${offering} to one fund`,
       data: input({ contributions: { future: 0, mission: 0, offering, tithe: 0 } }),
     })),
+    {
+      case: 'an email past 254 characters',
+      data: input({
+        email: `${'d'.repeat(64)}@${'x'.repeat(60)}.${'y'.repeat(60)}.${'z'.repeat(60)}.www.test`,
+      }),
+    },
     { case: 'a saved card token that is a number', data: input({ token: 7 }) },
     { case: 'a body that is not an object', data: 'nope' },
     { case: 'no body', data: undefined },

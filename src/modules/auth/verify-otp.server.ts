@@ -25,7 +25,7 @@ type VerifyDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 const verifyOtpInput = parseWith(
   Compile(
     Type.Object({
-      email: Type.String({ format: 'email' }),
+      email: Type.String({ format: 'email', maxLength: 254 }),
       mode: Type.Union([Type.Literal('login'), Type.Literal('signup')]),
       otp: Type.String({ pattern: '^[0-9]{6}$' }),
     }),

@@ -27,7 +27,7 @@ type OtpDeps = Pick<Deps, 'db' | 'hashToken' | 'logger' | 'mailer'>
 const requestOtpInput = parseWith(
   Compile(
     Type.Object({
-      email: Type.String({ format: 'email' }),
+      email: Type.String({ format: 'email', maxLength: 254 }),
       mode: Type.Union([Type.Literal('signup'), Type.Literal('login')]),
     }),
   ),

@@ -119,7 +119,7 @@ const startContributionInput = parseWith(
         Type.Union(fundsName.map((f) => Type.Literal(f))),
         Type.Number({ maximum: MAX_FUND_AMOUNT }),
       ),
-      email: Type.String({ format: 'email' }),
+      email: Type.String({ format: 'email', maxLength: 254 }),
       firstName: Type.String({ minLength: 1 }),
       lastName: Type.String({ minLength: 1 }),
       token: Type.Optional(Type.String()),
