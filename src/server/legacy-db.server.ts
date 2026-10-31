@@ -8,7 +8,7 @@ import type { InfraError } from '#/server/infra-error'
  * migration deletes its calls, and the file goes once none are left. Every `Err` rethrows its
  * original `cause`, so a caller sees exactly the error object it saw before.
  */
-export interface Executor {
+interface Executor {
   readonly run: <T>(query: Query<T>) => Promise<T>
   readonly batch: <const Q extends readonly [Query<unknown>, ...Query<unknown>[]]>(
     queries: Q,

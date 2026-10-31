@@ -1,35 +1,18 @@
 import { TaggedError } from 'better-result'
 
-import type { TransactionRollbackErrorResult } from '#/core/errors'
+/** A signed-in donor gave an email that another account has. */
+export class EmailBelongsToAnotherUser extends TaggedError('EmailBelongsToAnotherUser') {}
 
-export type CreatePendingContributionError =
-  | EmailBelongsToAnotherUserErrorResult
-  | GuestEmailExistsErrorResult
-  | TransactionRollbackErrorResult
+/** A guest gave the email of a registered account. */
+export class GuestEmailExists extends TaggedError('GuestEmailExists') {}
 
-interface EmailBelongsToAnotherUserErrorResult {
-  readonly error: EmailBelongsToAnotherUserError
-  readonly type: 'EmailBelongsToAnotherUserError'
-}
+/** Every fund was given nothing. */
+export class InvalidContribution extends TaggedError('InvalidContribution') {}
 
-interface GuestEmailExistsErrorResult {
-  readonly error: GuestEmailExistsError
-  readonly type: 'GuestEmailExistsError'
-}
-
-export class EmailBelongsToAnotherUserError extends Error {
-  constructor() {
-    super('Email belongs to another user')
-    this.name = 'EmailBelongsToAnotherUserError'
-  }
-}
-
-export class GuestEmailExistsError extends Error {
-  constructor() {
-    super('Email already exists for a registered user')
-    this.name = 'GuestEmailExistsError'
-  }
-}
+/** The saved card cannot be charged: no one is signed in (`userId` null), or they never saved it. */
+export class PaymentMethodUnavailable extends TaggedError('PaymentMethodUnavailable')<{
+  userId: null | number
+}> {}
 
 /** No transaction has the id. */
 export class ReceiptNotFound extends TaggedError('ReceiptNotFound')<{ transactionId: string }> {}

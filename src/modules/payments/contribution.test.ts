@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { errValue, okValue } from '#/server/testing/result'
+
 import { contributionItems, decideDonor, fundName, itemsFor, totalInCents } from './contribution'
 
 const guest = { id: 7, status: 'guest' as const }
@@ -43,7 +45,7 @@ describe('contribution items', () => {
     ])
   })
 
-  it('becomes rows of the transaction keyed by fund id', () => {
+  it('becomes rows of the transaction keyed by fund id, or names a missing fund', () => {
     expect.hasAssertions()
 
     const at = new Date(0)
@@ -58,11 +60,20 @@ describe('contribution items', () => {
       },
     ]
 
-    expect(itemsFor('txn_1', [{ amountInCents: 300, fund: 'tithe' }], funds)).toStrictEqual([
-      { amount: 300, fundId: 'fund_t', transactionId: 'txn_1' },
-    ])
-    expect(() => itemsFor('txn_1', [{ amountInCents: 300, fund: 'future' }], funds)).toThrow(
-      'Invalid fund name: Future',
-    )
+    expect(
+      okValue(itemsFor('txn_1', [{ amountInCents: 300, fund: 'tithe' }], funds)),
+    ).toStrictEqual([{ amount: 300, fundId: 'fund_t', transactionId: 'txn_1' }])
+    expect(
+      errValue(
+        itemsFor(
+          'txn_1',
+          [
+            { amountInCents: 300, fund: 'tithe' },
+            { amountInCents: 100, fund: 'future' },
+          ],
+          funds,
+        ),
+      ),
+    ).toBe('Future')
   })
 })
