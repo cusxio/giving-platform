@@ -14,8 +14,6 @@ export default {
   ignoreDependencies: [
     // Run by the commit-msg hook in .moon/workspace.yml, which knip does not read.
     '@commitlint/cli',
-    // Unused. Removing it rewrites pnpm-lock.yaml, so the owner removes it and this entry.
-    'msw',
   ],
   vitest: { entry: ['**/*.test.ts'] },
 } satisfies KnipConfig
