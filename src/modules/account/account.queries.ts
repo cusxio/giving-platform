@@ -41,7 +41,9 @@ export function useUpdatePrivacyModeMutation() {
   return useMutation({
     mutationFn: (privacyMode: UpdatePrivacyModeInput['privacyMode']) =>
       updatePrivacyMode({ data: { privacyMode } }),
-    onMutate(nextPrivacyMode) {
+    async onMutate(nextPrivacyMode) {
+      // A user refetch already in flight (e.g. on window focus) would land after this and undo it
+      await queryClient.cancelQueries({ queryKey: currentUserQuery().queryKey })
       queryClient.setQueryData<Extract<CurrentUserResponse, { type: 'SUCCESS' }>>(
         currentUserQuery().queryKey,
         (prev) => {
@@ -77,6 +79,7 @@ export function useUpdatePrivacyModeMutation() {
         }
       }
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: currentUserQuery().queryKey }),
   })
 }
 
