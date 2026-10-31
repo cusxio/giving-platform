@@ -32,7 +32,7 @@ export function WelcomeMigrate() {
         mutateAsync({ journey }),
       ])
         .then(([, res]) => {
-          // useServerFn resolves undefined after following a redirect
+          // A signed-out caller is already on its way to login
           if (!res) {
             return
           }
