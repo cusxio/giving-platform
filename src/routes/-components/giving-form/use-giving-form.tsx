@@ -12,7 +12,8 @@ import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
 import type { StartContributionResponse } from '#/features/giving/contribution.mutations'
 import { useStartContributionMutation } from '#/features/giving/contribution.mutations'
-import type { SavedPaymentMethod, User } from '#/server/schema.server'
+import type { User } from '#/modules/account'
+import type { SavedPaymentMethod } from '#/modules/payments'
 
 export type GivingFormStore = ReturnType<typeof useGivingForm>['store']
 export type GivingFormView = 'amounts' | 'details' | 'redirecting'

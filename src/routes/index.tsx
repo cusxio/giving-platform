@@ -6,12 +6,12 @@ import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
 import { funds } from '#/core/brand'
 import { currentUserQuery, useOptionalAuthUser } from '#/modules/account'
+import { savedPaymentMethodsQuery } from '#/modules/payments'
 import { Nav } from '#/routes/-components/nav'
 import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
 import { useGivingUrl } from './-hooks/use-giving-url'
-import { createSavedPaymentMethodsQueryOptions } from './-index.queries'
 
 const searchSchema = v.object({
   future: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
@@ -52,10 +52,7 @@ export const Route = createFileRoute('/')({
 
   async loader({ context }) {
     if (context.shouldPreloadPaymentMethods === true) {
-      await context.queryClient.query({
-        ...createSavedPaymentMethodsQueryOptions(true),
-        staleTime: 'static',
-      })
+      await context.queryClient.query({ ...savedPaymentMethodsQuery(true), staleTime: 'static' })
     }
   },
 

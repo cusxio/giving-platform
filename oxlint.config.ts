@@ -59,7 +59,6 @@ const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS
 const LEGACY_FILES: string[] = [
   'src/components/transaction-icon-status.tsx',
   'src/components/transaction-status.tsx',
-  'src/components/ui/payment-methods/index.tsx',
   'src/core/errors.ts',
   'src/features/giving/contribution.service.ts',
   'src/features/giving/payment.service.ts',
@@ -67,10 +66,7 @@ const LEGACY_FILES: string[] = [
   'src/features/payment-gateway/eghl.service.test.ts',
   'src/features/payment-gateway/eghl.service.ts',
   'src/features/user/user.repository.ts',
-  'src/routes/-components/giving-form/giving-form-details.tsx',
-  'src/routes/-components/giving-form/giving-form.tsx',
   'src/routes/-components/giving-form/use-giving-form.tsx',
-  'src/routes/-data/index.get-saved-payment-methods.procedure.ts',
   'src/routes/api/-eghl.callback.test.ts',
   'src/routes/api/-eghl.cron.test.ts',
   'src/routes/api/eghl.cron.ts',

@@ -2,7 +2,7 @@ import type { FormStore } from '@ariakit/react'
 import { FormRadio, FormRadioGroup } from '@ariakit/react'
 import { createElement, useId } from 'react'
 
-import type { SavedPaymentMethod } from '#/server/schema.server'
+import type { SavedPaymentMethod } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 import { CARD_COMPONENTS } from './payment-methods-cards'

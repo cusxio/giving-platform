@@ -1,8 +1,15 @@
 import { queryOptions } from '@tanstack/react-query'
 import { isNotFound } from '@tanstack/react-router'
 
-import { getReceipt } from './payments.functions'
+import { getReceipt, getSavedPaymentMethods } from './payments.functions'
 import type { ReceiptInput } from './receipt.server'
+
+export function savedPaymentMethodsQuery(authenticated: boolean) {
+  return queryOptions({
+    queryFn: () => (authenticated ? getSavedPaymentMethods() : []),
+    queryKey: ['saved-payment-methods', { authenticated }],
+  })
+}
 
 export function receiptQuery(transactionId: ReceiptInput['transactionId']) {
   return queryOptions({
