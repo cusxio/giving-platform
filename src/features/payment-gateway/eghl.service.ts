@@ -8,21 +8,12 @@ import { centsToRinggit } from '#/core/money'
 import type { Result } from '#/core/result'
 import { err, ok, tryAsync, trySync } from '#/core/result'
 import { constantTimeEqual } from '#/server/crypto.server'
-import { BASE_URL, EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/server/env.server'
+import { EGHL_PASSWORD, EGHL_SERVICE_ID, EGHL_URL } from '#/server/env.server'
 import type { Transaction } from '#/server/schema.server'
 
 import type { EghlFetchError, EghlQueryError } from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.schema'
 import { EghlQueryResponseSchema, EghlTxnExists } from './eghl.schema'
-
-interface CreatePaymentRequestParams {
-  amountInCents: number
-  customerEmail: string
-  customerName: string
-  description: string
-  token?: string
-  transactionId: Transaction['id']
-}
 
 interface QueryTransactionStatusParams {
   amountInCents: number
@@ -60,48 +51,6 @@ const hashValueFields = (reply: SignedReply) => [
 ]
 
 export class EghlService {
-  createPaymentRequestURL(params: CreatePaymentRequestParams) {
-    const { transactionId, amountInCents, description, customerEmail, customerName, token } = params
-    const amount = centsToRinggit(amountInCents)
-
-    const requestParams = {
-      Amount: amount.toFixed(2),
-      CurrencyCode: 'MYR',
-      CustEmail: customerEmail,
-      CustName: customerName,
-      MerchantCallBackURL: `${BASE_URL}/api/eghl/callback`,
-      MerchantReturnURL: `${BASE_URL}/api/eghl/return`,
-      OrderNumber: transactionId,
-      PaymentDesc: description,
-      PaymentID: transactionId,
-      PymtMethod: 'ANY',
-      ServiceID: EGHL_SERVICE_ID,
-      TransactionType: 'SALE',
-      ...(token !== undefined && { Token: token, TokenType: 'OCP' }),
-    }
-
-    const hashKeyFields = [
-      EGHL_PASSWORD,
-      requestParams.ServiceID,
-      requestParams.PaymentID,
-      requestParams.MerchantReturnURL,
-      '', // MerchantApprovalURL
-      '', // MerchantUnApprovalURL
-      requestParams.MerchantCallBackURL,
-      requestParams.Amount,
-      requestParams.CurrencyCode,
-      '', // CustIP
-      '', // PageTimeout
-      '', // CardNo
-      token ?? '',
-      '', // RecurringCriteria
-    ].join('')
-
-    const HashValue = this.#generateHashValue(hashKeyFields)
-
-    return queryString.stringifyUrl({ query: { ...requestParams, HashValue }, url: EGHL_URL })
-  }
-
   async queryTransactionStatus(
     params: QueryTransactionStatusParams,
   ): Promise<Result<EghlQueryResponse, EghlQueryError>> {

@@ -8,7 +8,6 @@ import type { EghlPaymentResponse } from './eghl.schema'
 import { EghlTxnExists, EghlTxnStatus } from './eghl.schema'
 
 const mockedEnv = vi.hoisted(() => ({
-  BASE_URL: 'https://app.give.test',
   EGHL_PASSWORD: 'secret-password',
   EGHL_SERVICE_ID: 'service-123',
   EGHL_URL: 'https://eghl.test/pay',
@@ -132,61 +131,6 @@ const queryAgainstGatewayReply = async (body: string) => {
 }
 
 describe('eghlService', () => {
-  describe('createPaymentRequestURL', () => {
-    it('builds a signed payment request that eGHL accepts', () => {
-      expect.hasAssertions()
-      const service = createService()
-
-      const url = service.createPaymentRequestURL({
-        amountInCents: 9950,
-        customerEmail: 'jane@example.com',
-        customerName: 'Jane Doe',
-        description: 'Giving',
-        transactionId: 'txn_001',
-      })
-
-      const parsed = new URL(url)
-      expect(`${parsed.origin}${parsed.pathname}`).toBe(mockedEnv.EGHL_URL)
-
-      const params = parsed.searchParams
-      const expectedReturnURL = `${mockedEnv.BASE_URL}/api/eghl/return`
-      const expectedCallbackURL = `${mockedEnv.BASE_URL}/api/eghl/callback`
-
-      expect(Object.fromEntries(params)).toMatchObject({
-        Amount: '99.50',
-        CurrencyCode: 'MYR',
-        CustEmail: 'jane@example.com',
-        CustName: 'Jane Doe',
-        MerchantCallBackURL: expectedCallbackURL,
-        MerchantReturnURL: expectedReturnURL,
-        OrderNumber: 'txn_001',
-        PaymentID: 'txn_001',
-        ServiceID: mockedEnv.EGHL_SERVICE_ID,
-      })
-
-      const expectedHash = hashValue(
-        [
-          mockedEnv.EGHL_PASSWORD,
-          mockedEnv.EGHL_SERVICE_ID,
-          'txn_001',
-          expectedReturnURL,
-          '',
-          '',
-          expectedCallbackURL,
-          '99.50',
-          'MYR',
-          '',
-          '',
-          '',
-          '',
-          '',
-        ].join(''),
-      )
-
-      expect(params.get('HashValue')).toBe(expectedHash)
-    })
-  })
-
   describe('verifyPaymentResponse', () => {
     it('returns true when the response is signed by eGHL', () => {
       expect.hasAssertions()

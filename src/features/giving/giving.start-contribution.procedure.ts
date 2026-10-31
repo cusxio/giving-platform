@@ -15,7 +15,6 @@ import type {
   ValidationErrorResponse,
 } from '#/core/wire'
 import { contributionServiceMiddleware } from '#/server/middleware/contribution-service-middleware'
-import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { savedPaymentMethodRepositoryMiddleware } from '#/server/middleware/saved-payment-method-repository-middleware'
 
 const schema = Compile(
@@ -43,14 +42,10 @@ type StartContributionBusinessErrorCode =
   | 'USER_MISMATCH'
 
 export const startContribution = createServerFn({ method: 'POST' })
-  .middleware([
-    contributionServiceMiddleware,
-    eghlServiceMiddleware,
-    savedPaymentMethodRepositoryMiddleware,
-  ])
+  .middleware([contributionServiceMiddleware, savedPaymentMethodRepositoryMiddleware])
   .validator((v: StartContributionInput) => v)
   .handler(async ({ data, context }): Promise<StartContributionResponse> => {
-    const { contributionService, user, eghlService, savedPaymentMethodRepository, logger } = context
+    const { contributionService, deps, user, savedPaymentMethodRepository, logger } = context
 
     const parseResult = trySync(
       () =>
@@ -188,7 +183,7 @@ export const startContribution = createServerFn({ method: 'POST' })
       }
     }
 
-    const redirectURL = eghlService.createPaymentRequestURL({
+    const redirectURL = deps.eghl.paymentRequestUrl({
       amountInCents: totalAmountInCents,
       customerEmail: email,
       customerName: txResult.value.customerName,
