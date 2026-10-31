@@ -24,3 +24,12 @@ interface ValidationError {
   message: string
   path: string
 }
+
+/**
+ * A server function's input type for the client. It validates nothing: the procedure's parser
+ * does, on the server.
+ */
+export const wireInput =
+  <T>() =>
+  (raw: T): T =>
+    raw
