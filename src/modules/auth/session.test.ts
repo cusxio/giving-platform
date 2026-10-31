@@ -1,13 +1,14 @@
+import { SpanStatusCode } from '@opentelemetry/api'
 import { describe, expect, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
 import type { QueryResult } from '#/server/db.server'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
+import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
-import { clearSessionCookie } from './session-cookie.server'
-import { endSession, logoutProcedure, resolveSession, verifySessionCookie } from './session.server'
+import { endSession, logoutProcedure, verifySessionCookie } from './session.server'
 import {
   deleteSessionById,
   extendSession,
@@ -86,9 +87,11 @@ describe('verifying a session cookie', () => {
     expect.hasAssertions()
 
     const { cookieValue, deps } = setup('active')
-    const result = await resolveSession(deps, cookieValue)
 
-    expect(result).toMatchObject({ ok: true, value: { serializedCookie: null, user: { id: 1 } } })
+    await expect(verifySessionCookie(deps, cookieValue)).resolves.toMatchObject({
+      session: { id: SESSION_ID },
+      user: { id: 1 },
+    })
   })
 
   it.each(['guest', 'suspended', 'deleted'] as const)(
@@ -96,28 +99,29 @@ describe('verifying a session cookie', () => {
     async (status) => {
       expect.hasAssertions()
 
-      const { cookieValue, deps } = setup(status)
-      const result = await resolveSession(deps, cookieValue)
+      const { cookieValue, deps, events } = setup(status)
 
-      expect(result).toStrictEqual({
-        error: { serializedCookie: clearSessionCookie(), type: 'SessionUserInactiveError' },
-        ok: false,
+      await expect(verifySessionCookie(deps, cookieValue)).resolves.toStrictEqual({
+        session: null,
+        user: null,
       })
+      expect(io.setCookies).toStrictEqual([CLEARED])
+      expect(events).toMatchObject([{ reason: 'SessionUserInactiveError' }])
     },
   )
 
   it('does not revive a rejected session when the user is reactivated', async () => {
     expect.hasAssertions()
 
-    const { cookieValue, deps, user } = setup('suspended')
-    await resolveSession(deps, cookieValue)
+    const { cookieValue, deps, events, user } = setup('suspended')
+    await verifySessionCookie(deps, cookieValue)
     user.status = 'active'
-    const result = await resolveSession(deps, cookieValue)
 
-    expect(result).toStrictEqual({
-      error: { serializedCookie: clearSessionCookie(), type: 'SessionNotFoundError' },
-      ok: false,
+    await expect(verifySessionCookie(deps, cookieValue)).resolves.toStrictEqual({
+      session: null,
+      user: null,
     })
+    expect(events.at(-1)).toMatchObject({ reason: 'SessionNotFoundError' })
   })
 })
 
@@ -157,7 +161,9 @@ describe('the session cookie on the response', () => {
     await backgroundWork()
 
     expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
-    expect(events).toMatchObject([{ event: 'session.extend.background_failed', level: 40 }])
+    expect(events).toMatchObject([
+      { event: 'session.extend.background_failed', level: 40, op: 'auth.extendSession' },
+    ])
   })
 
   it('rejects the session of a suspended user, deletes it and clears the cookie', async () => {
@@ -185,9 +191,9 @@ describe('the session cookie on the response', () => {
       user: null,
     })
     expect(io.setCookies).toStrictEqual([CLEARED])
-    expect(events.map((e) => [e.event, e.level])).toStrictEqual([
-      ['session.verify.inactive_delete_failed', 40],
-      ['session.verify.invalid', 30],
+    expect(events).toMatchObject([
+      { event: 'session.verify.inactive_delete_failed', level: 40, op: 'auth.deleteSessionById' },
+      { event: 'session.verify.invalid', level: 30 },
     ])
   })
 
@@ -209,9 +215,17 @@ describe('the session cookie on the response', () => {
   })
 
   it.each([
-    ['malformed', 'not-a-session', 'session.verify.validation_failed', 40],
-    ['unreadable from the db', `${SESSION_ID}.${RAW_TOKEN}`, 'session.verify.db_error', 50],
-  ] as const)('clears a cookie that is %s', async (_label, cookie, event, level) => {
+    [
+      'malformed',
+      'not-a-session',
+      { error_type: 'ParseError', event: 'session.verify.validation_failed', level: 40 },
+    ],
+    [
+      'unreadable from the db',
+      `${SESSION_ID}.${RAW_TOKEN}`,
+      { event: 'session.verify.db_error', level: 50, op: 'auth.findSessionByIdWithUser' },
+    ],
+  ] as const)('clears a cookie that is %s', async (_label, cookie, logged) => {
     expect.hasAssertions()
 
     const { db, deps, events } = setup('active', 20)
@@ -222,7 +236,32 @@ describe('the session cookie on the response', () => {
       user: null,
     })
     expect(io.setCookies).toStrictEqual([CLEARED])
-    expect(events).toMatchObject([{ event, level }])
+    expect(events).toMatchObject([logged])
+  })
+})
+
+describe('the request span', () => {
+  it('is marked failed when the session cannot be read', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, db, deps } = setup('active', 20)
+    db.on(findSessionByIdWithUser, fail)
+    const { span } = await inRequestSpan(() => verifySessionCookie(deps, cookieValue))
+
+    expect(span.status.code).toBe(SpanStatusCode.ERROR)
+  })
+
+  it('stays as it is when only the session extension fails', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, db, deps } = setup('active', 3)
+    db.on(extendSession, fail)
+    const { span } = await inRequestSpan(async () => {
+      await verifySessionCookie(deps, cookieValue)
+      await backgroundWork()
+    })
+
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
   })
 })
 
