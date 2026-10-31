@@ -206,6 +206,20 @@ describe('starting a contribution as a guest', () => {
     expect(redirectParams(result.response)).toMatchObject({ Amount: '5000000.00' })
   })
 
+  it('accepts names as long as the account columns, after trimming', async () => {
+    expect.hasAssertions()
+
+    const [first, last] = ['f'.repeat(32), 'l'.repeat(32)]
+    const fake = contributionDb(null)
+    const result = await start(fake, null, input({ firstName: ` ${first} `, lastName: last }))
+
+    expect(redirectParams(result.response)).toMatchObject({ CustName: `${first} ${last}` })
+    expect(fake.calls[1]).toStrictEqual({
+      args: [{ email: 'donor@give.test', firstName: first, lastName: last }],
+      name: 'account.upsertGuestUser',
+    })
+  })
+
   it('upserts a guest who already gave with the email', async () => {
     expect.hasAssertions()
 
@@ -417,6 +431,8 @@ describe('a contribution that is not recorded', () => {
   it.each([
     { case: 'a blank first name', data: input({ firstName: '   ' }) },
     { case: 'a first name that is a number', data: input({ firstName: 123 }) },
+    { case: 'a first name past 32 characters', data: input({ firstName: 'f'.repeat(33) }) },
+    { case: 'a last name past 32 characters', data: input({ lastName: 'l'.repeat(33) }) },
     ...[5_000_000.01, 9e15, '1e308'].map((offering) => ({
       case: `RM ${offering} to one fund`,
       data: input({ contributions: { future: 0, mission: 0, offering, tithe: 0 } }),
