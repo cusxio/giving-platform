@@ -1,4 +1,3 @@
-import type { DrizzleQueryError } from 'drizzle-orm'
 import type { ParseError as TypeboxParseError } from 'typebox/value'
 
 export interface ParseError {
@@ -7,7 +6,7 @@ export interface ParseError {
 }
 
 export function createDBError(error: unknown): DBQueryErrorResult {
-  return { error: error as DBQueryErrorResult['error'], type: 'DBQueryError' }
+  return { error, type: 'DBQueryError' }
 }
 
 export function createParseError(error: unknown): ParseError {
@@ -27,7 +26,7 @@ export interface DBEmptyReturnErrorResult {
 }
 
 export interface DBQueryErrorResult {
-  readonly error: DrizzleQueryError
+  readonly error: unknown
   readonly type: 'DBQueryError'
 }
 

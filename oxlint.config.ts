@@ -53,11 +53,6 @@ const restrictImports = (
 const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
 const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS]
 
-// Files that break a boundary today because their code has not moved into src/modules yet.
-// They keep only the module-entry rules. Each Phase 1 step deletes the entries it fixes, and
-// the list must end empty.
-const LEGACY_FILES: string[] = ['src/core/errors.ts']
-
 export default defineConfig({
   categories: {
     correctness: 'error',
@@ -229,6 +224,5 @@ export default defineConfig({
       files: ['src/modules/**/*.functions.ts'],
       rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_FUNCTIONS),
     },
-    { files: LEGACY_FILES, rules: restrictImports(...EVERYWHERE) },
   ],
 })
