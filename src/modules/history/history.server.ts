@@ -99,7 +99,10 @@ export const getTransactionsAction = defineRead({
   event: 'history.transactions',
   input: transactionsInput,
   run: ({ deps, user }, { page }) =>
-    loadTransactionsPage(deps, { donor: { id: user.id, journey: user.journey }, page: page ?? 1 }),
+    loadTransactionsPage(deps, {
+      donor: { id: user.id, journey: user.journey },
+      page: Math.max(1, page ?? 1),
+    }),
   wire: {},
 })
 

@@ -351,6 +351,30 @@ describe('a transactions page', () => {
     ])
   })
 
+  it.each([0, -1])('reads page 1 when asked for page %i', async (page) => {
+    expect.hasAssertions()
+
+    const db = pageDb()
+
+    await expect(
+      getTransactionsAction({ context: testContext(MEMBER, { db }), data: { page } }),
+    ).resolves.toStrictEqual({ pageSize: 20, totalCount: 21, transactions: [row] })
+    expect(db.calls[1]?.args).toStrictEqual([donor, { limit: 20, offset: 0 }])
+  })
+
+  it('refuses a page that is not an integer, without reading', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = pageDb()
+
+    await expect(
+      getTransactionsAction({ context: testContext(MEMBER, { db, logger }), data: { page: 1.5 } }),
+    ).rejects.toThrow(new Error('Invalid input'))
+    expect(events).toMatchObject([{ event: 'history.transactions.validation_failed' }])
+    expect(db.calls).toStrictEqual([])
+  })
+
   it('redirects a signed-out caller to login without reading', async () => {
     expect.hasAssertions()
 
