@@ -9,7 +9,7 @@ import type { User } from '#/modules/account/server'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
 import { anonymousOnly } from '#/server/authorize.server'
 import type { Deps } from '#/server/deps.server'
-import { infra, required } from '#/server/infra-error'
+import { infra } from '#/server/infra-error'
 import type { Parsed } from '#/server/input.server'
 import { parseWith } from '#/server/input.server'
 import { business, defineMutation } from '#/server/procedure.server'
@@ -34,7 +34,11 @@ const requestOtpInput = parseWith(
 )
 export type RequestOtpInput = Parsed<typeof requestOtpInput>
 
-/** The account a signup code is for: the email's row, or a new guest row for a new email. */
+/**
+ * The account a signup code is for: the email's row, or a new guest row for a new email. The
+ * upsert returns no row when the email was registered after the lookup, such as by a signup
+ * activating in between, so it is answered as the registered account it now is.
+ */
 function signupAccount(deps: OtpDeps, email: User['email']) {
   return Result.gen(async function* account() {
     const found = yield* Result.await(deps.db.run(findUserByEmail(email)))
@@ -42,7 +46,7 @@ function signupAccount(deps: OtpDeps, email: User['email']) {
       return Result.ok(found)
     }
     const created = yield* Result.await(deps.db.run(upsertGuestUser({ email })))
-    return required(created, upsertGuestUser.queryName)
+    return created === null ? Result.err(new AlreadyExistsError()) : Result.ok(created)
   })
 }
 

@@ -392,20 +392,21 @@ describe('requesting a code', () => {
     })
   })
 
-  it('is a server error when the guest insert returns no row', async () => {
+  it('answers a signup that loses its guest row to a registration as an existing account', async () => {
     expect.hasAssertions()
 
-    const { db, deps, events } = setup()
+    const { db, deps, events, sentEmails } = setup()
     db.on(upsertGuestUser, () => null)
 
     await expect(request(deps, { email: EMAIL, mode: 'signup' })).resolves.toStrictEqual({
-      type: 'SERVER_ERROR',
+      error: { code: 'ALREADY_EXISTS' },
+      type: 'BUSINESS_ERROR',
     })
-    expect(events.at(-1)).toMatchObject({
-      'error.type': 'no-row',
-      event: 'auth.request_otp.failed',
-      op: 'account.upsertGuestUser',
-    })
+    expect(sentEmails).toStrictEqual([])
+    expect(logged(events)).toStrictEqual([
+      'auth.request_otp.attempt',
+      'auth.request_otp.blocked:exists',
+    ])
   })
 })
 
