@@ -404,6 +404,8 @@ describe('a contribution that is not recorded', () => {
 
   it.each([
     { case: 'a blank first name', data: input({ firstName: '   ' }) },
+    { case: 'a first name that is a number', data: input({ firstName: 123 }) },
+    { case: 'a saved card token that is a number', data: input({ token: 7 }) },
     { case: 'a body that is not an object', data: 'nope' },
     { case: 'no body', data: undefined },
   ])('is a validation error for $case, before any query', async ({ data }) => {

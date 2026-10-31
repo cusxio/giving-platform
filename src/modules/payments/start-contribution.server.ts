@@ -116,7 +116,7 @@ const startContributionInput = parseWith(
     }),
   ),
   // Form fields arrive as strings, so the fund amounts are converted to numbers.
-  { convert: true, lowercase: ['email'], trim: ['email', 'firstName', 'lastName'] },
+  { convert: ['contributions'], lowercase: ['email'], trim: ['email', 'firstName', 'lastName'] },
 )
 export type StartContributionInput = Parsed<typeof startContributionInput>
 

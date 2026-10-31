@@ -1,4 +1,7 @@
 import { Result, TaggedError } from 'better-result'
+import type { TSchema } from 'typebox'
+import { IsObject } from 'typebox'
+import { Value } from 'typebox/value'
 
 interface Issue {
   readonly message: string
@@ -15,8 +18,8 @@ export type Parser<I> = (raw: unknown) => Result<I, InvalidInput>
 export type Parsed<P> = P extends Parser<infer I> ? I : never
 
 interface ParseOptions {
-  /** Coerce values to the schema's types before validating, such as a form's numeric strings. */
-  readonly convert?: boolean
+  /** Coerce these fields to their schema's types before validating, such as a form's numeric strings. */
+  readonly convert?: readonly string[]
   /** Lower-case these string fields before validating. */
   readonly lowercase?: readonly string[]
   /** Trim these string fields before validating. */
@@ -24,8 +27,8 @@ interface ParseOptions {
 }
 
 interface Schema<I> {
-  readonly Convert: (value: unknown) => unknown
   readonly Parse: (value: unknown) => I
+  readonly Type: () => TSchema
 }
 
 function hasIssues(
@@ -35,11 +38,18 @@ function hasIssues(
   return Array.isArray(errors)
 }
 
-function normalize(raw: unknown, options: ParseOptions): unknown {
+function normalize(raw: unknown, options: ParseOptions, type: TSchema): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return raw
   }
   const value: Record<string, unknown> = { ...raw }
+  const properties = IsObject(type) ? type.properties : {}
+  for (const key of options.convert ?? []) {
+    const property = properties[key]
+    if (property !== undefined && key in value) {
+      value[key] = Value.Convert(property, value[key])
+    }
+  }
   for (const key of options.trim ?? []) {
     const field = value[key]
     if (typeof field === 'string') {
@@ -63,10 +73,7 @@ function normalize(raw: unknown, options: ParseOptions): unknown {
 export function parseWith<I>(schema: Schema<I>, options: ParseOptions = {}): Parser<I> {
   return (raw) => {
     try {
-      const normalized = normalize(raw, options)
-      return Result.ok(
-        schema.Parse(options.convert === true ? schema.Convert(normalized) : normalized),
-      )
+      return Result.ok(schema.Parse(normalize(raw, options, schema.Type())))
     } catch (error) {
       if (!hasIssues(error)) {
         throw error

@@ -97,11 +97,11 @@ describe('a mutation', () => {
     expect(settled).toStrictEqual(answered({ type: 'SUCCESS', value: 'a@b.co' }))
   })
 
-  it('coerces a numeric string to a number only when the parser converts', async () => {
+  it('coerces a numeric string to a number only in a field the parser converts', async () => {
     expect.hasAssertions()
 
     const amountSchema = Compile(Type.Object({ amount: Type.Number() }))
-    const converting = parseWith(amountSchema, { convert: true })
+    const converting = parseWith(amountSchema, { convert: ['amount'] })
     const strictParser = parseWith(amountSchema)
     const define = (input: typeof strictParser) =>
       defineMutation({
