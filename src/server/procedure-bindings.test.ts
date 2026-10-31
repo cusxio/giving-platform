@@ -67,31 +67,77 @@ function boundAction(init: ESTree.Expression | null): string | undefined {
   return body.callee.name
 }
 
+/** The name a node exports under. */
+function nameOf(node: ESTree.Node | null | undefined): string {
+  if (node?.type === 'Identifier') {
+    return node.name
+  }
+  return node?.type === 'Literal' ? String(node.value) : '?'
+}
+
 /** Each exported name with the action its initializer binds, or `undefined` for any other shape. */
-function bindingsOf(file: string): [string, string | undefined][] {
-  const { errors, program } = parseSync(file, readFileSync(path.join(root, file), 'utf8'))
+function bindingsOf(file: string, source: string): [string, string | undefined][] {
+  const { errors, program } = parseSync(file, source)
   if (errors.length > 0) {
     throw new Error(`${file} does not parse`)
   }
-  return program.body
-    .filter((node) => node.type === 'ExportNamedDeclaration')
-    .flatMap((node) =>
-      node.declaration?.type === 'VariableDeclaration' && node.declaration.declarations.length === 1
-        ? node.declaration.declarations.map(({ id, init }): [string, string | undefined] => [
-            id.type === 'Identifier' ? id.name : '?',
-            boundAction(init),
-          ])
-        : [['?', undefined]],
-    )
+  return program.body.flatMap((node): [string, string | undefined][] => {
+    if (node.type === 'ExportDefaultDeclaration') {
+      return [['default', undefined]]
+    }
+    if (node.type === 'ExportAllDeclaration') {
+      return [[node.exported ? nameOf(node.exported) : '*', undefined]]
+    }
+    if (node.type !== 'ExportNamedDeclaration') {
+      return []
+    }
+    const { declaration } = node
+    if (declaration === null || declaration === undefined) {
+      return node.specifiers.map((specifier) => [nameOf(specifier.exported), undefined])
+    }
+    if (declaration.type === 'VariableDeclaration') {
+      const single = declaration.declarations.length === 1
+      return declaration.declarations.map(({ id, init }) => [
+        nameOf(id),
+        single ? boundAction(init) : undefined,
+      ])
+    }
+    return [['id' in declaration ? nameOf(declaration.id) : '?', undefined]]
+  })
 }
+
+/** The exports that are not `createServerFn(...).validator(X).handler((ctx) => <name>Action(ctx))`. */
+const unbound = (bindings: [string, string | undefined][]) =>
+  bindings.filter(([name, action]) => action !== `${name}Action`).map(([name]) => name)
 
 describe('a server function binding', () => {
   it.each(functionFiles)('%s binds every export in one line to an action', (file) => {
     expect.hasAssertions()
 
-    const bindings = bindingsOf(file)
+    const bindings = bindingsOf(file, readFileSync(path.join(root, file), 'utf8'))
 
     expect(bindings.length).toBeGreaterThan(0)
-    expect(bindings).toStrictEqual(bindings.map(([name]) => [name, `${name}Action`]))
+    expect(unbound(bindings)).toStrictEqual([])
+  })
+
+  it('names each export of another shape', () => {
+    expect.hasAssertions()
+
+    const source = [
+      'export const good = createServerFn().validator(v).handler((ctx) => goodAction(ctx))',
+      'export const wrong = createServerFn().validator(v).handler((ctx) => otherAction(ctx))',
+      'export function declared() {}',
+      'export type Shape = string',
+      'export { good as renamed }',
+      'export default good',
+    ].join('\n')
+
+    expect(unbound(bindingsOf('fixture.functions.ts', source))).toStrictEqual([
+      'wrong',
+      'declared',
+      'Shape',
+      'renamed',
+      'default',
+    ])
   })
 })
