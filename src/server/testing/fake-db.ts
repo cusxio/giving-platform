@@ -16,6 +16,11 @@ export interface FakeDb extends Db {
   ) => FakeDb
   /** Every query run so far, in order, including those inside batches and transactions. */
   readonly calls: readonly QueryCall[]
+  /**
+   * The query names each database round trip carried, as `createDb` sends them: one per `run`,
+   * one per `batch`, and one per statement inside a transaction.
+   */
+  readonly roundTrips: readonly (readonly string[])[]
 }
 
 type Impl = (...args: readonly unknown[]) => unknown
@@ -23,8 +28,9 @@ type Impl = (...args: readonly unknown[]) => unknown
 export function createFakeDb(): FakeDb {
   const impls = new Map<QueryDef<never, unknown>, Impl>()
   const calls: QueryCall[] = []
+  const roundTrips: string[][] = []
 
-  const run = <T>(query: Query<T>): Promise<T> => {
+  const answer = <T>(query: Query<T>): Promise<T> => {
     calls.push({ args: query.args, name: query.name })
     const impl = impls.get(query.def)
     if (impl === undefined) {
@@ -34,26 +40,43 @@ export function createFakeDb(): FakeDb {
     return Promise.resolve().then(() => impl(...query.args) as T)
   }
 
-  const executor: Executor = {
-    batch: async (queries) => {
-      const results: unknown[] = []
+  const answerAll = async (queries: readonly Query<unknown>[]) => {
+    const results: unknown[] = []
+    for (const query of queries) {
+      // oxlint-disable-next-line no-await-in-loop -- calls must record in statement order
+      results.push(await answer(query))
+    }
+    return results as never
+  }
+
+  const run = <T>(query: Query<T>): Promise<T> => {
+    roundTrips.push([query.name])
+    return answer(query)
+  }
+
+  const inTransaction: Executor = {
+    batch: (queries) => {
       for (const query of queries) {
-        // oxlint-disable-next-line no-await-in-loop -- calls must record in statement order
-        results.push(await run(query))
+        roundTrips.push([query.name])
       }
-      return results as never
+      return answerAll(queries)
     },
     run,
   }
 
   const fake: FakeDb = {
-    ...executor,
+    batch: (queries) => {
+      roundTrips.push(queries.map((query) => query.name))
+      return answerAll(queries)
+    },
     calls,
     on: (def, impl) => {
       impls.set(def, impl as Impl)
       return fake
     },
-    transaction: (work) => work(executor),
+    roundTrips,
+    run,
+    transaction: (work) => work(inTransaction),
   }
   return fake
 }

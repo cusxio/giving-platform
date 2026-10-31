@@ -67,6 +67,30 @@ describe('a fake db', () => {
     ])
   })
 
+  it('records one round trip per run and per batch, and per statement inside a transaction', async () => {
+    expect.hasAssertions()
+
+    const at = new Date(0)
+    const db = createFakeDb()
+      .on(findUserByEmail, () => null)
+      .on(activateUser, () => {})
+
+    await db.run(findUserByEmail('a@give.test'))
+    await db.batch([findUserByEmail('b@give.test'), activateUser(3, at)])
+    await db.transaction(async (tx) => {
+      await tx.batch([findUserByEmail('c@give.test'), activateUser(4, at)])
+      await tx.run(activateUser(5, at))
+    })
+
+    expect(db.roundTrips).toStrictEqual([
+      ['users.findByEmail'],
+      ['users.findByEmail', 'users.activate'],
+      ['users.findByEmail'],
+      ['users.activate'],
+      ['users.activate'],
+    ])
+  })
+
   it('types each impl from the real query factory', () => {
     expect.hasAssertions()
 
