@@ -68,7 +68,7 @@ An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exac
 ## Lint bans
 
 - `redirect` and `notFound` from `@tanstack/react-router` are banned in `src/modules/**/*.server.ts` and `src/server/**`. Only the runner, `eghl.http.server.ts`, `session.server.ts` (logout) and `maintenance.server.ts` throw them, all outside any workflow.
-- `Panic` and `panic` from `better-result` are banned outside the runner and tests.
+- `Panic` and `panic` from `better-result` are banned everywhere except the runner (`src/server/procedure.server.ts`), tests in `src/modules/**` (`*.test.ts`, `*.test.tsx`) and tests in `src/server/**` (`*.test.ts`). Tests elsewhere, such as in `src/core/**` or `src/routes/**`, may not import them.
 
 ## Tests
 
