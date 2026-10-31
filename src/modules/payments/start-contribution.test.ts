@@ -383,7 +383,10 @@ describe('a contribution that is not recorded', () => {
     ])
     expect(result.outcomes).toStrictEqual(['rollback'])
     expect(result.events.at(-1)).toMatchObject({
-      err: { message: 'connection terminated' },
+      err: {
+        message:
+          'Failed query: fake payments.insertTransactionItems\nparams: [object Object],[object Object]: connection terminated',
+      },
       error_type: 'TransactionRollbackError',
     })
   })

@@ -1,4 +1,5 @@
 import { Result } from 'better-result'
+import { DrizzleQueryError } from 'drizzle-orm'
 
 import type { Db, Executor, Query, QueryDef, Results } from '#/server/db.server'
 import { batchOp } from '#/server/db.server'
@@ -13,7 +14,9 @@ interface QueryCall {
 export interface FakeDb extends Db {
   /**
    * Answers every run of `def` with `impl`. An `impl` that throws is a failed statement:
-   * `Err(InfraError)` named after the query. A query with no answer rejects with
+   * `Err(InfraError)` named after the query. Its `cause` has production's shape: drizzle wraps
+   * the driver error in a `DrizzleQueryError` that quotes the arguments, except in a neon-http
+   * batch, which fails with the driver error itself. A query with no answer rejects with
    * `unexpected query <name>`, because it is a bug in the test. `NoInfer` fixes the row type
    * from `def`, so an impl cannot widen it.
    */
@@ -40,7 +43,7 @@ export function createFakeDb(): FakeDb {
   const roundTrips: string[][] = []
   const transactions: ('commit' | 'rollback')[] = []
 
-  const answer = <T>(query: Query<T>): Promise<Result<T, InfraError>> => {
+  const answer = <T>(query: Query<T>, wrapped = true): Promise<Result<T, InfraError>> => {
     calls.push({ args: query.args, name: query.name })
     const impl = impls.get(query.def)
     if (impl === undefined) {
@@ -51,7 +54,10 @@ export function createFakeDb(): FakeDb {
       try {
         return Result.ok(impl(...query.args) as T)
       } catch (error) {
-        return Result.err(infra(query.name, error))
+        const cause = wrapped
+          ? new DrizzleQueryError(`fake ${query.name}`, [...query.args], error as Error)
+          : error
+        return Result.err(infra(query.name, cause))
       }
     })
   }
@@ -60,11 +66,12 @@ export function createFakeDb(): FakeDb {
   const answerAll = async <const Q extends readonly Query<unknown>[]>(
     queries: Q,
     op: (failed: Query<unknown>) => string,
+    wrapped: boolean,
   ): Promise<Result<Results<Q>, InfraError>> => {
     const results: unknown[] = []
     for (const query of queries) {
       // oxlint-disable-next-line no-await-in-loop -- calls must record in statement order
-      const result = await answer(query)
+      const result = await answer(query, wrapped)
       if (result.isErr()) {
         return Result.err(infra(op(query), result.error.cause))
       }
@@ -83,7 +90,7 @@ export function createFakeDb(): FakeDb {
       for (const query of queries) {
         roundTrips.push([query.name])
       }
-      return answerAll(queries, (failed) => failed.name)
+      return answerAll(queries, (failed) => failed.name, true)
     },
     run,
   }
@@ -91,7 +98,7 @@ export function createFakeDb(): FakeDb {
   const fake: FakeDb = {
     batch: (queries) => {
       roundTrips.push(queries.map((query) => query.name))
-      return answerAll(queries, () => batchOp(queries))
+      return answerAll(queries, () => batchOp(queries), false)
     },
     calls,
     on: (def, impl) => {

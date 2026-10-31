@@ -1,5 +1,5 @@
 import { Result } from 'better-result'
-import { eq } from 'drizzle-orm'
+import { DrizzleQueryError, eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
 import { defineQuery, firstOrNull, nothing } from '#/server/db.server'
@@ -52,7 +52,7 @@ describe('a fake db', () => {
     )
   })
 
-  it('answers an impl that throws with an InfraError named after the query', async () => {
+  it("answers an impl that throws with an InfraError wrapping drizzle's error, as production", async () => {
     expect.hasAssertions()
 
     const at = new Date(0)
@@ -61,15 +61,36 @@ describe('a fake db', () => {
       .on(activateUser, fail)
 
     const alone = errValue(await db.run(activateUser(1, at)))
-    const batched = errValue(await db.batch([findUserByEmail('a@give.test'), activateUser(1, at)]))
     const inTransaction = errValue(
       await db.transaction((tx) => tx.batch([findUserByEmail('a@give.test'), activateUser(1, at)])),
     )
 
     expect(alone).toBeInstanceOf(InfraError)
-    expect(alone).toMatchObject({ cause: new Error('connection terminated'), op: 'users.activate' })
-    expect(batched).toMatchObject({ op: 'users.findByEmail + users.activate' })
-    expect(inTransaction).toMatchObject({ op: 'users.activate' })
+    expect(alone).toMatchObject({ op: 'users.activate' })
+    expect(alone.cause).toBeInstanceOf(DrizzleQueryError)
+    expect(alone.cause).toMatchObject({
+      cause: new Error('connection terminated'),
+      params: [1, at],
+    })
+    expect(inTransaction).toMatchObject({ cause: alone.cause, op: 'users.activate' })
+  })
+
+  it('answers a failed neon-http batch with the driver error itself, as production', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb()
+      .on(findUserByEmail, () => null)
+      .on(activateUser, fail)
+
+    const batched = errValue(
+      await db.batch([findUserByEmail('a@give.test'), activateUser(1, new Date(0))]),
+    )
+
+    expect(batched).toMatchObject({
+      cause: new Error('connection terminated'),
+      op: 'users.findByEmail + users.activate',
+    })
+    expect(batched.cause).not.toBeInstanceOf(DrizzleQueryError)
   })
 
   it('records every call in order across run, batch and transaction', async () => {
