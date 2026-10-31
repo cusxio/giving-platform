@@ -1,6 +1,5 @@
 import { createMiddleware } from '@tanstack/react-start'
 import { getCookie } from '@tanstack/react-start/server'
-import type { Logger } from 'pino'
 
 import type { SessionCheck } from '#/modules/auth/server'
 import { SESSION_COOKIE_NAME, verifySessionCookie } from '#/modules/auth/server'
@@ -11,8 +10,6 @@ import { logger } from '#/server/logger.server'
 /** What every server function and server route finds on `context`. */
 export interface RequestContext {
   readonly deps: Deps
-  /** The same logger as `deps.logger`, kept until every caller reads it from `deps`. */
-  readonly logger: Logger
   readonly session: SessionCheck['session']
   readonly user: SessionCheck['user']
 }
@@ -26,5 +23,5 @@ export const requestContext = createMiddleware().server<RequestContext>(async ({
   const { session, user } =
     cookie === undefined ? ANONYMOUS : await verifySessionCookie(base, cookie)
   const deps: Deps = { ...base, logger: logger.child({ user_id: user?.id }) }
-  return next({ context: { deps, logger: deps.logger, session, user } })
+  return next({ context: { deps, session, user } })
 })

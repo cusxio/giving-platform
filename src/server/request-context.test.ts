@@ -122,7 +122,7 @@ describe('the request context middleware', () => {
     expect(context).toMatchObject({ session: null, user: null })
   })
 
-  it('scopes the logger to the signed-in user and hands it out on both keys', async () => {
+  it('scopes the logger to the signed-in user', async () => {
     expect.hasAssertions()
 
     io.check = SIGNED_IN
@@ -130,7 +130,6 @@ describe('the request context middleware', () => {
     io.logs = []
     context.deps.logger.info({ event: 'probe' }, 'probe')
 
-    expect(context.logger).toBe(context.deps.logger)
     expect(io.logs).toContainEqual(expect.objectContaining({ event: 'probe', user_id: 42 }))
   })
 

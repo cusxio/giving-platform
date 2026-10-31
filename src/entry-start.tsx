@@ -6,7 +6,7 @@ export const startInstance = createStart(async () => {
   }
 
   const [{ maintenanceMiddleware }, { requestContext }] = await Promise.all([
-    import('./server/middleware/maintenance-middleware'),
+    import('./server/maintenance.server'),
     import('./server/request-context.server'),
   ])
 
