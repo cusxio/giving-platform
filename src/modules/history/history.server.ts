@@ -45,7 +45,7 @@ type TransactionDetail = readonly [
 ]
 
 /** One neon-http round trip for the three reads, then pure aggregation. */
-async function loadOverview(
+export async function loadOverview(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly year: OverviewYear },
 ) {
@@ -58,11 +58,11 @@ async function loadOverview(
   return summarizeOverview(recent, timeline, fundItems)
 }
 
-function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor): Promise<number[]> {
+export function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor): Promise<number[]> {
   return deps.db.run(successYears(donor))
 }
 
-async function loadTransactionsPage(
+export async function loadTransactionsPage(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly page: number },
 ) {

@@ -45,6 +45,7 @@ describe('the current user', () => {
       type: 'SUCCESS',
       value: { user, userSettings: { privacyMode: true, userId: 2 } },
     })
+    expect(db.roundTrips).toStrictEqual([[findUserById.queryName, findSettingsByUserId.queryName]])
   })
 
   it('gets privacy mode off when they never saved settings', async () => {
@@ -85,6 +86,7 @@ describe('the welcome data', () => {
       guestTransactionExists: exists,
       user,
     })
+    expect(db.roundTrips).toStrictEqual([[findUserById.queryName, hasGuestTransaction.queryName]])
   })
 
   it('is missing when the account row is gone', async () => {

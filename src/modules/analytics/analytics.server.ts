@@ -19,12 +19,12 @@ export interface ReportsInput {
   readonly startDateUTC: Date
 }
 
-async function loadInsights(deps: Pick<Deps, 'db'>): Promise<Insights> {
+export async function loadInsights(deps: Pick<Deps, 'db'>): Promise<Insights> {
   const [summary, weekly] = await deps.db.batch([insightsSummary(), weeklyCumulativeTotalsByYear()])
   return summarizeInsights(summary, weekly)
 }
 
-async function loadReport(
+export async function loadReport(
   deps: Pick<Deps, 'db'>,
   input: { readonly endExclusive: Date; readonly start: Date },
 ) {

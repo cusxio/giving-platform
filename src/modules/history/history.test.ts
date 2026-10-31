@@ -2,8 +2,22 @@ import { describe, expect, it } from 'vitest'
 
 import { createFakeDb } from '#/server/testing/fake-db'
 
-import { transactionById, transactionItemsOf } from './history.repository.server'
-import { findOwnTransaction } from './history.server'
+import {
+  countTransactions,
+  recentTransactions,
+  successFundItems,
+  successTimeline,
+  successYears,
+  transactionById,
+  transactionItemsOf,
+  transactionsPage,
+} from './history.repository.server'
+import {
+  findOwnTransaction,
+  loadAvailableYears,
+  loadOverview,
+  loadTransactionsPage,
+} from './history.server'
 
 const transaction = {
   amount: 5000,
@@ -31,6 +45,7 @@ describe('a transaction detail', () => {
     await expect(
       findOwnTransaction({ db }, { transactionId: transaction.id, viewerId: 2 }),
     ).resolves.toStrictEqual([transaction, items])
+    expect(db.roundTrips).toStrictEqual([[transactionById.queryName, transactionItemsOf.queryName]])
   })
 
   it.each([
@@ -47,5 +62,70 @@ describe('a transaction detail', () => {
         { transactionId: transaction.id, viewerId },
       ),
     ).resolves.toBeNull()
+  })
+})
+
+const donor = { id: 2, journey: 'start_fresh' as const }
+const row = {
+  amount: 5000,
+  createdAt: transaction.createdAt,
+  id: transaction.id,
+  status: 'success' as const,
+}
+
+describe('the overview', () => {
+  it('reads one Kuala Lumpur year in one round trip and summarizes it', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb()
+      .on(recentTransactions, () => [row])
+      .on(successTimeline, () => [{ amount: 5000, createdAt: row.createdAt }])
+      .on(successFundItems, () => [
+        { createdAt: row.createdAt, fundId: 'fund_tithe', fundName: 'Tithe' },
+      ])
+
+    const overview = await loadOverview({ db }, { donor, year: 2025 })
+
+    expect(overview.transactions).toStrictEqual([row])
+    expect(overview.summary).toMatchObject({ noOfContributions: 1, totalAmount: 50 })
+    expect(db.roundTrips).toStrictEqual([
+      [recentTransactions.queryName, successTimeline.queryName, successFundItems.queryName],
+    ])
+    expect(db.calls[0]?.args).toStrictEqual([
+      {
+        donor,
+        endExclusive: new Date('2025-12-31T16:00:00Z'),
+        start: new Date('2024-12-31T16:00:00Z'),
+      },
+    ])
+  })
+})
+
+describe('the available years', () => {
+  it('are the years the donor gave in', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb().on(successYears, () => [2024, 2025])
+
+    await expect(loadAvailableYears({ db }, donor)).resolves.toStrictEqual([2024, 2025])
+    expect(db.calls).toStrictEqual([{ args: [donor], name: successYears.queryName }])
+  })
+})
+
+describe('a transactions page', () => {
+  it('reads the count and the page in one round trip', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb()
+      .on(countTransactions, () => [{ value: 21 }])
+      .on(transactionsPage, () => [row])
+
+    await expect(loadTransactionsPage({ db }, { donor, page: 2 })).resolves.toStrictEqual({
+      pageSize: 20,
+      totalCount: 21,
+      transactions: [row],
+    })
+    expect(db.roundTrips).toStrictEqual([[countTransactions.queryName, transactionsPage.queryName]])
+    expect(db.calls[1]?.args).toStrictEqual([donor, { limit: 20, offset: 20 }])
   })
 })
