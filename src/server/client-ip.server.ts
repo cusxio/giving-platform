@@ -38,16 +38,22 @@ export function clientIp(headers: Headers): null | string {
     return null
   }
   const [a, b, c, d, e, f = '', g = '', h = ''] = groups(address)
+  const block = `${[a, b, c, d].join(':')}::/64`
   if ([a, b, c, d, e].some((group) => group !== '0')) {
-    return `${[a, b, c, d].join(':')}::/64`
+    return block
   }
   // ::ffff:a.b.c.d is IPv4-mapped; ::a.b.c.d is the deprecated IPv4-compatible form.
   if (f === 'ffff' || (f === '0' && g !== '0')) {
     return dotted(g, h)
   }
-  // The unspecified address names no client. ::1 is a single host, the loopback.
-  if (h === '0') {
-    return null
+  if (f === '0' && g === '0') {
+    // The unspecified address names no client. ::1 is a single host, the loopback.
+    if (h === '0') {
+      return null
+    }
+    if (h === '1') {
+      return '::1'
+    }
   }
-  return `::${h}`
+  return block
 }
