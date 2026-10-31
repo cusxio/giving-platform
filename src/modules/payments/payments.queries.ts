@@ -1,8 +1,15 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, useMutation } from '@tanstack/react-query'
 import { isNotFound } from '@tanstack/react-router'
 
-import { getReceipt, getSavedPaymentMethods } from './payments.functions'
+import { getReceipt, getSavedPaymentMethods, startContribution } from './payments.functions'
 import type { ReceiptInput } from './receipt.server'
+import type { StartContributionInput } from './start-contribution.server'
+
+export function useStartContributionMutation() {
+  return useMutation({
+    mutationFn: (input: StartContributionInput) => startContribution({ data: input }),
+  })
+}
 
 export function savedPaymentMethodsQuery(authenticated: boolean) {
   return queryOptions({

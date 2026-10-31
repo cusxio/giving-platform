@@ -2,8 +2,8 @@ import type { SetStateAction } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import type * as Toaster from '#/components/ui/toaster'
-import type { StartContributionResponse } from '#/features/giving/contribution.mutations'
-import type * as ContributionMutations from '#/features/giving/contribution.mutations'
+import type * as Payments from '#/modules/payments'
+import type { StartContributionResponse } from '#/modules/payments'
 
 const toast = vi.hoisted(() => ({
   error: vi.fn<(message: string) => void>(),
@@ -13,8 +13,8 @@ const toast = vi.hoisted(() => ({
 vi.mock<typeof Toaster>(import('#/components/ui/toaster'), () => ({
   toast: toast as unknown as typeof Toaster.toast,
 }))
-vi.mock<typeof ContributionMutations>(import('#/features/giving/contribution.mutations'), () => ({
-  useStartContributionMutation: vi.fn<typeof ContributionMutations.useStartContributionMutation>(),
+vi.mock<typeof Payments>(import('#/modules/payments'), () => ({
+  useStartContributionMutation: vi.fn<typeof Payments.useStartContributionMutation>(),
 }))
 
 const { handleFormSubmission } = await import('./use-giving-form')

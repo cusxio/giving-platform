@@ -36,8 +36,3 @@ const client = neon(DATABASE_URL)
 export const db = drizzle({ casing: 'snake_case', client })
 
 export type DB = typeof db
-export type DBTransaction = Parameters<Parameters<DB['transaction']>[0]>[0]
-
-export type AnyDB = DB | DBPool
-export type AnyDBOrTransaction = AnyDB | AnyDBTransaction
-export type AnyDBTransaction = DBPoolTransaction | DBTransaction
