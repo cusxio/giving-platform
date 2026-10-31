@@ -32,7 +32,7 @@ jobs:
       - name: Run moon tasks
         env:
           MOON_TOOLCHAIN_FORCE_GLOBALS: true
-        run: pnpm exec moon ci :lint :format-check :typecheck :test
+        run: pnpm exec moon ci :lint :format-check :typecheck :test :bundle :knip
 
   deploy:
     name: Deploy to Vercel

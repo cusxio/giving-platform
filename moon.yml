@@ -95,6 +95,26 @@ tasks:
       - /vite.config.ts
       - /tsconfig.json
 
+  # ── Verify ─────────────────────────────────────────────────
+
+  # TanStack Start's import protection fails this build when client code reaches a *.server.ts file.
+  bundle:
+    command: vite
+    args:
+      - build
+    inputs:
+      - group: sources
+      - /vite.config.ts
+      - /tsconfig.json
+
+  knip:
+    command: knip
+    inputs:
+      - group: sources
+      - /knip.config.ts
+      - /package.json
+      - /moon.yml
+
   # ── Build ──────────────────────────────────────────────────
 
   build:
