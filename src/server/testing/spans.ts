@@ -4,7 +4,7 @@ import type { ReadableSpan } from '@opentelemetry/sdk-trace'
 import { InMemorySpanExporter, SimpleSpanProcessor, TracerProvider } from '@opentelemetry/sdk-trace'
 
 /** Registers a tracer that keeps every finished span, as the SDK does in production. */
-function recordSpans(): InMemorySpanExporter {
+export function recordSpans(): InMemorySpanExporter {
   const exporter = new InMemorySpanExporter()
   context.disable()
   context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable())

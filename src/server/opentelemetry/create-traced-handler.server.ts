@@ -47,12 +47,10 @@ export function createTracedHandler<T extends ReturnType<typeof createStartHandl
 
           span.setAttribute('http.response.status_code', response.status)
 
+          // Below 500 the status stays as the request left it: a server function that answered
+          // SERVER_ERROR with a 200 has already marked the span failed, and OK would overwrite it.
           if (response.status >= 500) {
             span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${response.status}` })
-          } else if (response.status >= 400) {
-            span.setStatus({ code: SpanStatusCode.UNSET, message: `HTTP ${response.status}` })
-          } else {
-            span.setStatus({ code: SpanStatusCode.OK })
           }
 
           return response
