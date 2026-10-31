@@ -4,6 +4,13 @@ import type { Fund } from '#/core/brand/funds'
 import { ringgitToCents } from '#/core/money'
 import type { User } from '#/modules/account/server'
 
+/**
+ * The most one fund may receive in one contribution, in ringgit. Amounts are stored as integer
+ * cents in 32-bit columns (at most RM 21,474,836.47), and a gift to every fund at this amount
+ * still fits the transaction's total.
+ */
+export const MAX_FUND_AMOUNT = 5_000_000
+
 export interface ContributionItem {
   readonly amountInCents: number
   readonly fund: Fund

@@ -194,6 +194,18 @@ describe('starting a contribution as a guest', () => {
     expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
   })
 
+  it('accepts the most one fund may receive', async () => {
+    expect.hasAssertions()
+
+    const result = await start(
+      contributionDb(null),
+      null,
+      input({ contributions: { future: 0, mission: 0, offering: '5000000', tithe: 0 } }),
+    )
+
+    expect(redirectParams(result.response)).toMatchObject({ Amount: '5000000.00' })
+  })
+
   it('upserts a guest who already gave with the email', async () => {
     expect.hasAssertions()
 
@@ -405,6 +417,10 @@ describe('a contribution that is not recorded', () => {
   it.each([
     { case: 'a blank first name', data: input({ firstName: '   ' }) },
     { case: 'a first name that is a number', data: input({ firstName: 123 }) },
+    ...[5_000_000.01, 9e15, '1e308'].map((offering) => ({
+      case: `RM ${offering} to one fund`,
+      data: input({ contributions: { future: 0, mission: 0, offering, tithe: 0 } }),
+    })),
     { case: 'a saved card token that is a number', data: input({ token: 7 }) },
     { case: 'a body that is not an object', data: 'nope' },
     { case: 'no body', data: undefined },

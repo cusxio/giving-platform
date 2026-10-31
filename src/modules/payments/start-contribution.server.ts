@@ -15,7 +15,14 @@ import { parseWith } from '#/server/input.server'
 import { business, defineMutation } from '#/server/procedure.server'
 
 import type { ContributionItem } from './contribution'
-import { contributionItems, decideDonor, fundName, itemsFor, totalInCents } from './contribution'
+import {
+  MAX_FUND_AMOUNT,
+  contributionItems,
+  decideDonor,
+  fundName,
+  itemsFor,
+  totalInCents,
+} from './contribution'
 import {
   EmailBelongsToAnotherUser,
   GuestEmailExists,
@@ -108,7 +115,10 @@ export function createPendingContribution(
 const startContributionInput = parseWith(
   Compile(
     Type.Object({
-      contributions: Type.Record(Type.Union(fundsName.map((f) => Type.Literal(f))), Type.Number()),
+      contributions: Type.Record(
+        Type.Union(fundsName.map((f) => Type.Literal(f))),
+        Type.Number({ maximum: MAX_FUND_AMOUNT }),
+      ),
       email: Type.String({ format: 'email' }),
       firstName: Type.String({ minLength: 1 }),
       lastName: Type.String({ minLength: 1 }),

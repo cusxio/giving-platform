@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
+import { funds } from '#/core/brand'
+import { ringgitToCents } from '#/core/money'
 import { errValue, okValue } from '#/server/testing/result'
 
-import { contributionItems, decideDonor, fundName, itemsFor, totalInCents } from './contribution'
+import {
+  MAX_FUND_AMOUNT,
+  contributionItems,
+  decideDonor,
+  fundName,
+  itemsFor,
+  totalInCents,
+} from './contribution'
 
 const guest = { id: 7, status: 'guest' as const }
 const registered = { id: 7, status: 'active' as const }
@@ -24,6 +33,20 @@ describe('deciding whose contribution it is', () => {
 })
 
 describe('contribution items', () => {
+  it('fit a 32-bit integer of cents when every fund gets the most it may', () => {
+    expect.hasAssertions()
+
+    const largest = contributionItems(
+      Object.fromEntries(funds.map((fund) => [fund, MAX_FUND_AMOUNT])) as Record<
+        (typeof funds)[number],
+        number
+      >,
+    )
+
+    expect(totalInCents(largest)).toBe(funds.length * ringgitToCents(MAX_FUND_AMOUNT))
+    expect(totalInCents(largest)).toBeLessThanOrEqual(2 ** 31 - 1)
+  })
+
   it('converts ringgit to cents and leaves out funds given nothing', () => {
     expect.hasAssertions()
 
