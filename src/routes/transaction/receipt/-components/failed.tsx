@@ -1,12 +1,12 @@
-import type { Payment, Transaction } from '#/server/schema.server'
+import type { Receipt } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 import { ReturnToHome } from './return-to-home'
 import { TransactionStatusLayout } from './transaction-status-layout'
 
 interface FailedProps {
-  payment?: Pick<Payment, 'message'>
-  transaction: Pick<Transaction, 'id' | 'status'>
+  payment?: NonNullable<Receipt['payment']>
+  transaction: Receipt['transaction']
 }
 
 export function Failed(props: FailedProps) {

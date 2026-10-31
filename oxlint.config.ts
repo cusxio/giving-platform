@@ -66,7 +66,6 @@ const LEGACY_FILES: string[] = [
   'src/features/giving/saved-payment-method.repository.ts',
   'src/features/payment-gateway/eghl.service.test.ts',
   'src/features/payment-gateway/eghl.service.ts',
-  'src/features/transaction/transaction.repository.ts',
   'src/features/user/user.repository.ts',
   'src/routes/-components/giving-form/giving-form-details.tsx',
   'src/routes/-components/giving-form/giving-form.tsx',
@@ -75,14 +74,6 @@ const LEGACY_FILES: string[] = [
   'src/routes/api/-eghl.callback.test.ts',
   'src/routes/api/-eghl.cron.test.ts',
   'src/routes/api/eghl.cron.ts',
-  'src/routes/transaction/receipt/-components/failed.tsx',
-  'src/routes/transaction/receipt/-components/pending.tsx',
-  'src/routes/transaction/receipt/-components/success.tsx',
-  'src/routes/transaction/receipt/-components/transaction-status-layout.tsx',
-  'src/routes/transaction/receipt/-data/transaction-receipt.dto.test.ts',
-  'src/routes/transaction/receipt/-data/transaction-receipt.dto.ts',
-  'src/routes/transaction/receipt/-data/transaction-receipt.get-data.procedure.ts',
-  'src/routes/transaction/receipt/-transaction-receipt.queries.ts',
 ]
 
 export default defineConfig({

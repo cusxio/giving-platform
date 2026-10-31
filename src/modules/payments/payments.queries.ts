@@ -1,13 +1,12 @@
 import { queryOptions } from '@tanstack/react-query'
 import { isNotFound } from '@tanstack/react-router'
 
-import type { Transaction } from '#/server/schema.server'
+import { getReceipt } from './payments.functions'
+import type { ReceiptInput } from './receipt.server'
 
-import { getTransactionReceiptData } from './-data/transaction-receipt.get-data.procedure'
-
-export function createTransactionQueryOptions(transactionId: Transaction['id']) {
+export function receiptQuery(transactionId: ReceiptInput['transactionId']) {
   return queryOptions({
-    queryFn: () => getTransactionReceiptData({ data: { transactionId } }),
+    queryFn: () => getReceipt({ data: { transactionId } }),
     queryKey: ['transaction/receipt', { transactionId }],
     refetchInterval(query) {
       const status = query.state.data?.transaction.status
