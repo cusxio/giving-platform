@@ -1,5 +1,5 @@
 import { pino } from 'pino'
-import { describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, onTestFinished, vi } from 'vitest'
 
 import type {
   BusinessErrorResponse,
@@ -86,6 +86,7 @@ function setup(existing?: Status) {
   const sentEmails: MailMessage[] = []
   const events: LogLine[] = []
   const attempts = new Map<string, number>()
+  const windowStarts = new Map<string, Date>()
 
   const db = createFakeDb()
     .on(findUserByEmail, (email) => {
@@ -129,21 +130,26 @@ function setup(existing?: Status) {
       id: `session-${input.userId}`.padEnd(21, '0'),
       updatedAt: new Date(),
     }))
-    .on(recordAttempt, (identifier, action, _windowSeconds, currentTime) => {
+    .on(recordAttempt, (identifier, action, windowSeconds, currentTime) => {
       const key = `${action}:${identifier}`
-      const attemptCount = (attempts.get(key) ?? 0) + 1
+      const started = windowStarts.get(key) ?? currentTime
+      const open = started.getTime() > currentTime.getTime() - windowSeconds * 1000
+      const windowStartedAt = open ? started : currentTime
+      const attemptCount = (open ? (attempts.get(key) ?? 0) : 0) + 1
       attempts.set(key, attemptCount)
+      windowStarts.set(key, windowStartedAt)
       return {
         action,
         attemptCount,
         id: 1,
         identifier,
         lastAttemptAt: currentTime,
-        windowStartedAt: currentTime,
+        windowStartedAt,
       }
     })
     .on(resetAttempts, (identifier, action) => {
       attempts.delete(`${action}:${identifier}`)
+      windowStarts.delete(`${action}:${identifier}`)
     })
 
   const logger = pino(
@@ -671,11 +677,11 @@ describe('verifying a code', () => {
     expect(events.at(-1)).toMatchObject({ reason: 'expired_or_missing' })
   })
 
-  it('refuses the eleventh attempt in a window', async () => {
+  it('refuses the sixth attempt in a window', async () => {
     expect.hasAssertions()
 
     const { deps, events } = await issued('active', 'login')
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 5; i++) {
       // oxlint-disable-next-line no-await-in-loop -- attempts arrive one after another
       await verify(deps, { email: EMAIL, mode: 'login', otp: '000000' })
     }
@@ -685,7 +691,7 @@ describe('verifying a code', () => {
     ).resolves.toStrictEqual({
       error: {
         code: 'RATE_LIMIT_EXCEEDED',
-        message: 'Too many attempts. Please try again in 5 minutes.',
+        message: 'Too many attempts. Please try again in 15 minutes.',
       },
       type: 'BUSINESS_ERROR',
     })
@@ -873,6 +879,41 @@ describe('one address against another', () => {
     expect(io.setCookies).toHaveLength(1)
   })
 
+  it('cannot keep a slow owner from signing in by voiding each new code', async () => {
+    expect.hasAssertions()
+
+    const start = new Date('2026-10-31T10:00:00Z')
+    vi.useFakeTimers({ now: start, toFake: ['Date'] })
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
+    const { deps, lastOtp } = setup('active')
+    const fiveWrong = Array.from({ length: 5 }, () => [ATTACKER, '000000'] as const)
+    const owner = []
+    const attacker = []
+    for (const minute of [0, 3]) {
+      vi.setSystemTime(start.getTime() + minute * 60_000)
+      fromAddress(VICTIM)
+      // oxlint-disable-next-line no-await-in-loop -- the owner and the attacker take turns
+      await request(deps, { email: EMAIL, mode: 'login' })
+      // oxlint-disable-next-line no-await-in-loop -- the owner and the attacker take turns
+      const voided = await guess(deps, fiveWrong)
+      attacker.push(...voided)
+      vi.setSystemTime(start.getTime() + (minute + 2) * 60_000)
+      fromAddress(VICTIM)
+      // oxlint-disable-next-line no-await-in-loop -- the owner and the attacker take turns
+      owner.push(await verify(deps, { email: EMAIL, mode: 'login', otp: lastOtp() }))
+    }
+
+    expect(owner).toStrictEqual([invalidCode, success])
+    expect(attacker).toStrictEqual([
+      ...Array.from({ length: 5 }, () => invalidCode),
+      ...Array.from({ length: 5 }, () =>
+        tooMany('Too many attempts. Please try again in 12 minutes.'),
+      ),
+    ])
+  })
+
   it('caps the codes sent to one email across many addresses at fifteen', async () => {
     expect.hasAssertions()
 
@@ -914,10 +955,10 @@ describe('one code against many addresses', () => {
     expect.hasAssertions()
 
     const { deps, events, otp, tokens } = await issued('active', 'login')
-    const guesses = ADDRESSES.flatMap((address) =>
-      Array.from({ length: 10 }, (): readonly [string, string] => [address, WRONG]),
+    const guesses = [...ADDRESSES, '203.0.113.4', '203.0.113.5', '203.0.113.6'].flatMap((address) =>
+      Array.from({ length: 5 }, (): readonly [string, string] => [address, WRONG]),
     )
-    guesses[29] = ['203.0.113.3', otp]
+    guesses[29] = ['203.0.113.6', otp]
 
     await expect(guess(deps, guesses)).resolves.toStrictEqual(
       Array.from({ length: 30 }, () => invalidCode),
@@ -970,7 +1011,7 @@ describe('one code against many addresses', () => {
 
     const { attempts, deps, lastOtp, otp } = await issued('active', 'login')
     await guess(deps, [
-      ...Array.from({ length: 5 }, () => [ADDRESS, WRONG] as const),
+      ...[...ADDRESSES, '203.0.113.4', '203.0.113.5'].map((address) => [address, WRONG] as const),
       [ADDRESS, otp],
     ])
     await request(deps, { email: EMAIL, mode: 'login' })

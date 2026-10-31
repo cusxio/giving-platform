@@ -24,10 +24,13 @@ interface Limit {
  * - `address`: the client address across all emails, so one address cannot work through many
  *   emails. Supabase Auth's per-IP defaults, which leave room for a congregation on one network.
  * - `client`: the email from one address. The strict limit, so a client that floods an inbox or
- *   guesses codes stops itself without locking out the same email on another address.
+ *   guesses codes stops itself without locking out the same email on another address. Its checks
+ *   match one code's five over the request window, so one address voids at most one code in a
+ *   window in which the owner can ask for five.
  * - `email`: the email across all addresses, so many addresses together cannot flood one inbox
- *   or guess one code. It is three times the client limit: one address fills at most two client
- *   windows inside one email window, so it alone can never use up the email's allowance.
+ *   or guess one code. Its window is never longer than the client's, so one address fills at most
+ *   two client windows inside it; the cap is more than twice the client limit, so one address
+ *   alone can never use up the email's allowance.
  */
 const LIMITS: Record<Action, Readonly<Record<'address' | 'client' | 'email', Limit>>> = {
   otp_request: {
@@ -37,7 +40,7 @@ const LIMITS: Record<Action, Readonly<Record<'address' | 'client' | 'email', Lim
   },
   otp_verify: {
     address: { maxAttempts: 30, windowSeconds: 5 * 60 },
-    client: { maxAttempts: 10, windowSeconds: 5 * 60 },
+    client: { maxAttempts: 5, windowSeconds: 15 * 60 },
     email: { maxAttempts: 30, windowSeconds: 5 * 60 },
   },
 }

@@ -61,7 +61,7 @@ describe('the OTP rate limits', () => {
 
     expect(db.calls).toStrictEqual([
       {
-        args: [clientKey('donor@example.com', null), 'otp_verify', 300, expect.any(Date)],
+        args: [clientKey('donor@example.com', null), 'otp_verify', 900, expect.any(Date)],
         name: 'auth.recordAttempt',
       },
       {
@@ -91,16 +91,16 @@ describe('the OTP rate limits', () => {
     expect(keys(db)).toStrictEqual(['ip:203.0.113.7', clientKey('d@x.test', '203.0.113.7')])
   })
 
-  it('allows ten verification attempts for an email from one address in five minutes', async () => {
+  it('allows five verification attempts for an email from one address in fifteen minutes', async () => {
     expect.hasAssertions()
 
-    const tenth = await verifyAt(10)
+    const fifth = await verifyAt(5)
 
-    expect(tenth.isOk()).toBe(true)
-    expect(errValue(await verifyAt(11))).toMatchObject({
+    expect(fifth.isOk()).toBe(true)
+    expect(errValue(await verifyAt(6))).toMatchObject({
       _tag: 'RateLimitExceededError',
       ip: '203.0.113.7',
-      retryAfterSeconds: 300,
+      retryAfterSeconds: 900,
     })
   })
 
