@@ -136,6 +136,7 @@ export const transactionById = defineQuery(
   firstOrNull,
 )
 
+/** A transaction's fund rows, in the order they were added. */
 export const transactionItemsOf = defineQuery(
   'history.transactionItemsOf',
   (db, transactionId: TransactionId) =>
@@ -143,6 +144,7 @@ export const transactionItemsOf = defineQuery(
       .select({ amountInCents: transactionItems.amount, fundName: funds.name })
       .from(transactionItems)
       .innerJoin(funds, eq(funds.id, transactionItems.fundId))
-      .where(eq(transactionItems.transactionId, transactionId)),
+      .where(eq(transactionItems.transactionId, transactionId))
+      .orderBy(asc(transactionItems.id)),
   rows,
 )
