@@ -97,6 +97,28 @@ describe('a mutation', () => {
     expect(settled).toStrictEqual(answered({ type: 'SUCCESS', value: 'a@b.co' }))
   })
 
+  it('coerces a numeric string to a number only when the parser converts', async () => {
+    expect.hasAssertions()
+
+    const amountSchema = Compile(Type.Object({ amount: Type.Number() }))
+    const converting = parseWith(amountSchema, { convert: true })
+    const strictParser = parseWith(amountSchema)
+    const define = (input: typeof strictParser) =>
+      defineMutation({
+        auth: anyone,
+        event: 'm.x',
+        input,
+        run: (_ctx, { amount }) => Promise.resolve(Result.ok(amount)),
+        wire: {},
+      })
+
+    const converted = await call(define(converting), null, { amount: '2.25' })
+    const strict = await call(define(strictParser), null, { amount: '2.25' })
+
+    expect(converted.settled).toStrictEqual(answered({ type: 'SUCCESS', value: 2.25 }))
+    expect(strict.settled).toMatchObject(answered({ type: 'VALIDATION_ERROR' }))
+  })
+
   it('answers AUTH_ERROR to a signed-out or forbidden caller, without running', async () => {
     expect.hasAssertions()
 

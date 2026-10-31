@@ -15,6 +15,8 @@ export type Parser<I> = (raw: unknown) => Result<I, InvalidInput>
 export type Parsed<P> = P extends Parser<infer I> ? I : never
 
 interface ParseOptions {
+  /** Coerce values to the schema's types before validating, such as a form's numeric strings. */
+  readonly convert?: boolean
   /** Lower-case these string fields before validating. */
   readonly lowercase?: readonly string[]
   /** Trim these string fields before validating. */
@@ -22,6 +24,7 @@ interface ParseOptions {
 }
 
 interface Schema<I> {
+  readonly Convert: (value: unknown) => unknown
   readonly Parse: (value: unknown) => I
 }
 
@@ -60,7 +63,10 @@ function normalize(raw: unknown, options: ParseOptions): unknown {
 export function parseWith<I>(schema: Schema<I>, options: ParseOptions = {}): Parser<I> {
   return (raw) => {
     try {
-      return Result.ok(schema.Parse(normalize(raw, options)))
+      const normalized = normalize(raw, options)
+      return Result.ok(
+        schema.Parse(options.convert === true ? schema.Convert(normalized) : normalized),
+      )
     } catch (error) {
       if (!hasIssues(error)) {
         throw error
