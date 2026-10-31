@@ -11,7 +11,7 @@ export interface ServerErrorResponse {
   type: 'SERVER_ERROR'
 }
 
-export type SuccessResponse<T = undefined> = T extends undefined
+export type SuccessResponse<T = undefined> = [T] extends [undefined | void]
   ? { type: 'SUCCESS' }
   : { type: 'SUCCESS'; value: T }
 
