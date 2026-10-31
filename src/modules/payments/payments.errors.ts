@@ -1,3 +1,5 @@
+import { TaggedError } from 'better-result'
+
 import type { TransactionRollbackErrorResult } from '#/core/errors'
 
 export type CreatePendingContributionError =
@@ -28,3 +30,6 @@ export class GuestEmailExistsError extends Error {
     this.name = 'GuestEmailExistsError'
   }
 }
+
+/** No transaction has the id. */
+export class ReceiptNotFound extends TaggedError('ReceiptNotFound')<{ transactionId: string }> {}

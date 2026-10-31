@@ -1,21 +1,27 @@
+import { Result } from 'better-result'
+
 import type { User } from '#/modules/account/server'
+import { anyone } from '#/server/authorize.server'
+import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
-import { legacyDb } from '#/server/legacy-db.server'
-import type { RequestContext } from '#/server/request-context.server'
+import type { InfraError } from '#/server/infra-error'
+import { noInput } from '#/server/input.server'
+import { defineRead } from '#/server/procedure.server'
 
 import { unexpiredSavedCards } from './saved-cards.repository.server'
 
-export function listSavedCards(deps: Pick<Deps, 'db'>, userId: User['id']) {
-  return legacyDb(deps.db).run(unexpiredSavedCards(userId))
+/** A signed-out caller has no saved cards. */
+export async function listSavedCards(
+  deps: Pick<Deps, 'db'>,
+  userId: null | User['id'],
+): Promise<Result<QueryResult<typeof unexpiredSavedCards>, InfraError>> {
+  return userId === null ? Result.ok([]) : deps.db.run(unexpiredSavedCards(userId))
 }
 
-/** A signed-out caller has no saved cards. */
-export async function getSavedPaymentMethodsProcedure(
-  context: Pick<RequestContext, 'deps' | 'user'>,
-) {
-  const userId = context.user?.id
-  if (userId === undefined) {
-    return []
-  }
-  return listSavedCards(context.deps, userId)
-}
+export const getSavedPaymentMethodsAction = defineRead({
+  auth: anyone,
+  event: 'giving.saved_payment_methods',
+  input: noInput,
+  run: ({ deps, user }) => listSavedCards(deps, user?.id ?? null),
+  wire: {},
+})
