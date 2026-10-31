@@ -15,6 +15,9 @@ export class NotExistsError extends TaggedError('NotExistsError') {}
 /** The code does not match the newest one issued. */
 export class InvalidOtpError extends TaggedError('InvalidOtpError') {}
 
+/** The code had its last allowed check, so it is refused from now on, even when right. */
+export class CodeExhaustedError extends TaggedError('CodeExhaustedError') {}
+
 /**
  * No usable code: none issued, expired, already claimed, issued for the other mode, or held by an
  * account that may not use it.

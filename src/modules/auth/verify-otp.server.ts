@@ -15,7 +15,7 @@ import { parseWith } from '#/server/input.server'
 import { business, defineMutation, logInfraEvent } from '#/server/procedure.server'
 
 import { InvalidOtpError, InvalidRequestError } from './auth.errors'
-import { checkOtpVerify, limitedAddress, resetOtpVerify } from './rate-limit.server'
+import { checkCode, checkOtpVerify, limitedAddress, resetOtpVerify } from './rate-limit.server'
 import { SESSION_MAX_AGE_SECONDS, serializeSessionCookie } from './session-cookie.server'
 import { createSession } from './sessions.repository.server'
 import { claimTokenIfUnused, findToken } from './tokens.repository.server'
@@ -39,8 +39,8 @@ const mayUse = (user: User, mode: VerifyOtpInput['mode']) =>
   user.status === (mode === 'login' ? 'active' : 'guest')
 
 /**
- * Claims the user's newest unused code when it matches, then creates a session (and activates a
- * guest on signup) in one batch. Returns the serialized session cookie.
+ * Claims the user's newest unused code when it matches and has checks left, then creates a session
+ * (and activates a guest on signup) in one batch. Returns the serialized session cookie.
  */
 function validateOtp(deps: VerifyDeps, { email, mode, otp }: VerifyOtpInput) {
   return Result.gen(async function* validate() {
@@ -53,6 +53,7 @@ function validateOtp(deps: VerifyDeps, { email, mode, otp }: VerifyOtpInput) {
     if (token === null || token.mode !== mode) {
       return Result.err(new InvalidRequestError())
     }
+    yield* Result.await(checkCode(deps, token.id))
     if (!constantTimeEqual(deps.hashToken(otp), token.tokenHash)) {
       return Result.err(new InvalidOtpError())
     }
@@ -110,7 +111,7 @@ function verifyCode(deps: VerifyDeps, input: VerifyOtpInput, ip: null | string) 
 }
 
 /** One answer for a wrong code and a missing one, so a caller cannot tell them apart. */
-const invalid = (email: string, reason: 'expired_or_missing' | 'wrong_code') =>
+const invalid = (email: string, reason: 'code_exhausted' | 'expired_or_missing' | 'wrong_code') =>
   business('INVALID_OR_EXPIRED_OTP', {
     event: 'auth.verify_otp.invalid',
     fields: { email, reason },
@@ -134,6 +135,7 @@ export const verifyOtpAction = defineMutation({
     return Result.ok()
   },
   wire: {
+    CodeExhaustedError: (_error, { email }) => invalid(email, 'code_exhausted'),
     InvalidOtpError: (_error, { email }) => invalid(email, 'wrong_code'),
     InvalidRequestError: (_error, { email }) => invalid(email, 'expired_or_missing'),
     RateLimitExceededError: ({ ip, retryAfterSeconds }, { email }) =>

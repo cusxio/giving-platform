@@ -526,6 +526,7 @@ describe('verifying a code', () => {
       'auth.recordAttempt',
       'account.findUserByEmail',
       'auth.findToken',
+      'auth.recordAttempt',
       'auth.claimTokenIfUnused',
       'auth.createSession',
       'auth.resetAttempts',
@@ -832,10 +833,10 @@ describe('one address against another', () => {
     expect(sentEmails).toHaveLength(6)
   })
 
-  it('cannot keep the email from verifying its code on another address', async () => {
+  it('cannot keep the email from verifying a new code on another address', async () => {
     expect.hasAssertions()
 
-    const { deps, otp } = await issued('active', 'login')
+    const { deps, lastOtp, otp } = await issued('active', 'login')
     fromAddress(ATTACKER)
     let last: unknown
     for (let i = 0; i < 40; i++) {
@@ -845,7 +846,13 @@ describe('one address against another', () => {
     fromAddress(VICTIM)
 
     expect(last).toStrictEqual(tooMany('Too many attempts. Please try again in 5 minutes.'))
-    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(
+      invalidCode,
+    )
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(success)
+    await expect(
+      verify(deps, { email: EMAIL, mode: 'login', otp: lastOtp() }),
+    ).resolves.toStrictEqual(success)
     expect(io.setCookies).toHaveLength(1)
   })
 
@@ -868,6 +875,74 @@ describe('one address against another', () => {
     expect(sentEmails).toHaveLength(15)
     expect(events.at(-1)).toMatchObject({ event: 'auth.request_otp.rate_limited' })
     expect(events.at(-1)).not.toHaveProperty('ip')
+  })
+})
+
+/** Sends each `[address, otp]` guess in turn and returns the answers. */
+async function guess(deps: TestDeps, guesses: readonly (readonly [string, string])[]) {
+  const answers = []
+  for (const [address, otp] of guesses) {
+    fromAddress(address)
+    // oxlint-disable-next-line no-await-in-loop -- guesses arrive one after another
+    answers.push(await verify(deps, { email: EMAIL, mode: 'login', otp }))
+  }
+  return answers
+}
+
+describe('one code against many addresses', () => {
+  const ADDRESSES = ['203.0.113.1', '203.0.113.2', '203.0.113.3']
+  const WRONG = '000000'
+
+  it('compares only five guesses at one code, however many addresses send them', async () => {
+    expect.hasAssertions()
+
+    const { deps, events, otp, tokens } = await issued('active', 'login')
+    const guesses = ADDRESSES.flatMap((address) =>
+      Array.from({ length: 10 }, (): readonly [string, string] => [address, WRONG]),
+    )
+    guesses[29] = ['203.0.113.3', otp]
+
+    await expect(guess(deps, guesses)).resolves.toStrictEqual(
+      Array.from({ length: 30 }, () => invalidCode),
+    )
+    expect(io.setCookies).toStrictEqual([])
+    expect(tokens[0]?.usedAt).toBeNull()
+    expect(
+      events.filter((e) => e.event === 'auth.verify_otp.invalid').map((e) => e.reason),
+    ).toStrictEqual([
+      ...Array.from({ length: 5 }, () => 'wrong_code'),
+      ...Array.from({ length: 25 }, () => 'code_exhausted'),
+    ])
+  })
+
+  it('accepts the right code on its fifth check', async () => {
+    expect.hasAssertions()
+
+    const { deps, otp } = await issued('active', 'login')
+    const wrong = [...ADDRESSES, '203.0.113.4'].map((address) => [address, WRONG] as const)
+
+    await expect(guess(deps, [...wrong, ['203.0.113.5', otp]])).resolves.toStrictEqual([
+      ...wrong.map(() => invalidCode),
+      success,
+    ])
+    expect(io.setCookies).toHaveLength(1)
+  })
+
+  it('gives a new code its own five checks', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, lastOtp, otp } = await issued('active', 'login')
+    await guess(deps, [
+      ...Array.from({ length: 5 }, () => [ADDRESS, WRONG] as const),
+      [ADDRESS, otp],
+    ])
+    await request(deps, { email: EMAIL, mode: 'login' })
+
+    expect(attempts.get('otp_verify:code:1')).toBe(6)
+    await expect(
+      verify(deps, { email: EMAIL, mode: 'login', otp: lastOtp() }),
+    ).resolves.toStrictEqual(success)
+    expect(attempts.get('otp_verify:code:2')).toBe(1)
   })
 })
 

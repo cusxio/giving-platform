@@ -5,8 +5,9 @@ import { clientIp } from '#/server/client-ip.server'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
 
-import { RateLimitExceededError } from './auth.errors'
+import { CodeExhaustedError, RateLimitExceededError } from './auth.errors'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
+import { CODE_LIFETIME_MINUTES } from './tokens.repository.server'
 
 type Action = 'otp_request' | 'otp_verify'
 
@@ -128,4 +129,26 @@ export function resetOtpVerify(
   ip: null | string,
 ): Promise<Result<void, InfraError>> {
   return deps.db.run(resetAttempts(clientKey(email, ip), 'otp_verify'))
+}
+
+/**
+ * Checks one code accepts from every address together, the right one included. Counting comes
+ * before the comparison, so concurrent guesses cannot slip past the limit. The window opens at the
+ * first check, after the code was issued, so it outlives the code and never resets during its
+ * life. One code thus faces at most five guesses, however many addresses send them.
+ */
+const CODE_CHECKS: Limit = { maxAttempts: 5, windowSeconds: CODE_LIFETIME_MINUTES * 60 }
+
+/** Counts a check of the code and refuses every check after its fifth. */
+export async function checkCode(
+  deps: Pick<Deps, 'db'>,
+  tokenId: number,
+): Promise<Result<void, CodeExhaustedError | InfraError>> {
+  const { maxAttempts, windowSeconds } = CODE_CHECKS
+  const recorded = await deps.db.run(
+    recordAttempt(`code:${tokenId}`, 'otp_verify', windowSeconds, now()),
+  )
+  return recorded.andThen((row) =>
+    (row?.attemptCount ?? 1) <= maxAttempts ? Result.ok() : Result.err(new CodeExhaustedError()),
+  )
 }
