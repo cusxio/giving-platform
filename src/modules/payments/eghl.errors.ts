@@ -11,7 +11,7 @@ export interface EghlFetchError {
   readonly type: 'EghlFetchError'
 }
 
-export interface EghlInvalidMethodError {
+interface EghlInvalidMethodError {
   readonly type: 'EghlInvalidMethodError'
 }
 
@@ -23,19 +23,19 @@ export type EghlQueryError =
   | EghlVerificationError
   | ParseError
 
-export interface EghlQueryMismatchError {
+interface EghlQueryMismatchError {
   readonly type: 'EghlQueryMismatchError'
 }
 
-export interface EghlQueryResponseError {
+interface EghlQueryResponseError {
   readonly message: string
   readonly type: 'EghlQueryResponseError'
 }
 
-export interface EghlServerError {
+interface EghlServerError {
   readonly type: 'EghlServerError'
 }
 
-export interface EghlVerificationError {
+interface EghlVerificationError {
   readonly type: 'EghlVerificationError'
 }

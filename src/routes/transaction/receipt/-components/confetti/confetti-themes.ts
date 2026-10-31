@@ -3,7 +3,7 @@ import type confetti from 'canvas-confetti'
 
 import { clientTz, now } from '#/core/date'
 
-export interface ConfettiTheme {
+interface ConfettiTheme {
   emit: ({ remaining, totalDuration }: { remaining: number; totalDuration: number }) => Options[]
   mode: 'burst' | 'continuous'
   style: Options
