@@ -65,7 +65,7 @@ export const weeklyCumulativeTotalsByYear = defineQuery(
 )
 
 /** Successful transactions created in `[start, endExclusive)`. */
-export interface ReportRange {
+interface ReportRange {
   readonly endExclusive: Date
   readonly start: Date
 }

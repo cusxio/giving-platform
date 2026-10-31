@@ -205,7 +205,6 @@ export const payments = pgTable(
     index('payments_transaction_id_idx').on(table.transactionId),
   ],
 )
-export type Payment = InferSelectModel<typeof payments>
 export type PaymentInsert = InferInsertModel<typeof payments>
 
 export const savedPaymentMethods = pgTable(
@@ -246,7 +245,6 @@ export const savedPaymentMethods = pgTable(
     index('saved_payment_methods_token_idx').on(table.token),
   ],
 )
-export type SavedPaymentMethod = InferSelectModel<typeof savedPaymentMethods>
 
 // Session management
 const sessionId = () => varchar({ length: 21 })
@@ -273,7 +271,6 @@ export const sessions = pgTable(
 )
 
 export type Session = InferSelectModel<typeof sessions>
-export type SessionInsert = InferInsertModel<typeof sessions>
 
 export const tokens = pgTable(
   'tokens',
@@ -328,7 +325,6 @@ export const rateLimitAttempts = pgTable(
 )
 
 export type RateLimitAttempt = InferSelectModel<typeof rateLimitAttempts>
-export type RateLimitAttemptInsert = InferInsertModel<typeof rateLimitAttempts>
 
 function createId(length?: number): string {
   return customAlphabet(alphanumeric, length)()

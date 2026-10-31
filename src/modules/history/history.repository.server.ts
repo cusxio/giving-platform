@@ -137,7 +137,7 @@ export const transactionById = defineQuery(
 )
 
 export const transactionItemsOf = defineQuery(
-  'history.transactionItems',
+  'history.transactionItemsOf',
   (db, transactionId: TransactionId) =>
     db
       .select({ amountInCents: transactionItems.amount, fundName: funds.name })
