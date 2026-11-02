@@ -29,7 +29,7 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
   let errorCount = 0
 
   for (const pendingTransaction of pendingTransactions) {
-    // Sequential by design: one gateway query and one settlement at a time.
+    // Sequential by design: avoid concurrent requests to eGHL/payment finalization side effects.
     // oxlint-disable-next-line no-await-in-loop
     const settled = await settlePolled(deps, pendingTransaction)
 

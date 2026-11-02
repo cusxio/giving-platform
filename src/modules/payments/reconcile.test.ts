@@ -105,7 +105,7 @@ const answer = (
       return { card: null, kind, record }
     }
     case 'pending': {
-      return { answer: 'pending', kind, record }
+      return { answer: 'gateway_pending', kind, record }
     }
     case 'failed': {
       return { kind, record }

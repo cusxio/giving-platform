@@ -37,11 +37,7 @@ export type PaymentOutcome =
   | { readonly kind: 'failed'; readonly record: PaymentRecord }
   | { readonly kind: 'notFound' }
   | {
-      /**
-       * `pending` is the gateway's own pending status. `not_final` is any other answer that
-       * settles nothing, such as a repeated PaymentID's rejection or an authorized sale.
-       */
-      readonly answer: 'not_final' | 'pending'
+      readonly answer: 'gateway_pending' | 'inconclusive'
       readonly kind: 'pending'
       readonly record: PaymentRecord
     }
@@ -49,13 +45,11 @@ export type PaymentOutcome =
 type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
 
-/** Our own verdict for an attempt the gateway never settled: it has not heard of it for too long. */
 interface ExpiredOutcome {
   readonly kind: 'expired'
   readonly transactionId: string
 }
 
-/** What `recordOutcome` writes. Each kind has a target status. */
 export type Settling = ExpiredOutcome | FailedOutcome | SucceededOutcome
 
 export const transactionIdOf = (outcome: Settling): string =>
@@ -84,9 +78,8 @@ export interface StoredTransaction {
 }
 
 /**
- * A status change the table allows. Only `planTransition` makes one: the class is exported as a
- * type alone, and its private field keeps an object literal or a spread of a real transition
- * from passing as one, so `moveTransaction` can only ever write a pair `TRANSITIONS` lists.
+ * The private field makes TypeScript compare `Transition` nominally, so neither an object literal
+ * nor a spread of a real transition passes as one.
  */
 class Transition {
   declare private readonly planned: true
@@ -122,8 +115,8 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
 }
 
 /**
- * A reply's claim that the attempt ended unpaid. `cancelled` is a page left before any bank step,
- * by a cancel or a timeout: the reply has no gateway transaction and is not a repeated PaymentID.
+ * `cancelled` is a page left before any bank step, by a cancel or a timeout: the reply has no
+ * gateway transaction and is not a repeated PaymentID.
  */
 export interface UnconfirmedClaim {
   readonly kind: 'cancelled' | 'failed'
@@ -157,28 +150,20 @@ export function replyRecord(reply: GatewayReply): PaymentRecord {
   }
 }
 
-/** How long the gateway may not know an attempt before the cron fails it. */
 const EXPIRE_AFTER_MINUTES = 30
 
-/** What a status query answer means for a row: record a settling, or wait for a later answer. */
 export type Decision =
   | { readonly do: 'record'; readonly settling: Settling }
   | { readonly do: 'wait'; readonly why: 'gateway_pending' | 'not_found' }
 
-/**
- * Who asked. A callback or return brings the reply's unconfirmed claim. The cron brings the row's
- * age in minutes, fractional, and its id, since a not-found answer carries no record.
- */
 type DecisionContext =
   | { readonly ageMinutes: number; readonly transactionId: string }
   | { readonly claim: UnconfirmedClaim }
 
 /**
- * The one place that says what a status query answer means, for the callback, the return and the
- * cron. A final answer wins over any claim. A cancelled claim settles failed, with the reply's
- * record, when the gateway still reports the attempt pending with no transaction of its own: it
- * answers that way forever for a page left before any bank step. Only the cron expires an
- * attempt, and only one the gateway has not heard of for longer than `EXPIRE_AFTER_MINUTES`.
+ * A cancelled claim settles failed, with the reply's record, when the gateway still reports the
+ * attempt pending with no transaction of its own: it answers that way forever for a page left
+ * before any bank step.
  */
 export function decide(outcome: PaymentOutcome, context: DecisionContext): Decision {
   switch (outcome.kind) {
@@ -190,7 +175,7 @@ export function decide(outcome: PaymentOutcome, context: DecisionContext): Decis
       const abandoned =
         'claim' in context &&
         context.claim.kind === 'cancelled' &&
-        outcome.answer === 'pending' &&
+        outcome.answer === 'gateway_pending' &&
         outcome.record.providerTxnId === ''
       return abandoned
         ? { do: 'record', settling: { kind: 'failed', record: context.claim.record } }

@@ -61,8 +61,6 @@ const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
   regex: String.raw`^\./server/`,
 }
 
-// One settlement path: only settlement.server.ts calls the status writer, and only the writer
-// locks or moves a transaction row.
 const ONE_SETTLEMENT_PATH: ImportPattern = {
   message:
     'Only payments/settlement.server.ts calls recordOutcome. Settle through settleReply or settlePolled.',

@@ -329,7 +329,7 @@ describe("a pending answer's kind of pending", () => {
   it('is the gateway pending for its own pending status', () => {
     expect.hasAssertions()
 
-    expect(pendingAnswer(EghlTxnStatus.Pending)).toMatchObject({ answer: 'pending' })
+    expect(pendingAnswer(EghlTxnStatus.Pending)).toMatchObject({ answer: 'gateway_pending' })
   })
 
   it.each([
@@ -344,6 +344,9 @@ describe("a pending answer's kind of pending", () => {
   ] as const)('is not final for %s', (_case, status, message) => {
     expect.hasAssertions()
 
-    expect(pendingAnswer(status, message)).toMatchObject({ answer: 'not_final', kind: 'pending' })
+    expect(pendingAnswer(status, message)).toMatchObject({
+      answer: 'inconclusive',
+      kind: 'pending',
+    })
   })
 })

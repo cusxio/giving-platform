@@ -7,7 +7,7 @@ import type { InfraError } from '#/server/infra-error'
 
 import type { EghlQueryError } from './eghl.errors'
 import { EghlGatewayBusyError } from './eghl.errors'
-import type { Decision, GatewayReply } from './payment-outcome'
+import type { Decision, GatewayReply, UnconfirmedClaim } from './payment-outcome'
 import { decide } from './payment-outcome'
 import type { Recorded, Source } from './record-outcome.server'
 import { recordOutcome } from './record-outcome.server'
@@ -15,14 +15,8 @@ import { findPendingAmountInCents } from './transactions.repository.server'
 
 type SettlementDeps = Pick<Deps, 'db' | 'eghl' | 'logger'>
 
-type WaitReason =
-  | Extract<Decision, { do: 'wait' }>['why']
-  /** The transaction is no longer pending, or there is no such transaction. */
-  | 'not_pending'
-  /** The reply itself says the payment is still pending. */
-  | 'reply_pending'
+type WaitReason = Extract<Decision, { do: 'wait' }>['why'] | 'not_pending' | 'reply_pending'
 
-/** How one settlement ended. The cron counts from it; the callback and return only log. */
 type Settled =
   | Recorded
   | { readonly error: EghlQueryError; readonly kind: 'query_failed' }
@@ -36,7 +30,6 @@ const waiting = (why: WaitReason): Result<Settled, InfraError> =>
 const queryFailed = (error: EghlQueryError): Result<Settled, InfraError> =>
   Result.ok({ error, kind: 'query_failed' })
 
-/** How a failed status query is logged: its tag, and the error behind it when there is one. */
 const queryFailureFields = (error: Exclude<EghlQueryError, EghlGatewayBusyError>) =>
   error.match<
     Exclude<EghlQueryError, EghlGatewayBusyError>,
@@ -57,10 +50,9 @@ function logGatewayLeftPending(deps: SettlementDeps, transactionId: string) {
   )
 }
 
-/** Asks the gateway whether a reply's claim of failure holds, and records it only if it does. */
 async function confirmClaim(
   deps: SettlementDeps,
-  claim: Extract<GatewayReply, { kind: 'unconfirmed' }>['claim'],
+  claim: UnconfirmedClaim,
   source: Exclude<Source, 'cron'>,
 ): Settlement {
   const { transactionId } = claim.record
@@ -97,10 +89,6 @@ async function confirmClaim(
   return recordOutcome(deps, decision.settling, source)
 }
 
-/**
- * Settles a verified callback or return reply. A signed success is recorded as it is. A claim of
- * failure is recorded only once the gateway's status query agrees. A pending reply waits.
- */
 export async function settleReply(
   deps: SettlementDeps,
   reply: GatewayReply,
@@ -126,7 +114,6 @@ export async function settleReply(
   }
 }
 
-/** A pending transaction the cron picked. */
 interface PolledRow {
   readonly amountInCents: number
   readonly createdAt: Date
@@ -187,7 +174,6 @@ function logPolledQueryFailure(deps: SettlementDeps, transactionId: string, erro
   )
 }
 
-/** Settles one row the cron picked from the gateway's own status and the row's age. */
 export async function settlePolled(deps: SettlementDeps, row: PolledRow): Settlement {
   const { amountInCents, transactionId } = row
   const answer = await deps.eghl.queryStatus({ amountInCents, transactionId })

@@ -30,7 +30,6 @@ async function sent(run: (db: ReturnType<typeof createDriverDb>) => Promise<unkn
   return statements
 }
 
-/** Locks a row whose status column holds `status`. */
 const lockedAs = (status: string) =>
   createDriverDb(() => Promise.resolve({ rowCount: 1, rows: [[100, 'guest', status, 7]] })).run(
     lockTransaction(TRANSACTION_ID),

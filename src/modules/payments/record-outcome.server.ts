@@ -11,7 +11,6 @@ import { planTransition, targetOf, transactionIdOf } from './payment-outcome'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
 import { insertPayment, lockTransaction, moveTransaction } from './transactions.repository.server'
 
-/** Which channel brought the outcome. Logged with the writer's events, never branched on. */
 export type Source = 'callback' | 'cron' | 'return'
 
 export type Recorded =
@@ -24,7 +23,6 @@ export type Recorded =
       readonly from: TransactionStatus
       readonly kind: 'moved'
       readonly to: Reachable
-      /** Which outcome moved it, so the cron can count expiries apart from gateway answers. */
       readonly via: Settling['kind']
     }
   | { readonly kind: 'unknown' }
@@ -88,7 +86,6 @@ export function recordOutcome(
         via: outcome.kind,
       }
 
-      // An expiry is our verdict, not a gateway answer, so it has no payment to record.
       if (outcome.kind === 'expired') {
         return Result.ok(recorded)
       }

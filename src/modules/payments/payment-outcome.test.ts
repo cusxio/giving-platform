@@ -160,11 +160,11 @@ describe('deciding what a status query answer means', () => {
   const answers = {
     failed: { kind: 'failed', record },
     notFound: { kind: 'notFound' },
-    pending: { answer: 'pending', kind: 'pending', record },
+    pending: { answer: 'gateway_pending', kind: 'pending', record },
     succeeded: { card: null, kind: 'succeeded', record },
   } as const satisfies Record<PaymentOutcome['kind'], PaymentOutcome>
-  const openedPage = { answer: 'pending', kind: 'pending', record: noReference } as const
-  const repeatedId = { answer: 'not_final', kind: 'pending', record: noReference } as const
+  const openedPage = { answer: 'gateway_pending', kind: 'pending', record: noReference } as const
+  const repeatedId = { answer: 'inconclusive', kind: 'pending', record: noReference } as const
   const expire: Decision = {
     do: 'record',
     settling: { kind: 'expired', transactionId: 'txn_abc123' },

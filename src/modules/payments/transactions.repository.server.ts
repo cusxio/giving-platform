@@ -79,7 +79,6 @@ export const findPendingAmountInCents = defineQuery(
   (found) => found[0]?.amount,
 )
 
-/** A status column value outside `TRANSACTION_STATUSES`, such as one a later version wrote. */
 class UnknownStatusError extends Error {
   override name = 'UnknownStatusError'
 }
@@ -93,10 +92,7 @@ const knownStatus = <Row extends { status: string }>(row: Row | null): Row | nul
   return row
 }
 
-/**
- * Locks the row for the rest of the settlement, so a callback, a return and the cron take turns.
- * An unknown status fails the statement, so the settlement is an `InfraError`, never a guess.
- */
+/** Locks the row for the rest of the settlement, so a callback, a return and the cron take turns. */
 export const lockTransaction = defineQuery(
   'payments.lockTransaction',
   (db, transactionId: TransactionId) =>

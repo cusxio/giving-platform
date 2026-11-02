@@ -92,11 +92,11 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
       // eGHL rejects a reused PaymentID (e.g. a refreshed payment page) with a failure that
       // describes the repeated request, not the original attempt.
       return isDuplicatePaymentId(record.message)
-        ? { answer: 'not_final', kind: 'pending', record }
+        ? { answer: 'inconclusive', kind: 'pending', record }
         : { kind: 'failed', record }
     }
     case EghlTxnStatus.Pending: {
-      return { answer: 'pending', kind: 'pending', record }
+      return { answer: 'gateway_pending', kind: 'pending', record }
     }
     case EghlQueryTxnStatus.Authorized:
     case EghlQueryTxnStatus.Captured:
@@ -105,7 +105,7 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
     case EghlQueryTxnStatus.Refunded:
     case EghlQueryTxnStatus.ReversalPending:
     case EghlQueryTxnStatus.Reversed: {
-      return { answer: 'not_final', kind: 'pending', record }
+      return { answer: 'inconclusive', kind: 'pending', record }
     }
     default: {
       return assertExhaustive(TxnStatus)
