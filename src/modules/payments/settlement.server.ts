@@ -17,7 +17,7 @@ type SettlementDeps = Pick<Deps, 'db' | 'eghl' | 'logger'>
 
 type WaitReason = Extract<Decision, { do: 'wait' }>['why'] | 'not_pending' | 'reply_pending'
 
-type Settled =
+export type Settled =
   | Recorded
   | { readonly error: EghlQueryError; readonly kind: 'query_failed' }
   | { readonly kind: 'waiting'; readonly why: WaitReason }

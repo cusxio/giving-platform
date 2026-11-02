@@ -5,6 +5,7 @@ import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlReplyError } from './eghl.errors'
 import { replyRecord } from './payment-outcome'
+import type { Settled } from './settlement.server'
 import { settleReply } from './settlement.server'
 
 type SettlementDeps = Pick<Deps, 'db' | 'eghl' | 'logger'>
@@ -44,6 +45,18 @@ function refuseReply(
   })
 }
 
+function logProcessed(
+  logger: Deps['logger'],
+  route: 'callback' | 'return',
+  transactionId: string,
+  settled: Settled,
+) {
+  logger.info(
+    { event: `eghl.${route}.success`, settled: settled.kind, transaction_id: transactionId },
+    `${route === 'callback' ? 'Callback' : 'Return'} processed`,
+  )
+}
+
 async function callback(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
   const internalError = Response.json({ message: 'Internal Server Error' }, { status: 500 })
@@ -81,10 +94,7 @@ async function callback(deps: SettlementDeps, request: Request) {
     return internalError
   }
 
-  logger.info(
-    { event: 'eghl.callback.success', transaction_id: record.transactionId },
-    'Callback processed and saved successfully',
-  )
+  logProcessed(logger, 'callback', record.transactionId, finalizationResult.value)
 
   // eGHL resends the callback, up to 3 times, until it reads this exact body.
   return new Response('OK', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
@@ -123,10 +133,7 @@ async function returnGet(deps: SettlementDeps, request: Request) {
     throw errorRedirect
   }
 
-  logger.info(
-    { event: 'eghl.return.success', transaction_id: record.transactionId },
-    'Callback processed and saved successfully',
-  )
+  logProcessed(logger, 'return', record.transactionId, finalizationResult.value)
 
   throw redirect({
     params: { transactionId: record.transactionId },
@@ -171,10 +178,7 @@ async function returnPost(deps: SettlementDeps, request: Request) {
     return errorRedirect
   }
 
-  logger.info(
-    { event: 'eghl.return.success', transaction_id: record.transactionId },
-    'Callback processed and saved successfully',
-  )
+  logProcessed(logger, 'return', record.transactionId, finalizationResult.value)
 
   throw redirect({
     params: { transactionId: record.transactionId },

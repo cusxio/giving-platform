@@ -647,6 +647,32 @@ describe('a success held for its money', () => {
 
     await expect(run(deps)).rejects.toMatchObject(toReceipt)
   })
+
+  it.each([
+    [
+      'callback',
+      'Callback processed',
+      (deps: TestDeps) => handleEghlCallback(deps, post(CALLBACK_URL, successBody())),
+    ],
+    [
+      'return',
+      'Return processed',
+      (deps: TestDeps) => handleEghlReturnGet(deps, new Request(`${RETURN_URL}?${successBody()}`)),
+    ],
+  ] as const)('logs the %s as processed and held, not saved', async (route, msg, run) => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const deps = stubPaymentService(logger)
+    finalizePaymentFromCallback.mockResolvedValue(held)
+    await run(deps).catch(() => {})
+
+    const processed = events.filter(({ event }) => event === `eghl.${route}.success`)
+
+    expect(processed).toStrictEqual([
+      expect.objectContaining({ msg, settled: 'held', transaction_id: TRANSACTION_ID }),
+    ])
+  })
 })
 
 const eghlEvents = (events: { event?: string }[]) =>
@@ -697,7 +723,7 @@ describe('logging a verified reply', () => {
         txn_exists: '0',
       },
       { event: 'eghl.settlement.not_final', transaction_id: TRANSACTION_ID },
-      { event: 'eghl.callback.success' },
+      { event: 'eghl.callback.success', settled: 'waiting' },
     ])
   })
 })
