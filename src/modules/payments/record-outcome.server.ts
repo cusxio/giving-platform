@@ -88,6 +88,8 @@ export function recordOutcome(
             amount_in_cents: plan.received.amountInCents,
             currency: plan.received.currency,
             event: `payment.finalize.${plan.why}`,
+            method: plan.received.method,
+            provider_txn_id: plan.received.providerTxnId,
             stored_amount_in_cents: stored.amountInCents,
             ...logFields,
           },

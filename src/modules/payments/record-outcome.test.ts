@@ -390,7 +390,7 @@ describe('a success whose money does not match the row', () => {
     ['amount', paidRecord({ amountInCents: 9900 }), 'payment.finalize.amount_mismatch'],
     ['currency', paidRecord({ currency: 'USD' }), 'payment.finalize.currency_mismatch'],
   ] as const)(
-    'logs another %s as an error with both amounts and fails the request span',
+    'logs another %s as an error with both amounts and the charge to look up, and fails the request span',
     async (_money, paid, event) => {
       expect.hasAssertions()
 
@@ -405,6 +405,8 @@ describe('a success whose money does not match the row', () => {
           currency: paid.currency,
           event,
           level: 50,
+          method: 'CC',
+          provider_txn_id: 'CIVtxn_abc123',
           source: 'callback',
           stored_amount_in_cents: 5000,
           transaction_id: 'txn_abc123',
