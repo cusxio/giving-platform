@@ -51,7 +51,11 @@ function refuseReply(
   })
 }
 
-type Settlement = Promise<Result<Recorded | { readonly kind: 'waiting' }, InfraError>>
+type Settled = Recorded | { readonly kind: 'waiting' }
+type Settlement = Promise<Result<Settled, InfraError>>
+
+/** The transaction stays pending; nothing was written. */
+const WAITING: Settled = { kind: 'waiting' }
 
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
 async function settleInboundReply(deps: SettlementDeps, reply: GatewayReply): Settlement {
@@ -69,7 +73,7 @@ async function settleInboundReply(deps: SettlementDeps, reply: GatewayReply): Se
         { event: 'eghl.settlement.not_final', transaction_id: reply.record.transactionId },
         'Reply does not settle the transaction, leaving it pending',
       )
-      return Result.ok({ kind: 'waiting' } as const)
+      return Result.ok(WAITING)
     }
     default: {
       return assertExhaustive(reply)
@@ -82,7 +86,7 @@ function leftPending(deps: SettlementDeps, transactionId: PaymentRecord['transac
     { event: 'eghl.settlement.not_final', transaction_id: transactionId },
     'Gateway status does not settle the transaction, leaving it pending',
   )
-  return Result.ok({ kind: 'waiting' } as const)
+  return Result.ok(WAITING)
 }
 
 async function confirmByQuery(
@@ -95,7 +99,7 @@ async function confirmByQuery(
     return Result.err(amountResult.error)
   }
   if (amountResult.value === undefined) {
-    return Result.ok({ kind: 'waiting' } as const)
+    return Result.ok(WAITING)
   }
 
   const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
@@ -111,7 +115,7 @@ async function confirmByQuery(
       },
       'Could not confirm the reply with the gateway, leaving it pending',
     )
-    return Result.ok({ kind: 'waiting' } as const)
+    return Result.ok(WAITING)
   }
 
   const outcome = queryResult.value

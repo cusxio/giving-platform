@@ -2,11 +2,21 @@ import { describe, expect, it } from 'vitest'
 
 import { createDriverDb } from '#/server/testing/driver-db'
 
-import type { Transition } from './payment-outcome'
+import type { PaymentRecord, Transition } from './payment-outcome'
 import { planTransition } from './payment-outcome'
 import { lockTransaction, moveTransaction } from './transactions.repository.server'
 
 const TRANSACTION_ID = 'T2000000000000000001'
+
+const record: PaymentRecord = {
+  amountInCents: 100,
+  currency: 'MYR',
+  message: '',
+  method: 'CC',
+  paidAt: null,
+  providerTxnId: '',
+  transactionId: TRANSACTION_ID,
+}
 
 /** Runs one statement against a recording driver and returns the SQL it sent. */
 async function sent(run: (db: ReturnType<typeof createDriverDb>) => Promise<unknown>) {
@@ -22,9 +32,7 @@ async function sent(run: (db: ReturnType<typeof createDriverDb>) => Promise<unkn
 const planned = (to: 'failed' | 'success'): Transition => {
   const plan = planTransition(
     { amountInCents: 1, createdAs: 'guest', status: 'pending', userId: 1 },
-    to === 'success'
-      ? { card: null, kind: 'succeeded', record: { transactionId: TRANSACTION_ID } as never }
-      : { kind: 'failed', record: { transactionId: TRANSACTION_ID } as never },
+    to === 'success' ? { card: null, kind: 'succeeded', record } : { kind: 'failed', record },
   )
   if (plan.kind !== 'move') {
     throw new Error('expected a move')
