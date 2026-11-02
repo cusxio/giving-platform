@@ -10,7 +10,7 @@ export const TRANSITIONS = {
 
 type Transitions = typeof TRANSITIONS
 
-export type SourcesOf<To extends TransactionStatus> = {
+type SourcesOf<To extends TransactionStatus> = {
   [From in TransactionStatus]: To extends Transitions[From][number] ? From : never
 }[TransactionStatus]
 
@@ -28,11 +28,10 @@ export const sourcesOf = (to: Reachable): TransactionStatus[] =>
 
 export const COUNTED_STATUS = 'success' as const satisfies TransactionStatus
 
-export const LISTED_IN_HISTORY = {
-  failed: true,
-  pending: false,
-  success: true,
-} as const satisfies Record<TransactionStatus, boolean>
+const LISTED_IN_HISTORY = { failed: true, pending: false, success: true } as const satisfies Record<
+  TransactionStatus,
+  boolean
+>
 
 export const LISTED_STATUSES: TransactionStatus[] = TRANSACTION_STATUSES.filter(
   (status) => LISTED_IN_HISTORY[status],
