@@ -79,7 +79,7 @@ export interface StoredTransaction {
 
 /**
  * The private field makes TypeScript compare `Transition` nominally, so neither an object literal
- * nor a spread of a real transition passes as one.
+ * nor a spread of a real transition passes as one. Freezing stops `Object.assign` retargeting one.
  */
 class Transition {
   declare private readonly planned: true
@@ -91,6 +91,7 @@ class Transition {
     this.from = from
     this.to = to
     this.transactionId = transactionId
+    Object.freeze(this)
   }
 }
 export type { Transition }

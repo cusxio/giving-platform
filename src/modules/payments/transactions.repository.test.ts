@@ -134,5 +134,14 @@ describe('the transition moveTransaction takes', () => {
 
     expect(forgeries).toHaveLength(6)
   })
+
+  it('cannot be retargeted after planning', () => {
+    expect.hasAssertions()
+
+    const real = planned('success')
+
+    expect(() => Object.assign(real, { transactionId: 'someone-else' })).toThrow(TypeError)
+    expect(real.transactionId).toBe(TRANSACTION_ID)
+  })
 })
 // oxlint-enable typescript/no-misused-spread
