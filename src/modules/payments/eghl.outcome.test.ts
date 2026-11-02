@@ -391,6 +391,96 @@ describe('text that must fit its payments column', () => {
   })
 })
 
+const settledCardOf = (overrides: Partial<EghlPaymentResponse>) => {
+  const clipped: ClippedField[] = []
+  const reply = replyOf(paid({ ...newCard, ...overrides }), clipped)
+  if (reply.kind !== 'settled') {
+    throw new Error(`expected a settled reply, got ${reply.kind}`)
+  }
+  return { card: reply.outcome.card, clipped, record: reply.outcome.record }
+}
+
+describe('a card whose fields do not fit the saved-card columns', () => {
+  it.each([
+    ['a token at its 50-character column', { Token: 'T'.repeat(50) }],
+    ['a mask at its 19-character column', { CardNoMask: '4'.repeat(19) }],
+    ['a type at its 10-character column', { CardType: 'MASTERCARD' }],
+    ['a holder at its 30-character column', { CardHolder: 'H'.repeat(30) }],
+    ['a holder whose 30th character is an emoji', { CardHolder: `${'H'.repeat(29)}😀` }],
+    ['no holder', { CardHolder: undefined }],
+  ])('saves %s', (_case, overrides) => {
+    expect.hasAssertions()
+
+    expect(settledCardOf(overrides)).toMatchObject({ card: { kind: 'saved' }, clipped: [] })
+  })
+
+  it.each([
+    ['a token one over its column', { Token: 'T'.repeat(51) }],
+    ['an empty token', { Token: '' }],
+    ['a token with a NUL', { Token: 'tok\u0000new' }],
+    [
+      'a token one over, on a saved card charged again',
+      { CardExp: undefined, CardNoMask: undefined, CardType: undefined, Token: 'T'.repeat(51) },
+    ],
+  ])('drops the card for %s, and still settles', (_case, overrides) => {
+    expect.hasAssertions()
+
+    expect(settledCardOf(overrides)).toMatchObject({
+      card: null,
+      clipped: ['Token'],
+      record: { amountInCents: 5000, message: 'Transaction Successful' },
+    })
+  })
+
+  it.each([
+    ['a mask one over its column', { CardNoMask: '4'.repeat(20) }, 'CardNoMask'],
+    ['an empty mask', { CardNoMask: '' }, 'CardNoMask'],
+    ['a mask with a NUL', { CardNoMask: '411111\u0000******1111' }, 'CardNoMask'],
+    ['an expiry of seven digits', { CardExp: '2099120' }, 'CardExp'],
+    ['an expiry of five digits', { CardExp: '20991' }, 'CardExp'],
+    ['an expiry that is not digits', { CardExp: '12/99X' }, 'CardExp'],
+    ['a type one over its column', { CardType: 'MASTERCARDS' }, 'CardType'],
+    ['an empty type', { CardType: '' }, 'CardType'],
+    ['a holder one over its column', { CardHolder: 'H'.repeat(31) }, 'CardHolder'],
+    [
+      'a holder with an emoji one past its column',
+      { CardHolder: `${'H'.repeat(30)}😀` },
+      'CardHolder',
+    ],
+    ['a holder with a NUL', { CardHolder: 'ADA\u0000LOVELACE' }, 'CardHolder'],
+  ])('keeps only the token for %s, never a cut detail', (_case, overrides, field) => {
+    expect.hasAssertions()
+
+    expect(settledCardOf(overrides)).toStrictEqual({
+      card: { kind: 'reused', token: 'tok_new' },
+      clipped: [field],
+      record: settledOf(paid()).record,
+    })
+  })
+
+  it('names every detail that does not fit', () => {
+    expect.hasAssertions()
+
+    expect(settledCardOf({ CardExp: '1299', CardHolder: 'H'.repeat(31) }).clipped).toStrictEqual([
+      'CardExp',
+      'CardHolder',
+    ])
+  })
+
+  it('drops the card of a status query answer whose token does not fit', () => {
+    expect.hasAssertions()
+    const clipped: ClippedField[] = []
+
+    const outcome = outcomeOf(
+      answered({ ...newCard, Token: 'T'.repeat(51), TxnStatus: EghlTxnStatus.Success }),
+      clipped,
+    )
+
+    expect(outcome.unwrap()).toMatchObject({ card: null, kind: 'succeeded' })
+    expect(clipped).toStrictEqual(['Token'])
+  })
+})
+
 const failedReply = (TxnID: string, TxnMessage: string) =>
   replyOf(paid({ TxnID, TxnMessage, TxnStatus: EghlTxnStatus.Failed }))
 

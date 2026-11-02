@@ -5,7 +5,13 @@ import { TZDate } from '#/core/date'
 
 import { EghlGatewayBusyError } from './eghl.errors'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
-import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+import {
+  CARD_FIELD_LENGTHS,
+  EghlCardFieldsSchema,
+  EghlQueryTxnStatus,
+  EghlTxnExists,
+  EghlTxnStatus,
+} from './eghl.wire'
 import type { CardUse, GatewayReply, PaymentOutcome, PaymentRecord } from './payment-outcome'
 
 type Wire = EghlPaymentResponse | EghlQueryResponse
@@ -18,8 +24,12 @@ export const TEXT_COLUMN_LENGTHS = { PymtMethod: 10, TxnMessage: 255 } as const
 
 type TextField = keyof typeof TEXT_COLUMN_LENGTHS
 
+type CardField = keyof typeof CARD_FIELD_LENGTHS
+
 /** A reply or answer field cut or dropped to fit its column. */
-export type ClippedField = TextField
+export type ClippedField = CardField | TextField
+
+const isCardField = (name: string): name is CardField => Object.hasOwn(CARD_FIELD_LENGTHS, name)
 
 /** Postgres cannot store NUL, and a URL-decoded field can carry one. */
 function textOf(wire: Wire, field: TextField, clipped: ClippedField[]): string {
@@ -52,12 +62,31 @@ function paidAtOf({ RespTime, RespTime2 }: Wire): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-function cardOf(wire: Wire): CardUse | null {
+/**
+ * A token that breaks `EghlCardFieldsSchema` drops the card. Details that break it, or are
+ * missing, leave the token alone, which touches a card the donor already saved. Nothing is cut.
+ */
+function cardOf(wire: Wire, clipped: ClippedField[]): CardUse | null {
   const { CardExp, CardHolder, CardNoMask, CardType, Token, TokenType } = wire
   if (TokenType !== 'OCP' || Token === undefined) {
     return null
   }
-  if (CardNoMask === undefined || CardExp === undefined || CardType === undefined) {
+  const card = { CardExp, CardHolder, CardNoMask, CardType, Token }
+  const refused = new Set(
+    EghlCardFieldsSchema.Errors(card)
+      .map(({ instancePath }) => instancePath.slice(1))
+      .filter((name) => isCardField(name)),
+  )
+  clipped.push(...refused)
+  if (refused.has('Token')) {
+    return null
+  }
+  if (
+    refused.size > 0 ||
+    CardNoMask === undefined ||
+    CardExp === undefined ||
+    CardType === undefined
+  ) {
     return { kind: 'reused', token: Token }
   }
   return {
@@ -92,7 +121,11 @@ export function replyOf(
     case EghlTxnStatus.Success: {
       return {
         kind: 'settled',
-        outcome: { card: cardOf(wire), kind: 'succeeded', record: recordOf(wire, clipped) },
+        outcome: {
+          card: cardOf(wire, clipped),
+          kind: 'succeeded',
+          record: recordOf(wire, clipped),
+        },
       }
     }
     case EghlTxnStatus.Failed: {
@@ -119,7 +152,7 @@ function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): Pa
   const { TxnStatus } = wire
   switch (TxnStatus) {
     case EghlTxnStatus.Success: {
-      return { card: cardOf(wire), kind: 'succeeded', record }
+      return { card: cardOf(wire, clipped), kind: 'succeeded', record }
     }
     case EghlTxnStatus.Failed: {
       // eGHL rejects a reused PaymentID (e.g. a refreshed payment page) with a failure that

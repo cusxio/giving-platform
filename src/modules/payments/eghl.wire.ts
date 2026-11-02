@@ -139,6 +139,39 @@ export const EghlPaymentResponseSchema = Compile(
   }),
 )
 
+/** The one-click card fields' maximum lengths (spec 2.2), equal to the saved-card columns. */
+export const CARD_FIELD_LENGTHS = {
+  CardExp: 6,
+  CardHolder: 30,
+  CardNoMask: 19,
+  CardType: 10,
+  Token: 50,
+} as const
+
+const WITHOUT_NUL = String.raw`^[^\u0000]*$`
+
+/**
+ * What a card must look like to be saved. A reply's own schema leaves these fields unbounded so
+ * that a card that breaks them costs only the card, never the payment.
+ */
+export const EghlCardFieldsSchema = Compile(
+  Type.Object({
+    CardExp: Type.Optional(
+      Type.String({ pattern: String.raw`^\d{${CARD_FIELD_LENGTHS.CardExp}}$` }),
+    ),
+    CardHolder: Type.Optional(
+      Type.String({ maxLength: CARD_FIELD_LENGTHS.CardHolder, pattern: WITHOUT_NUL }),
+    ),
+    CardNoMask: Type.Optional(
+      Type.String({ maxLength: CARD_FIELD_LENGTHS.CardNoMask, minLength: 1, pattern: WITHOUT_NUL }),
+    ),
+    CardType: Type.Optional(
+      Type.String({ maxLength: CARD_FIELD_LENGTHS.CardType, minLength: 1, pattern: WITHOUT_NUL }),
+    ),
+    Token: Type.String({ maxLength: CARD_FIELD_LENGTHS.Token, minLength: 1, pattern: WITHOUT_NUL }),
+  }),
+)
+
 export enum EghlTxnExists {
   Exists = '0',
   InternalError = '2',
