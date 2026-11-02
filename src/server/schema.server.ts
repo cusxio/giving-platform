@@ -15,6 +15,7 @@ import { customAlphabet } from 'nanoid'
 import { alphanumeric } from 'nanoid-dictionary'
 
 import { now } from '#/core/date'
+import { TRANSACTION_STATUSES } from '#/core/transaction-status'
 
 const timestamptz = () => timestamp({ withTimezone: true })
 
@@ -126,9 +127,7 @@ export const transactions = pgTable(
        * @see eGHL Merchant Integration Guide v2.9w, Section 2.1, Field `PaymentID`.
        */
       .$defaultFn(() => createId(20)),
-    status: text({ enum: ['pending', 'success', 'failed'] })
-      .default('pending')
-      .notNull(),
+    status: text({ enum: TRANSACTION_STATUSES }).default('pending').notNull(),
     updatedAt: updatedAt(),
     userId: userId()
       .references(() => users.id, { onDelete: 'restrict' })

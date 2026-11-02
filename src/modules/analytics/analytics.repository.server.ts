@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, lt, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
+import { COUNTED_STATUS } from '#/core/transaction-status'
 import { defineQuery, rows } from '#/server/db.server'
 import { funds, transactionItems, transactions } from '#/server/schema.server'
 import { roundedAvg, safeSum } from '#/server/sql.server'
@@ -27,7 +28,7 @@ export const insightsSummary = defineQuery(
         weekdayCount: sql<number>`COUNT(*) FILTER (WHERE EXTRACT(DOW FROM ${transactions.createdAt} AT TIME ZONE ${clientTz}) NOT IN (0, 6))::integer`,
       })
       .from(transactions)
-      .where(eq(transactions.status, 'success')),
+      .where(eq(transactions.status, COUNTED_STATUS)),
   rows,
 )
 
@@ -46,7 +47,7 @@ export const weeklyCumulativeTotalsByYear = defineQuery(
           year: year.as('year'),
         })
         .from(transactions)
-        .where(and(eq(transactions.status, 'success'), gte(year, cutoffYear)))
+        .where(and(eq(transactions.status, COUNTED_STATUS), gte(year, cutoffYear)))
         .groupBy(year.as('year'), week.as('week')),
     )
 
@@ -84,7 +85,7 @@ export const fundTotals = defineQuery(
       .from(transactions)
       .where(
         and(
-          eq(transactions.status, 'success'),
+          eq(transactions.status, COUNTED_STATUS),
           gte(transactions.createdAt, range.start),
           lt(transactions.createdAt, range.endExclusive),
         ),
