@@ -8,7 +8,6 @@ import type { GatewayReply, PaymentOutcome, PaymentRecord } from './payment-outc
 type OkOf<F extends (...args: never[]) => Promise<unknown>> =
   Awaited<ReturnType<F>> extends Result<infer V, unknown> ? V : never
 
-/** Every key of `T`, at any depth. A Date is a value, not a shape. */
 type Keys<T> = T extends Date
   ? never
   : T extends readonly (infer E)[]
@@ -17,7 +16,6 @@ type Keys<T> = T extends Date
       ? { [K in keyof T]-?: (K & string) | Keys<T[K]> }[keyof T]
       : never
 
-/** The keys that start with a capital letter, as eGHL's wire fields do. */
 type PascalCase<K> = K extends `${infer First}${string}`
   ? First extends Uppercase<First>
     ? First extends Lowercase<First>
@@ -26,7 +24,6 @@ type PascalCase<K> = K extends `${infer First}${string}`
     : never
   : never
 
-/** What crosses the port, the platform's Request aside. */
 type PortData =
   | OkOf<PaymentGateway['queryStatus']>
   | OkOf<PaymentGateway['readReply']>

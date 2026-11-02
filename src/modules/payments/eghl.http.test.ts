@@ -31,8 +31,7 @@ const { eghl } = testDeps().config
 const TRANSACTION_ID = 'txn_abc123'
 const AMOUNT_IN_CENTS = 5000
 
-/** recordOutcome was asked to settle the stored transaction once, with an outcome of `kind`. */
-const settling = (kind: 'failed' | 'succeeded') => [
+const settledOnceAs = (kind: 'failed' | 'succeeded') => [
   [{ kind, record: { transactionId: TRANSACTION_ID } }],
 ]
 
@@ -198,7 +197,7 @@ describe('eGHL callback route', () => {
 
     expect(response.status).toBe(200)
     await expect(response.text()).resolves.toBe('OK')
-    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settling('succeeded'))
+    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settledOnceAs('succeeded'))
   })
 
   it('acknowledges a pending reply without settling the transaction', async () => {
@@ -247,7 +246,7 @@ describe('eGHL callback route', () => {
     )
 
     expect(gateway.mock.calls.map(([url]) => url)).toStrictEqual([eghl.url])
-    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settling('failed'))
+    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settledOnceAs('failed'))
     await expect(response.text()).resolves.toBe('OK')
   })
 
@@ -259,7 +258,7 @@ describe('eGHL callback route', () => {
       gatewayAnswering(EghlTxnStatus.Success, 'Transaction Successful'),
     )
 
-    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settling('succeeded'))
+    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settledOnceAs('succeeded'))
   })
 
   it('rejects a reply whose HashValue2 does not match, whatever fields it adds', async () => {

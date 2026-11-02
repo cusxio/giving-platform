@@ -10,7 +10,6 @@ import type { CardUse, GatewayReply, PaymentOutcome, PaymentRecord } from './pay
 
 type Wire = EghlPaymentResponse | EghlQueryResponse
 
-/** "30.00" to 3000. The schema guarantees digits, a dot and two digits, so no float is involved. */
 function centsOf(amount: string): number {
   const [ringgit = '', cents = ''] = amount.split('.')
   return Number(ringgit) * 100 + Number(cents)
@@ -26,7 +25,6 @@ function paidAtOf({ RespTime, RespTime2 }: Wire): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-/** The one-click card a paid reply carries: its full details, or only the token charged again. */
 function cardOf(wire: Wire): CardUse | null {
   const { CardExp, CardHolder, CardNoMask, CardType, Token, TokenType } = wire
   if (TokenType !== 'OCP' || Token === undefined) {
@@ -53,7 +51,6 @@ function recordOf(wire: Wire): PaymentRecord {
   }
 }
 
-/** A verified callback or return reply. */
 export function replyOf(wire: EghlPaymentResponse): GatewayReply {
   switch (wire.TxnStatus) {
     case EghlTxnStatus.Success: {
@@ -74,7 +71,6 @@ export function replyOf(wire: EghlPaymentResponse): GatewayReply {
   }
 }
 
-/** Authorized and captured are statuses a sale never reaches. */
 export const isUnexpectedForSale = ({ TxnStatus }: EghlQueryResponse) =>
   TxnStatus === EghlQueryTxnStatus.Authorized || TxnStatus === EghlQueryTxnStatus.Captured
 
@@ -83,7 +79,6 @@ const isDuplicatePaymentId = (message: string) =>
 
 function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
   const record = recordOf(wire)
-  // A const, so the default branch narrows the status and not the whole answer to never.
   const { TxnStatus } = wire
   switch (TxnStatus) {
     case EghlTxnStatus.Success: {
@@ -112,10 +107,6 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
   }
 }
 
-/**
- * A verified status query answer that names the payment and amount asked about. An internal
- * error says nothing about the payment, so it is an error to retry later.
- */
 export function outcomeOf(wire: EghlQueryResponse): Result<PaymentOutcome, EghlGatewayBusyError> {
   switch (wire.TxnExists) {
     case EghlTxnExists.InternalError: {

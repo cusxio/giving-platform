@@ -17,7 +17,6 @@ import {
 
 const { eghl } = testDeps().config
 
-/** The decisions these tests pinned in W0, read off the domain mapping that replaced them. */
 const inboundActionOf = (reply: EghlPaymentResponse) =>
   ({ pending: 'leave-pending', settled: 'settle-success', unconfirmed: 'confirm-by-query' })[
     replyOf(reply).kind

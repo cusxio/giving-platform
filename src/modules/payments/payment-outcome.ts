@@ -1,7 +1,6 @@
 import { assertExhaustive } from '#/core/assert-exhaustive'
 
-/** A card the donor paid with on a one-click payment, as the gateway described it. */
-export interface SavedCardToken {
+interface SavedCardToken {
   readonly exp: string
   readonly holder: string | undefined
   readonly mask: string
@@ -30,20 +29,16 @@ export interface PaymentRecord {
   readonly transactionId: string
 }
 
-/**
- * What the gateway reports about one payment. Only `succeeded` and `failed` move a row;
- * `pending` and `notFound` leave it where it is.
- */
+/** What the gateway reports about one payment. */
 export type PaymentOutcome =
   | { readonly card: CardUse | null; readonly kind: 'succeeded'; readonly record: PaymentRecord }
   | { readonly kind: 'failed'; readonly record: PaymentRecord }
   | { readonly kind: 'notFound' }
   | { readonly kind: 'pending'; readonly record: PaymentRecord }
 
-export type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
-export type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
+type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
+type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
 
-/** The outcomes that settle a transaction. */
 export type Settling = FailedOutcome | SucceededOutcome
 
 /**

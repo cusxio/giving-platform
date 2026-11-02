@@ -81,7 +81,6 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
   }
 }
 
-/** The eGHL adapter. It logs each verified reply's and answer's status code through `logger`. */
 export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGateway {
   const hashValueFields = (reply: SignedReply) => [
     config.password,

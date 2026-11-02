@@ -24,10 +24,6 @@ const paid = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymentResponse
   ...overrides,
 })
 
-/**
- * The decisions eGHL replies got before they were mapped to domain values, read off the domain
- * mapping. The expectations below are the ones written against those decisions, unchanged.
- */
 const inboundActionOf = (reply: Pick<EghlPaymentResponse, 'TxnStatus'>) =>
   ({ pending: 'leave-pending', settled: 'settle-success', unconfirmed: 'confirm-by-query' })[
     replyOf(paid(reply)).kind

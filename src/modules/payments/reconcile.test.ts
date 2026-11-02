@@ -90,7 +90,6 @@ const fakeDb = (
   return { db: createDriverDb(client), statements }
 }
 
-/** What the gateway says about `transactionId`, as the port reports it. */
 const answer = (
   transactionId: string,
   kind: 'failed' | 'pending' | 'succeeded',
