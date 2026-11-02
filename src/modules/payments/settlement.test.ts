@@ -182,9 +182,9 @@ const rowExpiredByTheCron = async () => {
   return row
 }
 
-const rowTheGatewayFailed = async () => {
+const rowTheGatewayFailed = async (providerTxnId: string) => {
   const row = statefulRow()
-  const declined = paid({ message: 'Card declined', providerTxnId: 'CIVdeclined' })
+  const declined = paid({ message: 'Card declined', providerTxnId })
   row.queryStatus.mockResolvedValue(Result.ok({ kind: 'failed', record: declined }))
   await settleReply(
     row.deps,
@@ -261,11 +261,37 @@ describe('a row the cron expired', () => {
   })
 })
 
+const CONFLICT_ALERT = {
+  amount_in_cents: STORED_CENTS,
+  event: 'payment.finalize.conflict',
+  from: 'failed',
+  level: 50,
+  provider_txn_id: 'CIVtxn_abc123',
+  stored_amount_in_cents: STORED_CENTS,
+}
+
 describe('a row the gateway failed', () => {
+  it.each(['callback', 'return'] as const)(
+    'is held on a signed %s success under the TxnID of the failure, with a conflict alert',
+    async (source) => {
+      expect.hasAssertions()
+
+      const { callsSince, deps, eventsSince, paymentRows, status } =
+        await rowTheGatewayFailed('CIVtxn_abc123')
+      const settled = await settleReply(deps, SIGNED_SUCCESS, source)
+
+      expect(okValue(settled)).toStrictEqual({ kind: 'held', why: 'conflict' })
+      expect([status(), paymentRows()]).toStrictEqual(['held', 1])
+      expect(callsSince()).toStrictEqual(HELD_WRITES)
+      expect(eventsSince()).toStrictEqual([expect.objectContaining({ ...CONFLICT_ALERT, source })])
+    },
+  )
+
   it('becomes success on a signed success under another TxnID, with an error alert', async () => {
     expect.hasAssertions()
 
-    const { callsSince, deps, eventsSince, paymentRows, status } = await rowTheGatewayFailed()
+    const { callsSince, deps, eventsSince, paymentRows, status } =
+      await rowTheGatewayFailed('CIVdeclined')
     const failed = [status(), paymentRows()]
     const settled = await settleReply(deps, SIGNED_SUCCESS, 'callback')
 
@@ -284,7 +310,7 @@ describe('a row the gateway failed', () => {
 
 describe('a success row an operator marked failed by hand', () => {
   it.each(['callback', 'return'] as const)(
-    'stays failed when the donor replays its signed success as a %s, with no second payments row',
+    'is held when the donor replays its signed success as a %s, with no second payments row',
     async (source) => {
       expect.hasAssertions()
 
@@ -292,17 +318,27 @@ describe('a success row an operator marked failed by hand', () => {
         await rowFailedByHandAfterItsSuccess()
       const settled = await settleReply(deps, SIGNED_SUCCESS, source)
 
-      expect(okValue(settled)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'replay' })
-      expect([status(), paymentRows()]).toStrictEqual(['failed', 1])
-      expect(callsSince()).toStrictEqual([
-        'payments.lockTransaction',
-        'payments.findProviderTxnIds',
-      ])
-      expect(eventsSince()).toStrictEqual([
-        expect.objectContaining({ event: 'payment.finalize.idempotent', level: 30 }),
-      ])
+      expect(okValue(settled)).toStrictEqual({ kind: 'held', why: 'conflict' })
+      expect([status(), paymentRows()]).toStrictEqual(['held', 1])
+      expect(callsSince()).toStrictEqual(HELD_WRITES)
+      expect(eventsSince()).toStrictEqual([expect.objectContaining({ ...CONFLICT_ALERT, source })])
     },
   )
+
+  it('absorbs a second replay once held, with no second alert', async () => {
+    expect.hasAssertions()
+
+    const row = await rowFailedByHandAfterItsSuccess()
+    await settleReply(row.deps, SIGNED_SUCCESS, 'return')
+    row.mark()
+    const settled = await settleReply(row.deps, SIGNED_SUCCESS, 'return')
+
+    expect(okValue(settled)).toStrictEqual({ at: 'held', kind: 'absorbed', why: 'replay' })
+    expect([row.status(), row.paymentRows()]).toStrictEqual(['held', 1])
+    expect(row.eventsSince()).toStrictEqual([
+      expect.objectContaining({ event: 'payment.finalize.idempotent', level: 30 }),
+    ])
+  })
 })
 
 describe('a held row', () => {

@@ -34,6 +34,12 @@ export type Recorded =
     }
   | { readonly kind: 'unknown' }
 
+const HOLD_MESSAGES: Record<HoldReason, string> = {
+  amount_mismatch: 'Gateway reports a success for other money than the transaction, holding it',
+  conflict: 'Gateway reports a success under a TxnID the transaction already recorded, holding it',
+  currency_mismatch: 'Gateway reports a success for other money than the transaction, holding it',
+}
+
 function logAbsorbed(
   logger: Deps['logger'],
   fields: { readonly source: Source; readonly transaction_id: string },
@@ -100,7 +106,7 @@ export function recordOutcome(
             stored_amount_in_cents: stored.amountInCents,
             ...logFields,
           },
-          'Gateway reports a success for other money than the transaction, holding it',
+          HOLD_MESSAGES[plan.why],
         )
         const held: Recorded = { kind: 'held', why: plan.why }
         return Result.ok(held)

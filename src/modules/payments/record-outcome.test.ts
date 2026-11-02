@@ -496,7 +496,7 @@ describe('a success onto a failed row', () => {
     ])
   })
 
-  it('logs a late success over a recorded gateway failure as an error naming the charge, and fails the request span', async () => {
+  it('logs a late success over a gateway failure under another TxnID as an error naming the charge, and fails the request span', async () => {
     expect.hasAssertions()
 
     const { events, logger } = recordingLogger()
@@ -539,27 +539,53 @@ describe('a success onto a failed row', () => {
     expect(span.status.code).toBe(SpanStatusCode.UNSET)
   })
 
-  it('absorbs a replay of the success a row failed by hand recorded, with no write, card or alert', async () => {
-    expect.hasAssertions()
+  it.each([
+    ['the same money', paidRecord()],
+    ['another amount', paidRecord({ amountInCents: 9900 })],
+  ] as const)(
+    'holds a success for %s under the TxnID a payments row carries, with no payment or card, and one conflict alert',
+    async (_money, paid) => {
+      expect.hasAssertions()
 
-    const { events, logger } = recordingLogger()
-    const db = storedAs('user', 'failed', ['CIVtxn_abc123'])
-    const { settled, span } = await inRequestSpan(() => record(db, succeeded(newCard), logger))
+      const { events, logger } = recordingLogger()
+      const db = storedAs('user', 'failed', ['CIVtxn_abc123'])
+      const { settled, span } = await inRequestSpan(() =>
+        record(db, succeeded(newCard, paid), logger),
+      )
 
-    expect(settled).toMatchObject({
-      status: 'fulfilled',
-      value: { value: { at: 'failed', kind: 'absorbed', why: 'replay' } },
-    })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual([
-      'payments.lockTransaction',
-      'payments.findProviderTxnIds',
-    ])
-    expect(db.transactions).toStrictEqual(['commit'])
-    expect(events).toStrictEqual([
-      expect.objectContaining({ event: 'payment.finalize.idempotent', level: 30 }),
-    ])
-    expect(span.status.code).toBe(SpanStatusCode.UNSET)
-  })
+      expect(settled).toMatchObject({
+        status: 'fulfilled',
+        value: { value: { kind: 'held', why: 'conflict' } },
+      })
+      expect(db.calls).toStrictEqual([
+        { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+        { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
+        {
+          args: [expect.objectContaining({ from: 'failed', to: 'held' })],
+          name: 'payments.moveTransaction',
+        },
+      ])
+      expect(db.transactions).toStrictEqual(['commit'])
+      expect(events).toStrictEqual([
+        expect.objectContaining({
+          amount_in_cents: paid.amountInCents,
+          currency: 'MYR',
+          event: 'payment.finalize.conflict',
+          from: 'failed',
+          level: 50,
+          method: 'CC',
+          provider_txn_id: 'CIVtxn_abc123',
+          source: 'callback',
+          stored_amount_in_cents: 5000,
+          transaction_id: 'txn_abc123',
+        }),
+      ])
+      expect([span.status.code, span.attributes['error.type']]).toStrictEqual([
+        SpanStatusCode.ERROR,
+        'payment.finalize.conflict',
+      ])
+    },
+  )
 
   it('rolls the late success back without the alert when the payment cannot be written', async () => {
     expect.hasAssertions()

@@ -100,7 +100,7 @@ class Transition {
 }
 export type { Transition }
 
-export type HoldReason = 'amount_mismatch' | 'currency_mismatch'
+export type HoldReason = 'amount_mismatch' | 'conflict' | 'currency_mismatch'
 
 export type Plan =
   | {
@@ -116,16 +116,28 @@ export type Plan =
     }
   | { readonly kind: 'move'; readonly transition: Transition }
 
-interface MoneyMismatch {
+interface HoldCause {
   readonly received: PaymentRecord
   readonly why: HoldReason
 }
 
-function moneyMismatchOf(stored: StoredTransaction, outcome: Settling): MoneyMismatch | null {
+/**
+ * eGHL gives a payment's failure and its success the same TxnID, and a reply's signature has no
+ * nonce or time. A success under a TxnID the transaction recorded is a replay of a success an
+ * operator failed by hand, or a gateway that contradicts its own failure, and nothing here tells
+ * the two apart.
+ */
+const recordedBefore = (stored: StoredTransaction, record: PaymentRecord): boolean =>
+  record.providerTxnId !== '' && stored.providerTxnIds.includes(record.providerTxnId)
+
+function holdCauseOf(stored: StoredTransaction, outcome: Settling): HoldCause | null {
   if (outcome.kind !== 'succeeded') {
     return null
   }
   const { record } = outcome
+  if (recordedBefore(stored, record)) {
+    return { received: record, why: 'conflict' }
+  }
   if (record.currency !== PAYMENT_CURRENCY) {
     return { received: record, why: 'currency_mismatch' }
   }
@@ -134,20 +146,13 @@ function moneyMismatchOf(stored: StoredTransaction, outcome: Settling): MoneyMis
     : { received: record, why: 'amount_mismatch' }
 }
 
-/**
- * A reply's signature carries no nonce or time, so a donor can resend a success the transaction
- * already recorded.
- */
-const recordedBefore = (stored: StoredTransaction, outcome: Settling): boolean =>
-  outcome.kind === 'succeeded' && stored.providerTxnIds.includes(outcome.record.providerTxnId)
-
 export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
   const reported = targetOf(outcome)
-  if (stored.status === reported || recordedBefore(stored, outcome)) {
+  if (stored.status === reported) {
     return { at: stored.status, kind: 'absorb', why: 'replay' }
   }
-  const mismatch = moneyMismatchOf(stored, outcome)
-  const to = mismatch === null ? reported : 'held'
+  const cause = holdCauseOf(stored, outcome)
+  const to = cause === null ? reported : 'held'
   if (stored.status === to) {
     return { at: stored.status, kind: 'absorb', why: 'replay' }
   }
@@ -155,9 +160,7 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
     return { at: stored.status, kind: 'absorb', why: 'contradiction' }
   }
   const transition = new Transition(stored.status, to, transactionIdOf(outcome))
-  return mismatch === null
-    ? { kind: 'move', transition }
-    : { kind: 'hold', ...mismatch, transition }
+  return cause === null ? { kind: 'move', transition } : { kind: 'hold', ...cause, transition }
 }
 
 /** `cancelled` is a page left before any bank step, by a cancel or a timeout. */

@@ -102,6 +102,12 @@ const each = (plan: Expected): Record<Money, Expected> => ({
   'another currency': plan,
   'same money': plan,
 })
+const holdEach = (why: HoldReason, from?: TransactionStatus): Record<Money, Expected> => ({
+  'another amount': hold(why, 'another amount', from),
+  'another amount and currency': hold(why, 'another amount and currency', from),
+  'another currency': hold(why, 'another currency', from),
+  'same money': hold(why, 'same money', from),
+})
 
 type Expected = Plan | ReturnType<typeof hold> | ReturnType<typeof move>
 
@@ -150,14 +156,30 @@ const PLAN_TABLE: [TransactionStatus, Settling['kind'], Record<Money, Expected>]
   ['held', 'failed', each(absorb('held', 'contradiction'))],
   ['held', 'expired', each(absorb('held', 'contradiction'))],
 ]
-const PLAN_CELLS = PLAN_TABLE.flatMap(([status, kind, plans]) =>
-  MONIES.map((money) => [status, kind, money, plans[money]] as const),
-)
+
+/** eGHL gives a PaymentID's failure and its success the same TxnID. */
+const RECORDED = [record.providerTxnId]
+
+const RECORDED_PLAN_TABLE: typeof PLAN_TABLE = [
+  ['pending', 'succeeded', holdEach('conflict')],
+  ['success', 'succeeded', each(absorb('success', 'replay'))],
+  ['failed', 'succeeded', holdEach('conflict', 'failed')],
+  ['held', 'succeeded', each(absorb('held', 'replay'))],
+  ...PLAN_TABLE.filter(([, kind]) => kind !== 'succeeded'),
+]
+
+const cellsOf = (table: typeof PLAN_TABLE) =>
+  table.flatMap(([status, kind, plans]) =>
+    MONIES.map((money) => [status, kind, money, plans[money]] as const),
+  )
+const PLAN_CELLS = cellsOf(PLAN_TABLE)
+const RECORDED_PLAN_CELLS = cellsOf(RECORDED_PLAN_TABLE)
 
 const STEPS = {
   expired: outcomeOf('expired'),
   failed: outcomeOf('failed'),
   mismatched: outcomeOf('succeeded', 'another amount'),
+  otherTxnId: { card: null, kind: 'succeeded', record: { ...record, providerTxnId: 'CIVother' } },
   succeeded: outcomeOf('succeeded'),
 } as const satisfies Record<string, Settling>
 type Step = keyof typeof STEPS
@@ -165,18 +187,46 @@ const STEP_KINDS = Object.keys(STEPS) as Step[]
 
 const RANK: Record<TransactionStatus, number> = { failed: 1, held: 2, pending: 0, success: 2 }
 
-const apply = (status: TransactionStatus, step: Step): TransactionStatus => {
-  const plan = planTransition(stored(status), STEPS[step])
-  return plan.kind === 'absorb' ? status : plan.transition.to
+/** A row and the TxnID of each of its payments rows. */
+interface Row {
+  readonly status: TransactionStatus
+  readonly txnIds: readonly string[]
 }
 
-function run(start: TransactionStatus, sequence: readonly Step[]) {
+const STARTS = {
+  'failed by a gateway failure': { status: 'failed', txnIds: RECORDED },
+  'failed by the cron': { status: 'failed', txnIds: [] },
+  held: { status: 'held', txnIds: [] },
+  'held after a gateway failure': { status: 'held', txnIds: RECORDED },
+  pending: { status: 'pending', txnIds: [] },
+  success: { status: 'success', txnIds: RECORDED },
+} as const satisfies Record<string, Row>
+type Start = keyof typeof STARTS
+const START_NAMES = Object.keys(STARTS) as Start[]
+
+/** Plans the step and, as the writer does, adds a payments row on a move that carries a record. */
+const apply = (row: Row, step: Step): Row => {
+  const outcome = STEPS[step]
+  const plan = planTransition({ ...stored(row.status), providerTxnIds: row.txnIds }, outcome)
+  if (plan.kind === 'absorb') {
+    return row
+  }
+  const wrote = plan.kind === 'move' && outcome.kind !== 'expired'
+  return {
+    status: plan.transition.to,
+    txnIds: wrote ? [...row.txnIds, outcome.record.providerTxnId] : row.txnIds,
+  }
+}
+
+function run(start: Row, sequence: readonly Step[]) {
   const trail = [start]
   for (const step of sequence) {
     trail.push(apply(trail.at(-1)!, step))
   }
   return trail
 }
+const statusesOf = (start: Start, sequence: readonly Step[]) =>
+  run(STARTS[start], sequence).map(({ status }) => status)
 
 function sequences(maxLength: number): Step[][] {
   let frontier: Step[][] = [[]]
@@ -195,34 +245,54 @@ function sequences(maxLength: number): Step[][] {
 }
 
 const movesInto = (to: TransactionStatus) =>
-  TRANSACTION_STATUSES.filter((start) => start !== to).flatMap((start) =>
-    STEP_KINDS.filter((step) => apply(start, step) === to).map((step) => [start, step]),
+  START_NAMES.filter((start) => STARTS[start].status !== to).flatMap((start) =>
+    STEP_KINDS.filter((step) => apply(STARTS[start], step).status === to).map((step) => [
+      start,
+      step,
+    ]),
   )
 
-const PAYING_STEPS = new Set<Step>(['mismatched', 'succeeded'])
+const PAYING_STEPS = new Set<Step>(['mismatched', 'otherTxnId', 'succeeded'])
 const paid = (sequence: readonly Step[]) => sequence.some((step) => PAYING_STEPS.has(step))
 
 const neverDecreases = (trail: readonly TransactionStatus[]) =>
   trail.every((status, index) => index === 0 || RANK[status] >= RANK[trail[index - 1]!])
 
 describe('planning a transition', () => {
-  it('covers every stored status against every outcome and every money', () => {
-    expect.hasAssertions()
+  it.each([
+    ['no payments row', PLAN_CELLS],
+    ['a payments row under the TxnID', RECORDED_PLAN_CELLS],
+  ] as const)(
+    'covers every stored status against every outcome and every money, with %s',
+    (_history, table) => {
+      expect.hasAssertions()
 
-    const cells = PLAN_CELLS.map(([status, kind, money]) => `${status}/${kind}/${money}`)
-    const every = TRANSACTION_STATUSES.flatMap((status) =>
-      OUTCOME_KINDS.flatMap((kind) => MONIES.map((money) => `${status}/${kind}/${money}`)),
-    )
+      const cells = table.map(([status, kind, money]) => `${status}/${kind}/${money}`)
+      const every = TRANSACTION_STATUSES.flatMap((status) =>
+        OUTCOME_KINDS.flatMap((kind) => MONIES.map((money) => `${status}/${kind}/${money}`)),
+      )
 
-    expect(cells).toHaveLength(every.length)
-    expect(new Set(cells)).toStrictEqual(new Set(every))
-  })
+      expect(cells).toHaveLength(every.length)
+      expect(new Set(cells)).toStrictEqual(new Set(every))
+    },
+  )
 
   it.each(PLAN_CELLS)('plans %s + %s with %s', (status, kind, money, plan) => {
     expect.hasAssertions()
 
     expect(fieldsOf(planTransition(stored(status), outcomeOf(kind, money)))).toStrictEqual(plan)
   })
+
+  it.each(RECORDED_PLAN_CELLS)(
+    'plans %s + %s with %s when a payments row carries the TxnID',
+    (status, kind, money, plan) => {
+      expect.hasAssertions()
+
+      expect(
+        fieldsOf(planTransition(stored(status, RECORDED), outcomeOf(kind, money))),
+      ).toStrictEqual(plan)
+    },
+  )
 
   it('absorbs a mismatched success replayed onto a success row as a replay, not a hold', () => {
     expect.hasAssertions()
@@ -235,18 +305,15 @@ describe('planning a transition', () => {
     expect(planTransition(stored('success'), mismatched)).toStrictEqual(absorb('success', 'replay'))
   })
 
-  it.each(MONIES)(
-    'absorbs a success with %s whose TxnID a payments row of a failed row carries, as a replay',
-    (money) => {
-      expect.hasAssertions()
+  it('holds a success for other money under a TxnID a failed row recorded as a conflict, not a mismatch', () => {
+    expect.hasAssertions()
 
-      const replayed = outcomeOf('succeeded', money)
+    const mismatched = outcomeOf('succeeded', 'another amount and currency')
 
-      expect(planTransition(stored('failed', [record.providerTxnId]), replayed)).toStrictEqual(
-        absorb('failed', 'replay'),
-      )
-    },
-  )
+    expect(fieldsOf(planTransition(stored('failed', RECORDED), mismatched))).toStrictEqual(
+      hold('conflict', 'another amount and currency', 'failed'),
+    )
+  })
 
   it('still calls a failure for the TxnID a success row recorded a contradiction', () => {
     expect.hasAssertions()
@@ -267,6 +334,20 @@ describe('planning a transition', () => {
       fieldsOf(planTransition(stored('failed', providerTxnIds), outcomeOf('succeeded'))),
     ).toStrictEqual(move('success', 'failed'))
   })
+
+  it('never matches an empty TxnID to a payments row with an empty TxnID', () => {
+    expect.hasAssertions()
+
+    const noTxnId = {
+      card: null,
+      kind: 'succeeded',
+      record: { ...record, providerTxnId: '' },
+    } as const
+
+    expect(fieldsOf(planTransition(stored('failed', ['']), noTxnId))).toStrictEqual(
+      move('success', 'failed'),
+    )
+  })
 })
 
 describe('any sequence of outcomes', () => {
@@ -275,59 +356,77 @@ describe('any sequence of outcomes', () => {
   it('enumerates every sequence of length 1 to 4', () => {
     expect.hasAssertions()
 
-    expect(all).toHaveLength(4 + 16 + 64 + 256)
+    expect(all).toHaveLength(5 + 25 + 125 + 625)
   })
 
-  it.each(TRANSACTION_STATUSES)('from %s never lowers the status rank', (start) => {
+  it.each(START_NAMES)('from %s never lowers the status rank', (start) => {
     expect.hasAssertions()
 
-    const violations = all.filter((sequence) => !neverDecreases(run(start, sequence)))
+    const violations = all.filter((sequence) => !neverDecreases(statusesOf(start, sequence)))
 
     expect(violations).toStrictEqual([])
   })
 
-  it('never leaves held, and reaches it only through a mismatched success', () => {
+  it.each(START_NAMES)('from %s never records a TxnID twice', (start) => {
     expect.hasAssertions()
 
-    const leftHeld = all.filter((sequence) => run('held', sequence).some((s) => s !== 'held'))
+    const counted = all.filter((sequence) => {
+      const { txnIds } = run(STARTS[start], sequence).at(-1)!
+      return new Set(txnIds).size !== txnIds.length
+    })
+
+    expect(counted).toStrictEqual([])
+  })
+
+  it('never leaves held, and reaches it only through a mismatched success or a recorded TxnID', () => {
+    expect.hasAssertions()
+
+    const leftHeld = START_NAMES.filter((start) => STARTS[start].status === 'held').flatMap(
+      (start) => all.filter((sequence) => statusesOf(start, sequence).some((s) => s !== 'held')),
+    )
 
     expect(leftHeld).toStrictEqual([])
     expect(movesInto('held')).toStrictEqual([
+      ['failed by a gateway failure', 'mismatched'],
+      ['failed by a gateway failure', 'succeeded'],
+      ['failed by the cron', 'mismatched'],
       ['pending', 'mismatched'],
-      ['failed', 'mismatched'],
     ])
   })
 
-  it('never leaves success, and reaches it only through a matching success', () => {
+  it('never leaves success, and reaches it only through a matching success under a new TxnID', () => {
     expect.hasAssertions()
 
     const leftSuccess = all.filter((sequence) =>
-      run('success', sequence).some((s) => s !== 'success'),
+      statusesOf('success', sequence).some((s) => s !== 'success'),
     )
 
     expect(leftSuccess).toStrictEqual([])
     expect(movesInto('success')).toStrictEqual([
+      ['failed by a gateway failure', 'otherTxnId'],
+      ['failed by the cron', 'otherTxnId'],
+      ['failed by the cron', 'succeeded'],
+      ['pending', 'otherTxnId'],
       ['pending', 'succeeded'],
-      ['failed', 'succeeded'],
     ])
   })
 
-  it.each(TRANSACTION_STATUSES)('from %s never ends failed once a success arrived', (start) => {
+  it.each(START_NAMES)('from %s never ends failed once a success arrived', (start) => {
     expect.hasAssertions()
 
     const failedAfterPaying = all
       .filter((sequence) => paid(sequence))
-      .filter((sequence) => run(start, sequence).at(-1) === 'failed')
+      .filter((sequence) => statusesOf(start, sequence).at(-1) === 'failed')
 
     expect(failedAfterPaying).toStrictEqual([])
   })
 
-  it.each(TRANSACTION_STATUSES)('from %s ends where its replay ends', (start) => {
+  it.each(START_NAMES)('from %s ends where its replay ends', (start) => {
     expect.hasAssertions()
 
     const drifted = all.filter((sequence) => {
-      const once = run(start, sequence).at(-1)!
-      return run(once, sequence).at(-1) !== once
+      const once = run(STARTS[start], sequence).at(-1)!
+      return run(once, sequence).at(-1)!.status !== once.status
     })
 
     expect(drifted).toStrictEqual([])
