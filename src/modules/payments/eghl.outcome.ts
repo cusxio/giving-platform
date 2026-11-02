@@ -71,8 +71,9 @@ function cardOf(wire: Wire, clipped: ClippedField[]): CardUse | null {
   if (refused.has('Token')) {
     return null
   }
+  const holder = refused.has('CardHolder') ? undefined : CardHolder
   if (
-    refused.size > 0 ||
+    [...refused].some((name) => name !== 'CardHolder') ||
     CardNoMask === undefined ||
     CardExp === undefined ||
     CardType === undefined
@@ -80,7 +81,7 @@ function cardOf(wire: Wire, clipped: ClippedField[]): CardUse | null {
     return { kind: 'reused', token: Token }
   }
   return {
-    card: { exp: CardExp, holder: CardHolder, mask: CardNoMask, token: Token, type: CardType },
+    card: { exp: CardExp, holder, mask: CardNoMask, token: Token, type: CardType },
     kind: 'saved',
   }
 }

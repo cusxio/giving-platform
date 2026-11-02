@@ -441,13 +441,6 @@ describe('a card whose fields do not fit the saved-card columns', () => {
     ['an expiry that is not digits', { CardExp: '12/99X' }, 'CardExp'],
     ['a type one over its column', { CardType: 'MASTERCARDS' }, 'CardType'],
     ['an empty type', { CardType: '' }, 'CardType'],
-    ['a holder one over its column', { CardHolder: 'H'.repeat(31) }, 'CardHolder'],
-    [
-      'a holder with an emoji one past its column',
-      { CardHolder: `${'H'.repeat(30)}😀` },
-      'CardHolder',
-    ],
-    ['a holder with a NUL', { CardHolder: 'ADA\u0000LOVELACE' }, 'CardHolder'],
   ])('keeps only the token for %s, never a cut detail', (_case, overrides, field) => {
     expect.hasAssertions()
 
@@ -458,13 +451,36 @@ describe('a card whose fields do not fit the saved-card columns', () => {
     })
   })
 
-  it('names every detail that does not fit', () => {
+  it.each([
+    ['a holder one over its column', { CardHolder: 'H'.repeat(31) }],
+    ['a holder with an emoji one past its column', { CardHolder: `${'H'.repeat(30)}😀` }],
+    ['a holder with a NUL', { CardHolder: 'ADA\u0000LOVELACE' }],
+  ])('saves the card with no holder for %s, never a cut holder', (_case, overrides) => {
     expect.hasAssertions()
 
-    expect(settledCardOf({ CardExp: '1299', CardHolder: 'H'.repeat(31) }).clipped).toStrictEqual([
-      'CardExp',
-      'CardHolder',
-    ])
+    expect(settledCardOf(overrides)).toStrictEqual({
+      card: {
+        card: {
+          exp: '209912',
+          holder: undefined,
+          mask: '411111******1111',
+          token: 'tok_new',
+          type: 'VISA',
+        },
+        kind: 'saved',
+      },
+      clipped: ['CardHolder'],
+      record: settledOf(paid()).record,
+    })
+  })
+
+  it('names every detail that does not fit, and keeps only the token when one is not the holder', () => {
+    expect.hasAssertions()
+
+    expect(settledCardOf({ CardExp: '1299', CardHolder: 'H'.repeat(31) })).toMatchObject({
+      card: { kind: 'reused', token: 'tok_new' },
+      clipped: ['CardExp', 'CardHolder'],
+    })
   })
 
   it('drops the card of a status query answer whose token does not fit', () => {
