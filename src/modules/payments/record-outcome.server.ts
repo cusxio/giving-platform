@@ -5,8 +5,9 @@ import type { Reachable, TransactionStatus } from '#/core/transaction-status'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
 import { required } from '#/server/infra-error'
+import { logAlert } from '#/server/procedure.server'
 
-import type { Plan, Settling } from './payment-outcome'
+import type { HoldReason, Plan, Settling } from './payment-outcome'
 import { planTransition, targetOf, transactionIdOf } from './payment-outcome'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
 import { insertPayment, lockTransaction, moveTransaction } from './transactions.repository.server'
@@ -19,6 +20,7 @@ export type Recorded =
       readonly kind: 'absorbed'
       readonly why: 'contradiction' | 'replay'
     }
+  | { readonly kind: 'held'; readonly why: HoldReason }
   | {
       readonly from: TransactionStatus
       readonly kind: 'moved'
@@ -74,6 +76,21 @@ export function recordOutcome(
         logAbsorbed(deps.logger, logFields, plan, targetOf(outcome))
         const absorbed: Recorded = { at: plan.at, kind: 'absorbed', why: plan.why }
         return Result.ok(absorbed)
+      }
+      if (plan.kind === 'hold') {
+        logAlert(
+          deps.logger,
+          {
+            amount_in_cents: plan.received.amountInCents,
+            currency: plan.received.currency,
+            event: `payment.finalize.${plan.why}`,
+            stored_amount_in_cents: stored.amountInCents,
+            ...logFields,
+          },
+          'Gateway reports a success for other money than the transaction, leaving it pending',
+        )
+        const held: Recorded = { kind: 'held', why: plan.why }
+        return Result.ok(held)
       }
 
       const moved = yield* Result.await(tx.run(moveTransaction(plan.transition)))

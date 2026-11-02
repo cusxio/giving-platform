@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import { assertExhaustive } from '#/core/assert-exhaustive'
 import type { TransactionStatus } from '#/core/transaction-status'
 import { TRANSACTION_STATUSES } from '#/core/transaction-status'
 
 import type {
   Decision,
+  HoldReason,
   PaymentOutcome,
   PaymentRecord,
   Plan,
@@ -23,12 +25,33 @@ const record: PaymentRecord = {
   transactionId: 'txn_abc123',
 }
 
-const OUTCOMES: Record<Settling['kind'], Settling> = {
-  expired: { kind: 'expired', transactionId: 'txn_abc123' },
-  failed: { kind: 'failed', record },
-  succeeded: { card: null, kind: 'succeeded', record },
+/** The money a reply or answer reports, against the stored 50.00 MYR. */
+const MONEY = {
+  'same money': record,
+  'another amount': { ...record, amountInCents: 9900 },
+  'another currency': { ...record, currency: 'USD' },
+  'another amount and currency': { ...record, amountInCents: 9900, currency: 'USD' },
+} as const satisfies Record<string, PaymentRecord>
+type Money = keyof typeof MONEY
+const MONIES = Object.keys(MONEY) as Money[]
+
+const outcomeOf = (kind: Settling['kind'], money: Money = 'same money'): Settling => {
+  switch (kind) {
+    case 'succeeded': {
+      return { card: null, kind, record: MONEY[money] }
+    }
+    case 'failed': {
+      return { kind, record: MONEY[money] }
+    }
+    case 'expired': {
+      return { kind, transactionId: 'txn_abc123' }
+    }
+    default: {
+      return assertExhaustive(kind)
+    }
+  }
 }
-const OUTCOME_KINDS = Object.keys(OUTCOMES) as Settling['kind'][]
+const OUTCOME_KINDS = ['succeeded', 'failed', 'expired'] as const satisfies Settling['kind'][]
 
 const stored = (status: TransactionStatus): StoredTransaction => ({
   amountInCents: 5000,
@@ -59,39 +82,80 @@ const absorb = (at: TransactionStatus, why: 'contradiction' | 'replay'): Plan =>
   kind: 'absorb',
   why,
 })
+const hold = (why: HoldReason, money: Money): Plan => ({
+  kind: 'hold',
+  received: MONEY[money],
+  why,
+})
+const each = <T>(plan: T): [T, T, T, T] => [plan, plan, plan, plan]
 
-const PLAN_TABLE: [TransactionStatus, Settling['kind'], Plan | ReturnType<typeof move>][] = [
-  ['pending', 'succeeded', move('pending', 'success')],
-  ['pending', 'failed', move('pending', 'failed')],
-  ['pending', 'expired', move('pending', 'failed')],
-  ['success', 'succeeded', absorb('success', 'replay')],
-  ['success', 'failed', absorb('success', 'contradiction')],
-  ['success', 'expired', absorb('success', 'contradiction')],
-  ['failed', 'succeeded', absorb('failed', 'contradiction')],
-  ['failed', 'failed', absorb('failed', 'replay')],
-  ['failed', 'expired', absorb('failed', 'replay')],
+type Expected = Plan | ReturnType<typeof move>
+
+/** One row per stored status and outcome; one column per entry of MONEY, in its order. */
+const PLAN_TABLE: [
+  TransactionStatus,
+  Settling['kind'],
+  [Expected, Expected, Expected, Expected],
+][] = [
+  [
+    'pending',
+    'succeeded',
+    [
+      move('pending', 'success'),
+      hold('amount_mismatch', 'another amount'),
+      hold('currency_mismatch', 'another currency'),
+      hold('currency_mismatch', 'another amount and currency'),
+    ],
+  ],
+  ['pending', 'failed', each(move('pending', 'failed'))],
+  ['pending', 'expired', each(move('pending', 'failed'))],
+  ['success', 'succeeded', each(absorb('success', 'replay'))],
+  ['success', 'failed', each(absorb('success', 'contradiction'))],
+  ['success', 'expired', each(absorb('success', 'contradiction'))],
+  ['failed', 'succeeded', each(absorb('failed', 'contradiction'))],
+  ['failed', 'failed', each(absorb('failed', 'replay'))],
+  ['failed', 'expired', each(absorb('failed', 'replay'))],
 ]
+const PLAN_CELLS = PLAN_TABLE.flatMap(([status, kind, plans]) =>
+  plans.map((plan, column) => [status, kind, MONIES[column]!, plan] as const),
+)
+
+/** The sequence alphabet: each outcome kind, plus a success whose amount differs from the row. */
+const STEPS = {
+  expired: outcomeOf('expired'),
+  failed: outcomeOf('failed'),
+  mismatched: outcomeOf('succeeded', 'another amount'),
+  succeeded: outcomeOf('succeeded'),
+} as const satisfies Record<string, Settling>
+type Step = keyof typeof STEPS
+const STEP_KINDS = Object.keys(STEPS) as Step[]
 
 const RANK: Record<TransactionStatus, number> = { failed: 1, pending: 0, success: 2 }
 
-const apply = (status: TransactionStatus, kind: Settling['kind']): TransactionStatus => {
-  const plan = planTransition(stored(status), OUTCOMES[kind])
+const apply = (status: TransactionStatus, step: Step): TransactionStatus => {
+  const plan = planTransition(stored(status), STEPS[step])
   return plan.kind === 'move' ? plan.transition.to : status
 }
 
-function run(start: TransactionStatus, sequence: readonly Settling['kind'][]) {
+function run(start: TransactionStatus, sequence: readonly Step[]) {
   const trail = [start]
-  for (const kind of sequence) {
-    trail.push(apply(trail.at(-1)!, kind))
+  for (const step of sequence) {
+    trail.push(apply(trail.at(-1)!, step))
   }
   return trail
 }
 
-function sequences(maxLength: number): Settling['kind'][][] {
-  let frontier: Settling['kind'][][] = [[]]
-  const all: Settling['kind'][][] = []
+function sequences(maxLength: number): Step[][] {
+  let frontier: Step[][] = [[]]
+  const all: Step[][] = []
   for (let length = 1; length <= maxLength; length++) {
-    frontier = frontier.flatMap((prefix) => OUTCOME_KINDS.map((kind) => [...prefix, kind]))
+    const next: Step[][] = []
+    for (const prefix of frontier) {
+      for (const step of STEP_KINDS) {
+        next.push([...prefix, step])
+      }
+    }
+    frontier = next
     all.push(...frontier)
   }
   return all
@@ -101,22 +165,33 @@ const neverDecreases = (trail: readonly TransactionStatus[]) =>
   trail.every((status, index) => index === 0 || RANK[status] >= RANK[trail[index - 1]!])
 
 describe('planning a transition', () => {
-  it('covers every stored status against every outcome', () => {
+  it('covers every stored status against every outcome and every money', () => {
     expect.hasAssertions()
 
-    const cells = PLAN_TABLE.map(([status, kind]) => `${status}/${kind}`)
+    const cells = PLAN_CELLS.map(([status, kind, money]) => `${status}/${kind}/${money}`)
     const every = TRANSACTION_STATUSES.flatMap((status) =>
-      OUTCOME_KINDS.map((kind) => `${status}/${kind}`),
+      OUTCOME_KINDS.flatMap((kind) => MONIES.map((money) => `${status}/${kind}/${money}`)),
     )
 
     expect(cells).toHaveLength(every.length)
     expect(new Set(cells)).toStrictEqual(new Set(every))
   })
 
-  it.each(PLAN_TABLE)('plans %s + %s', (status, kind, plan) => {
+  it.each(PLAN_CELLS)('plans %s + %s with %s', (status, kind, money, plan) => {
     expect.hasAssertions()
 
-    expect(fieldsOf(planTransition(stored(status), OUTCOMES[kind]))).toStrictEqual(plan)
+    expect(fieldsOf(planTransition(stored(status), outcomeOf(kind, money)))).toStrictEqual(plan)
+  })
+
+  it('absorbs a mismatched success replayed onto a success row as a replay, not a hold', () => {
+    expect.hasAssertions()
+
+    const mismatched = outcomeOf('succeeded', 'another amount and currency')
+
+    expect(planTransition(stored('pending'), mismatched)).toStrictEqual(
+      hold('currency_mismatch', 'another amount and currency'),
+    )
+    expect(planTransition(stored('success'), mismatched)).toStrictEqual(absorb('success', 'replay'))
   })
 })
 
@@ -126,7 +201,7 @@ describe('any sequence of outcomes', () => {
   it('enumerates every sequence of length 1 to 4', () => {
     expect.hasAssertions()
 
-    expect(all).toHaveLength(3 + 9 + 27 + 81)
+    expect(all).toHaveLength(4 + 16 + 64 + 256)
   })
 
   it.each(TRANSACTION_STATUSES)('from %s never lowers the status rank', (start) => {

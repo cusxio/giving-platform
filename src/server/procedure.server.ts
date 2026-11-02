@@ -238,12 +238,31 @@ const GENERIC = new Set(['Error', 'NeonDbError', 'error'])
 const typeOf = (failure: Loggable): string =>
   GENERIC.has(failure.name) && failure.code !== undefined ? failure.code : failure.name
 
-/** A `SERVER_ERROR` envelope is an HTTP 200, so the request span would otherwise look healthy. */
-function markSpanFailed(failure: Loggable, type: string, message: string) {
+function markSpanError(type: string, message: string) {
   const span = trace.getActiveSpan()
-  span?.recordException({ message: failure.message, name: failure.name, stack: failure.stack })
   span?.setAttribute('error.type', type)
   span?.setStatus({ code: SpanStatusCode.ERROR, message })
+}
+
+/** A `SERVER_ERROR` envelope is an HTTP 200, so the request span would otherwise look healthy. */
+function markSpanFailed(failure: Loggable, type: string, message: string) {
+  trace
+    .getActiveSpan()
+    ?.recordException({ message: failure.message, name: failure.name, stack: failure.stack })
+  markSpanError(type, message)
+}
+
+/**
+ * Logs a domain event someone must act on at `error`, and marks the request span failed with the
+ * event as `error.type`, because the response says nothing went wrong.
+ */
+export function logAlert(
+  logger: Deps['logger'],
+  fields: Readonly<Record<string, unknown>> & { readonly event: string },
+  msg: string,
+) {
+  logger.error(fields, msg)
+  markSpanError(fields.event, msg)
 }
 
 interface InfraEvent {

@@ -618,6 +618,37 @@ describe('a defect while settling', () => {
   })
 })
 
+describe('a success held for its money', () => {
+  const held = Result.ok({ kind: 'held', why: 'amount_mismatch' } as const)
+  const toReceipt = { options: { replace: true, to: '/transaction/receipt/$transactionId' } }
+
+  it('still acknowledges the callback with the literal OK, so the gateway stops resending', async () => {
+    expect.hasAssertions()
+
+    const deps = stubPaymentService()
+    finalizePaymentFromCallback.mockResolvedValue(held)
+    const response = await handleEghlCallback(deps, post(CALLBACK_URL, successBody()))
+
+    expect(response.status).toBe(200)
+    await expect(response.text()).resolves.toBe('OK')
+  })
+
+  it.each([
+    [
+      'GET',
+      (deps: TestDeps) => handleEghlReturnGet(deps, new Request(`${RETURN_URL}?${successBody()}`)),
+    ],
+    ['POST', (deps: TestDeps) => handleEghlReturnPost(deps, post(RETURN_URL, successBody()))],
+  ])('still sends the donor of a %s return to the receipt', async (_method, run) => {
+    expect.hasAssertions()
+
+    const deps = stubPaymentService()
+    finalizePaymentFromCallback.mockResolvedValue(held)
+
+    await expect(run(deps)).rejects.toMatchObject(toReceipt)
+  })
+})
+
 const eghlEvents = (events: { event?: string }[]) =>
   events.filter(({ event }) => event?.startsWith('eghl.') === true)
 

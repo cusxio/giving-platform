@@ -1,3 +1,4 @@
+import { SpanStatusCode } from '@opentelemetry/api'
 import { pino } from 'pino'
 import type { Logger } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,7 @@ import type { FakeDb } from '#/server/testing/fake-db'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { errValue, okValue } from '#/server/testing/result'
+import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
 import type { CardUse, PaymentRecord, Settling } from './payment-outcome'
@@ -326,5 +328,58 @@ describe('recording a payment outcome', () => {
         transaction_id: 'txn_abc123',
       }),
     ])
+  })
+})
+
+describe('a success whose money does not match the row', () => {
+  it.each([
+    ['amount', paidRecord({ amountInCents: 9900 }), 'amount_mismatch'],
+    ['currency', paidRecord({ currency: 'USD' }), 'currency_mismatch'],
+  ] as const)('holds the row on another %s and writes nothing', async (_money, paid, why) => {
+    expect.hasAssertions()
+
+    const db = storedAs('user')
+    const result = await record(db, succeeded(newCard, paid))
+
+    expect(okValue(result)).toStrictEqual({ kind: 'held', why })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.transactions).toStrictEqual(['commit'])
+  })
+
+  it.each([
+    ['amount', paidRecord({ amountInCents: 9900 }), 'payment.finalize.amount_mismatch'],
+    ['currency', paidRecord({ currency: 'USD' }), 'payment.finalize.currency_mismatch'],
+  ] as const)(
+    'logs another %s as an error with both amounts and fails the request span',
+    async (_money, paid, event) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const { span } = await inRequestSpan(() =>
+        record(storedAs('guest'), succeeded(null, paid), logger),
+      )
+
+      expect(events).toStrictEqual([
+        expect.objectContaining({
+          amount_in_cents: paid.amountInCents,
+          currency: paid.currency,
+          event,
+          level: 50,
+          source: 'callback',
+          stored_amount_in_cents: 5000,
+          transaction_id: 'txn_abc123',
+        }),
+      ])
+      expect(span.status.code).toBe(SpanStatusCode.ERROR)
+      expect(span.attributes['error.type']).toBe(event)
+    },
+  )
+
+  it('leaves the request span as it is when the money matches', async () => {
+    expect.hasAssertions()
+
+    const { span } = await inRequestSpan(() => record(storedAs('guest'), succeeded()))
+
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
   })
 })

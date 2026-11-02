@@ -41,7 +41,7 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
       continue
     }
 
-    if (settled.value.kind === 'query_failed') {
+    if (settled.value.kind === 'query_failed' || settled.value.kind === 'held') {
       errorCount++
     } else if (settled.value.kind === 'moved') {
       if (settled.value.via === 'expired') {

@@ -292,6 +292,21 @@ describe('eGHL cron', () => {
     expect(run.stats).toStrictEqual({ errors: 3, finalized: 2, found: 11, marked_failed: 1 })
   })
 
+  it('counts a success held for its money as an error, not as finalized', async () => {
+    expect.hasAssertions()
+
+    const { db } = fakeDb([pending('txn_held', 40)])
+    const run = await runCron({
+      db,
+      finalize: finalizeBy({
+        txn_held: Result.ok({ kind: 'held', why: 'currency_mismatch' } as const),
+      }),
+      replies: { txn_held: Result.ok(answer('txn_held', 'succeeded')) },
+    })
+
+    expect(run.stats).toStrictEqual({ errors: 1, finalized: 0, found: 1, marked_failed: 0 })
+  })
+
   it('fails each expired row on its own and counts each one it could not write', async () => {
     expect.hasAssertions()
 

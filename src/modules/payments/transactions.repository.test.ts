@@ -37,7 +37,7 @@ const lockedAs = (status: string) =>
 
 const planned = (to: 'failed' | 'success'): Transition => {
   const plan = planTransition(
-    { amountInCents: 1, createdAs: 'guest', status: 'pending', userId: 1 },
+    { amountInCents: record.amountInCents, createdAs: 'guest', status: 'pending', userId: 1 },
     to === 'success' ? { card: null, kind: 'succeeded', record } : { kind: 'failed', record },
   )
   if (plan.kind !== 'move') {

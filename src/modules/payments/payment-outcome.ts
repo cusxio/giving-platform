@@ -70,6 +70,9 @@ export function targetOf(outcome: Settling): Reachable {
   }
 }
 
+/** The only currency the platform asks the gateway to charge. */
+export const PAYMENT_CURRENCY = 'MYR'
+
 export interface StoredTransaction {
   readonly amountInCents: number
   readonly createdAs: 'guest' | 'user'
@@ -96,14 +99,22 @@ class Transition {
 }
 export type { Transition }
 
+export type HoldReason = 'amount_mismatch' | 'currency_mismatch'
+
 export type Plan =
   | {
       readonly at: TransactionStatus
       readonly kind: 'absorb'
       readonly why: 'contradiction' | 'replay'
     }
+  /** A success for other money than the row asked for. The row stays as it is. */
+  | { readonly kind: 'hold'; readonly received: PaymentRecord; readonly why: HoldReason }
   | { readonly kind: 'move'; readonly transition: Transition }
 
+/**
+ * A replay is absorbed before the money check, so a replayed success never looks like a
+ * mismatch. Only a move into success checks the money: a failure for other money does no harm.
+ */
 export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
   const to = targetOf(outcome)
   if (stored.status === to) {
@@ -111,6 +122,15 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
   }
   if (!canMove(stored.status, to)) {
     return { at: stored.status, kind: 'absorb', why: 'contradiction' }
+  }
+  if (outcome.kind === 'succeeded') {
+    const { record } = outcome
+    if (record.currency !== PAYMENT_CURRENCY) {
+      return { kind: 'hold', received: record, why: 'currency_mismatch' }
+    }
+    if (record.amountInCents !== stored.amountInCents) {
+      return { kind: 'hold', received: record, why: 'amount_mismatch' }
+    }
   }
   return { kind: 'move', transition: new Transition(stored.status, to, transactionIdOf(outcome)) }
 }

@@ -22,6 +22,7 @@ import { isUnexpectedForSale, outcomeOf, replyOf } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
+import { PAYMENT_CURRENCY } from './payment-outcome'
 
 export interface EghlConfig {
   /** Origin the gateway calls back and returns the donor to. */
@@ -128,7 +129,7 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
 
       const requestParams = {
         Amount: amount.toFixed(2),
-        CurrencyCode: 'MYR',
+        CurrencyCode: PAYMENT_CURRENCY,
         CustEmail: customerEmail,
         CustName: customerName,
         MerchantCallBackURL: `${config.baseUrl}/api/eghl/callback`,
@@ -194,7 +195,7 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
 
         const requestParams = {
           Amount: amount.toFixed(2),
-          CurrencyCode: 'MYR',
+          CurrencyCode: PAYMENT_CURRENCY,
           PaymentID: transactionId,
           PymtMethod: 'ANY',
           ServiceID: config.serviceId,
