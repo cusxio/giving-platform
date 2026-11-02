@@ -78,12 +78,6 @@ export const firstOrNull = <R>(raw: readonly R[]): R | null => raw[0] ?? null
 
 export const nothing = (): undefined => undefined
 
-/**
- * For neon-http statements without RETURNING: the rows they changed. Drizzle types such a result
- * only through the abstract query-result HKT, so this reads the driver's field directly.
- */
-export const affectedRows = (raw: unknown): number => (raw as { rowCount: number }).rowCount
-
 /** The decoded results of a batch, one per query, in order. */
 export type Results<Q extends readonly Query<unknown>[]> = {
   -readonly [K in keyof Q]: Q[K] extends Query<infer T> ? T : never
