@@ -41,14 +41,25 @@ export type PaymentOutcome =
 type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
 
-export type Settling = FailedOutcome | SucceededOutcome
+/** Our own verdict for an attempt the gateway never settled: it has not heard of it for too long. */
+interface ExpiredOutcome {
+  readonly kind: 'expired'
+  readonly transactionId: string
+}
+
+/** What `recordOutcome` writes. Each kind has a target status. */
+export type Settling = ExpiredOutcome | FailedOutcome | SucceededOutcome
+
+export const transactionIdOf = (outcome: Settling): string =>
+  outcome.kind === 'expired' ? outcome.transactionId : outcome.record.transactionId
 
 export function targetOf(outcome: Settling): Reachable {
   switch (outcome.kind) {
     case 'succeeded': {
       return 'success'
     }
-    case 'failed': {
+    case 'failed':
+    case 'expired': {
       return 'failed'
     }
     default: {
@@ -99,10 +110,7 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
   if (!canMove(stored.status, to)) {
     return { at: stored.status, kind: 'absorb', why: 'contradiction' }
   }
-  return {
-    kind: 'move',
-    transition: new Transition(stored.status, to, outcome.record.transactionId),
-  }
+  return { kind: 'move', transition: new Transition(stored.status, to, transactionIdOf(outcome)) }
 }
 
 /**
@@ -128,6 +136,47 @@ export function replyRecord(reply: GatewayReply): PaymentRecord {
     }
     default: {
       return assertExhaustive(reply)
+    }
+  }
+}
+
+/** How long the gateway may not know an attempt before the cron fails it. */
+const EXPIRE_AFTER_MINUTES = 30
+
+/** What a status query answer means for a row: record a settling, or wait for a later answer. */
+export type Decision =
+  | { readonly do: 'record'; readonly settling: Settling }
+  | { readonly do: 'wait'; readonly why: 'gateway_pending' | 'not_found' }
+
+/**
+ * Who asked. A callback or return brings the reply's unconfirmed claim. The cron brings the row's
+ * age in minutes, fractional, and its id, since a not-found answer carries no record.
+ */
+type DecisionContext =
+  | { readonly ageMinutes: number; readonly transactionId: string }
+  | { readonly claim: FailedOutcome }
+
+/**
+ * The one place that says what a status query answer means, for the callback, the return and the
+ * cron. A final answer wins over any claim. Only the cron expires an attempt, and only one the
+ * gateway has not heard of for longer than `EXPIRE_AFTER_MINUTES`.
+ */
+export function decide(outcome: PaymentOutcome, context: DecisionContext): Decision {
+  switch (outcome.kind) {
+    case 'succeeded':
+    case 'failed': {
+      return { do: 'record', settling: outcome }
+    }
+    case 'pending': {
+      return { do: 'wait', why: 'gateway_pending' }
+    }
+    case 'notFound': {
+      return 'ageMinutes' in context && context.ageMinutes > EXPIRE_AFTER_MINUTES
+        ? { do: 'record', settling: { kind: 'expired', transactionId: context.transactionId } }
+        : { do: 'wait', why: 'not_found' }
+    }
+    default: {
+      return assertExhaustive(outcome)
     }
   }
 }

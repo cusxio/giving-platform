@@ -11,19 +11,20 @@ import { testDeps } from '#/server/testing/test-deps'
 import { EghlGatewayBusyError, EghlServerError } from './eghl.errors'
 import type { PaymentGateway } from './gateway'
 import type { PaymentOutcome, Settling } from './payment-outcome'
+import { targetOf, transactionIdOf } from './payment-outcome'
 import { handleReconcile } from './reconcile.server'
-import type { recordOutcome } from './record-outcome.server'
+import type { Recorded, recordOutcome } from './record-outcome.server'
 
 type FinalizeResult = Awaited<ReturnType<typeof recordOutcome>>
 
 const settlement = vi.hoisted(() => ({
-  finalize: (_outcome: unknown): Promise<FinalizeResult> => {
+  finalize: (_outcome: unknown, _source: unknown): Promise<FinalizeResult> => {
     throw new Error('runCron sets finalize')
   },
 }))
 
 vi.mock(import('./record-outcome.server'), () => ({
-  recordOutcome: (_deps, outcome) => settlement.finalize(outcome),
+  recordOutcome: (_deps, outcome, source) => settlement.finalize(outcome, source),
 }))
 
 const settings = { CRON_SECRET: 'cron-secret', EGHL_SERVICE_ID: testDeps().config.eghl.serviceId }
@@ -37,10 +38,6 @@ const PENDING_SELECT =
   'select "amount", "created_at", "id" from "transactions" ' +
   'where ("transactions"."status" = $1 and "transactions"."created_at" < $2 ' +
   'and "transactions"."created_at" > $3) order by "transactions"."created_at" asc limit $4'
-
-const MARK_FAILED_UPDATE =
-  'update "transactions" set "status" = $1, "updated_at" = $2 ' +
-  'where ("transactions"."id" in ($3, $4) and "transactions"."status" = $5)'
 
 interface PendingRow {
   amountInCents: number
@@ -119,8 +116,13 @@ const finalizeBy =
   (outcomes: Record<string, FinalizeResult> = {}) =>
   (outcome: Settling) =>
     Promise.resolve(
-      outcomes[outcome.record.transactionId] ??
-        Result.ok({ from: 'pending', kind: 'moved', to: 'success' } as const),
+      outcomes[transactionIdOf(outcome)] ??
+        Result.ok<Recorded>({
+          from: 'pending',
+          kind: 'moved',
+          to: targetOf(outcome),
+          via: outcome.kind,
+        }),
     )
 
 const notFound = () => Result.ok<PaymentOutcome>({ kind: 'notFound' })
@@ -240,6 +242,11 @@ describe('eGHL cron', () => {
       db,
       finalize: finalizeBy({
         txn_already_final: Result.ok({ at: 'success', kind: 'absorbed', why: 'replay' } as const),
+        txn_missing_settled_meanwhile: Result.ok({
+          at: 'success',
+          kind: 'absorbed',
+          why: 'contradiction',
+        } as const),
         txn_finalize_error: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
       }),
       replies,
@@ -261,51 +268,38 @@ describe('eGHL cron', () => {
       rows.map(({ amountInCents, transactionId }) => ({ amountInCents, transactionId })),
     )
     expect(run.finalizeCalls).toStrictEqual([
-      [reply.txn_success],
-      [reply.txn_failed],
-      [reply.txn_already_final],
-      [reply.txn_finalize_error],
+      [{ kind: 'expired', transactionId: 'txn_missing_old' }, 'cron'],
+      [{ kind: 'expired', transactionId: 'txn_missing_settled_meanwhile' }, 'cron'],
+      [reply.txn_success, 'cron'],
+      [reply.txn_failed, 'cron'],
+      [reply.txn_already_final, 'cron'],
+      [reply.txn_finalize_error, 'cron'],
     ])
-    expect(statements.slice(1)).toStrictEqual([
-      {
-        params: [
-          'failed',
-          pgTimestamp(NOW),
-          'txn_missing_old',
-          'txn_missing_settled_meanwhile',
-          'pending',
-        ],
-        sql: MARK_FAILED_UPDATE,
-      },
-    ])
+    expect(statements).toHaveLength(1)
     expect(run.stats).toStrictEqual({ errors: 3, finalized: 2, found: 11, marked_failed: 1 })
   })
 
-  it('counts every transaction it could not mark failed as an error', async () => {
+  it('fails each expired row on its own and counts each one it could not write', async () => {
     expect.hasAssertions()
 
-    const { db, statements } = fakeDb([pending('txn_a', 45), pending('txn_b', 31)], {
-      failOn: 'update',
+    const { db } = fakeDb([pending('txn_a', 45), pending('txn_b', 31)])
+    const writeFailed = Result.err(infra('payments.moveTransaction', new Error('update failed')))
+
+    const run = await runCron({
+      db,
+      finalize: finalizeBy({ txn_a: writeFailed, txn_b: writeFailed }),
+      replies: { txn_a: notFound(), txn_b: notFound() },
     })
 
-    const run = await runCron({ db, replies: { txn_a: notFound(), txn_b: notFound() } })
-
     expect(run).toMatchObject({ body: 'ok', status: 200 })
-    expect(statements[1]?.params).toStrictEqual([
-      'failed',
-      pgTimestamp(NOW),
-      'txn_a',
-      'txn_b',
-      'pending',
+    expect(run.finalizeCalls).toStrictEqual([
+      [{ kind: 'expired', transactionId: 'txn_a' }, 'cron'],
+      [{ kind: 'expired', transactionId: 'txn_b' }, 'cron'],
     ])
     expect(run.stats).toStrictEqual({ errors: 2, finalized: 0, found: 2, marked_failed: 0 })
     expect(run.errors).toMatchObject([
-      {
-        count: 2,
-        event: 'eghl.cron.failed',
-        op: 'payments.markPendingTransactionsFailed',
-        sampleIds: ['txn_a', 'txn_b'],
-      },
+      { event: 'eghl.cron.failed', op: 'payments.moveTransaction', transaction_id: 'txn_a' },
+      { event: 'eghl.cron.failed', op: 'payments.moveTransaction', transaction_id: 'txn_b' },
     ])
   })
 

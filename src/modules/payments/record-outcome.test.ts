@@ -70,7 +70,7 @@ const MOVE = { from: 'pending', to: 'success', transactionId: 'txn_abc123' }
 const record = async (db: FakeDb, outcome: Settling, logger?: Logger) => {
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
   try {
-    return await recordOutcome(testDeps({ db, ...(logger && { logger }) }), outcome)
+    return await recordOutcome(testDeps({ db, ...(logger && { logger }) }), outcome, 'callback')
   } finally {
     vi.useRealTimers()
   }
@@ -83,7 +83,12 @@ describe('recording a payment outcome', () => {
     const db = storedAs('guest')
     const result = await record(db, succeeded())
 
-    expect(okValue(result)).toStrictEqual({ from: 'pending', kind: 'moved', to: 'success' })
+    expect(okValue(result)).toStrictEqual({
+      from: 'pending',
+      kind: 'moved',
+      to: 'success',
+      via: 'succeeded',
+    })
     expect(db.transactions).toStrictEqual(['commit'])
     expect(db.roundTrips).toStrictEqual([
       ['payments.lockTransaction'],
@@ -103,11 +108,38 @@ describe('recording a payment outcome', () => {
     const db = storedAs('guest')
     const result = await record(db, failed())
 
-    expect(okValue(result)).toStrictEqual({ from: 'pending', kind: 'moved', to: 'failed' })
+    expect(okValue(result)).toStrictEqual({
+      from: 'pending',
+      kind: 'moved',
+      to: 'failed',
+      via: 'failed',
+    })
     expect(db.calls[1]).toStrictEqual({
       args: [expect.objectContaining({ ...MOVE, to: 'failed' })],
       name: 'payments.moveTransaction',
     })
+  })
+
+  it('fails an expired row without recording a payment', async () => {
+    expect.hasAssertions()
+
+    const db = storedAs('user')
+    const result = await record(db, { kind: 'expired', transactionId: 'txn_abc123' })
+
+    expect(okValue(result)).toStrictEqual({
+      from: 'pending',
+      kind: 'moved',
+      to: 'failed',
+      via: 'expired',
+    })
+    expect(db.calls).toStrictEqual([
+      { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      {
+        args: [expect.objectContaining({ ...MOVE, to: 'failed' })],
+        name: 'payments.moveTransaction',
+      },
+    ])
+    expect(db.transactions).toStrictEqual(['commit'])
   })
 
   it('leaves an unknown transaction alone', async () => {
@@ -273,8 +305,8 @@ describe('recording a payment outcome', () => {
     )
 
     expect(events).toMatchObject([
-      { event: 'payment.finalize.idempotent', transaction_id: 'txn_abc123' },
-      { event: 'payment.finalize.idempotent', transaction_id: 'txn_abc123' },
+      { event: 'payment.finalize.idempotent', source: 'callback', transaction_id: 'txn_abc123' },
+      { event: 'payment.finalize.idempotent', source: 'callback', transaction_id: 'txn_abc123' },
     ])
   })
 
@@ -288,6 +320,7 @@ describe('recording a payment outcome', () => {
       expect.objectContaining({
         event: 'payment.finalize.contradiction',
         level: 40,
+        source: 'callback',
         status: 'success',
         to: 'failed',
         transaction_id: 'txn_abc123',

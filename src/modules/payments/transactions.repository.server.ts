@@ -3,7 +3,7 @@ import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
 import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
-import { affectedRows, defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
+import { defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { PaymentInsert, Transaction, User } from '#/server/schema.server'
 import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
 
@@ -160,15 +160,4 @@ export const pendingTransactionsToReconcile = defineQuery(
       .orderBy(asc(transactions.createdAt))
       .limit(25),
   rows,
-)
-
-/** Marks the transactions failed if they are still pending. Yields how many it changed. */
-export const markPendingTransactionsFailed = defineQuery(
-  'payments.markPendingTransactionsFailed',
-  (db, transactionIds: TransactionId[]) =>
-    db
-      .update(transactions)
-      .set({ status: 'failed' })
-      .where(and(inArray(transactions.id, transactionIds), eq(transactions.status, 'pending'))),
-  affectedRows,
 )

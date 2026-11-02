@@ -165,7 +165,9 @@ const stubPaymentService = (
 ) => {
   finalizePaymentFromCallback
     .mockReset()
-    .mockResolvedValue(Result.ok({ from: 'pending', kind: 'moved', to: 'success' } as const))
+    .mockResolvedValue(
+      Result.ok({ from: 'pending', kind: 'moved', to: 'success', via: 'succeeded' } as const),
+    )
   return testDeps({ db, logger })
 }
 

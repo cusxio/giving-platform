@@ -3,8 +3,15 @@ import { describe, expect, it } from 'vitest'
 import type { TransactionStatus } from '#/core/transaction-status'
 import { TRANSACTION_STATUSES } from '#/core/transaction-status'
 
-import type { PaymentRecord, Plan, Settling, StoredTransaction } from './payment-outcome'
-import { planTransition } from './payment-outcome'
+import type {
+  Decision,
+  PaymentOutcome,
+  PaymentRecord,
+  Plan,
+  Settling,
+  StoredTransaction,
+} from './payment-outcome'
+import { decide, planTransition } from './payment-outcome'
 
 const record: PaymentRecord = {
   amountInCents: 5000,
@@ -17,6 +24,7 @@ const record: PaymentRecord = {
 }
 
 const OUTCOMES: Record<Settling['kind'], Settling> = {
+  expired: { kind: 'expired', transactionId: 'txn_abc123' },
   failed: { kind: 'failed', record },
   succeeded: { card: null, kind: 'succeeded', record },
 }
@@ -55,10 +63,13 @@ const absorb = (at: TransactionStatus, why: 'contradiction' | 'replay'): Plan =>
 const PLAN_TABLE: [TransactionStatus, Settling['kind'], Plan | ReturnType<typeof move>][] = [
   ['pending', 'succeeded', move('pending', 'success')],
   ['pending', 'failed', move('pending', 'failed')],
+  ['pending', 'expired', move('pending', 'failed')],
   ['success', 'succeeded', absorb('success', 'replay')],
   ['success', 'failed', absorb('success', 'contradiction')],
+  ['success', 'expired', absorb('success', 'contradiction')],
   ['failed', 'succeeded', absorb('failed', 'contradiction')],
   ['failed', 'failed', absorb('failed', 'replay')],
+  ['failed', 'expired', absorb('failed', 'replay')],
 ]
 
 const RANK: Record<TransactionStatus, number> = { failed: 1, pending: 0, success: 2 }
@@ -115,7 +126,7 @@ describe('any sequence of outcomes', () => {
   it('enumerates every sequence of length 1 to 4', () => {
     expect.hasAssertions()
 
-    expect(all).toHaveLength(2 + 4 + 8 + 16)
+    expect(all).toHaveLength(3 + 9 + 27 + 81)
   })
 
   it.each(TRANSACTION_STATUSES)('from %s never lowers the status rank', (start) => {
@@ -135,5 +146,45 @@ describe('any sequence of outcomes', () => {
     })
 
     expect(drifted).toStrictEqual([])
+  })
+})
+
+const polledAt = (ageMinutes: number) => ({ ageMinutes, transactionId: 'txn_abc123' })
+const wait = (why: 'gateway_pending' | 'not_found'): Decision => ({ do: 'wait', why })
+
+describe('deciding what a status query answer means', () => {
+  const claim = { kind: 'failed', record: { ...record, message: 'Card declined' } } as const
+  const answers = {
+    failed: { kind: 'failed', record },
+    notFound: { kind: 'notFound' },
+    pending: { kind: 'pending', record },
+    succeeded: { card: null, kind: 'succeeded', record },
+  } as const satisfies Record<PaymentOutcome['kind'], PaymentOutcome>
+  const expire: Decision = {
+    do: 'record',
+    settling: { kind: 'expired', transactionId: 'txn_abc123' },
+  }
+
+  it.each([
+    ['a success, against a claim', answers.succeeded, { claim }, answers.succeeded],
+    ['a failure, against a claim', answers.failed, { claim }, answers.failed],
+    ['a success, for the cron', answers.succeeded, polledAt(45), answers.succeeded],
+    ['a failure, for the cron', answers.failed, polledAt(45), answers.failed],
+  ] as const)('records %s as the gateway gave it', (_case, outcome, context, settling) => {
+    expect.hasAssertions()
+
+    expect(decide(outcome, context)).toStrictEqual({ do: 'record', settling })
+  })
+
+  it.each([
+    ['pending, against a claim', answers.pending, { claim }, wait('gateway_pending')],
+    ['pending, for the cron at any age', answers.pending, polledAt(2000), wait('gateway_pending')],
+    ['not found, against a claim', answers.notFound, { claim }, wait('not_found')],
+    ['not found, for the cron at 30 minutes', answers.notFound, polledAt(30), wait('not_found')],
+    ['not found, for the cron past 30 minutes', answers.notFound, polledAt(30.001), expire],
+  ] as const)('decides %s', (_case, outcome, context, decision) => {
+    expect.hasAssertions()
+
+    expect(decide(outcome, context)).toStrictEqual(decision)
   })
 })

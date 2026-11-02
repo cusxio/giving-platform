@@ -1,18 +1,11 @@
 import { redirect } from '@tanstack/react-router'
-import { Result } from 'better-result'
 
-import { assertExhaustive } from '#/core/assert-exhaustive'
 import type { Deps } from '#/server/deps.server'
-import type { InfraError } from '#/server/infra-error'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlReplyError } from './eghl.errors'
-import { EghlGatewayBusyError } from './eghl.errors'
-import type { GatewayReply, PaymentRecord } from './payment-outcome'
 import { replyRecord } from './payment-outcome'
-import type { Recorded } from './record-outcome.server'
-import { recordOutcome } from './record-outcome.server'
-import { findPendingAmountInCents } from './transactions.repository.server'
+import { settleReply } from './settlement.server'
 
 type SettlementDeps = Pick<Deps, 'db' | 'eghl' | 'logger'>
 
@@ -51,88 +44,6 @@ function refuseReply(
   })
 }
 
-type Settled = Recorded | { readonly kind: 'waiting' }
-type Settlement = Promise<Result<Settled, InfraError>>
-
-const WAITING: Settled = { kind: 'waiting' }
-
-/** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
-async function settleInboundReply(deps: SettlementDeps, reply: GatewayReply): Settlement {
-  const { logger } = deps
-
-  switch (reply.kind) {
-    case 'settled': {
-      return recordOutcome(deps, reply.outcome)
-    }
-    case 'unconfirmed': {
-      return confirmByQuery(deps, reply.claim.record.transactionId)
-    }
-    case 'pending': {
-      logger.info(
-        { event: 'eghl.settlement.not_final', transaction_id: reply.record.transactionId },
-        'Reply does not settle the transaction, leaving it pending',
-      )
-      return Result.ok(WAITING)
-    }
-    default: {
-      return assertExhaustive(reply)
-    }
-  }
-}
-
-function leftPending(deps: SettlementDeps, transactionId: PaymentRecord['transactionId']) {
-  deps.logger.info(
-    { event: 'eghl.settlement.not_final', transaction_id: transactionId },
-    'Gateway status does not settle the transaction, leaving it pending',
-  )
-  return Result.ok(WAITING)
-}
-
-async function confirmByQuery(
-  deps: SettlementDeps,
-  transactionId: PaymentRecord['transactionId'],
-): Settlement {
-  const { eghl, logger } = deps
-  const amountResult = await deps.db.run(findPendingAmountInCents(transactionId))
-  if (amountResult.isErr()) {
-    return Result.err(amountResult.error)
-  }
-  if (amountResult.value === undefined) {
-    return Result.ok(WAITING)
-  }
-
-  const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
-  if (queryResult.isErr()) {
-    if (EghlGatewayBusyError.is(queryResult.error)) {
-      return leftPending(deps, transactionId)
-    }
-    logger.warn(
-      {
-        'error.type': queryResult.error._tag,
-        event: 'eghl.settlement.query_failed',
-        transaction_id: transactionId,
-      },
-      'Could not confirm the reply with the gateway, leaving it pending',
-    )
-    return Result.ok(WAITING)
-  }
-
-  const outcome = queryResult.value
-  switch (outcome.kind) {
-    case 'succeeded':
-    case 'failed': {
-      return recordOutcome(deps, outcome)
-    }
-    case 'pending':
-    case 'notFound': {
-      return leftPending(deps, transactionId)
-    }
-    default: {
-      return assertExhaustive(outcome)
-    }
-  }
-}
-
 async function callback(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
   const internalError = Response.json({ message: 'Internal Server Error' }, { status: 500 })
@@ -161,7 +72,7 @@ async function callback(deps: SettlementDeps, request: Request) {
     'Signature verified, processing payment finalization',
   )
 
-  const finalizationResult = await settleInboundReply(deps, reply)
+  const finalizationResult = await settleReply(deps, reply, 'callback')
 
   if (finalizationResult.isErr()) {
     logInfraFailure(logger, 'eghl.callback', finalizationResult.error, {
@@ -203,7 +114,7 @@ async function returnGet(deps: SettlementDeps, request: Request) {
     'Signature verified, processing GET return',
   )
 
-  const finalizationResult = await settleInboundReply(deps, reply)
+  const finalizationResult = await settleReply(deps, reply, 'return')
 
   if (finalizationResult.isErr()) {
     logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
@@ -251,7 +162,7 @@ async function returnPost(deps: SettlementDeps, request: Request) {
     'Signature verified, processing payment finalization',
   )
 
-  const finalizationResult = await settleInboundReply(deps, reply)
+  const finalizationResult = await settleReply(deps, reply, 'return')
 
   if (finalizationResult.isErr()) {
     logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
