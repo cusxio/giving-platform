@@ -14,7 +14,6 @@ const REACHABLE = new Set<TransactionStatus>(['success', 'failed'])
 
 const isReachable = (status: TransactionStatus): status is Reachable => REACHABLE.has(status)
 
-/** Whether the inverse table, read through sourcesOf, lists `from` as a source of `to`. */
 const inverseLists = (from: TransactionStatus, to: TransactionStatus) =>
   isReachable(to) && sourcesOf(to).includes(from)
 
@@ -45,7 +44,7 @@ describe('the transaction status machine', () => {
     expect.hasAssertions()
 
     // @ts-expect-error nothing moves a row back to pending
-    expect(() => sourcesOf('pending')).toThrow('no status moves to pending')
+    expect(sourcesOf('pending')).toStrictEqual([])
   })
 
   it('lists success and failed in history and counts only success', () => {

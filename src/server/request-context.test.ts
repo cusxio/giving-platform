@@ -63,7 +63,6 @@ const sha256 = (parts: string[]) =>
     .update(['secret-password', ...parts].join(''))
     .digest('hex')
 
-/** A failed return in the live shape, signed with the mocked eGHL password. */
 function signedReturn() {
   const fields = {
     Amount: '1.00',

@@ -18,7 +18,6 @@ const record: PaymentRecord = {
   transactionId: TRANSACTION_ID,
 }
 
-/** Runs one statement against a recording driver and returns the SQL it sent. */
 async function sent(run: (db: ReturnType<typeof createDriverDb>) => Promise<unknown>) {
   const statements: { params: unknown[]; sql: string }[] = []
   const db = createDriverDb((sql, params) => {

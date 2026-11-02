@@ -54,7 +54,6 @@ function refuseReply(
 type Settled = Recorded | { readonly kind: 'waiting' }
 type Settlement = Promise<Result<Settled, InfraError>>
 
-/** The transaction stays pending; nothing was written. */
 const WAITING: Settled = { kind: 'waiting' }
 
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */

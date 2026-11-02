@@ -39,12 +39,7 @@ function logAbsorbed(
   )
 }
 
-/**
- * The one writer of transaction status. Inside one transaction: lock the row, plan the move from
- * the table, and on a move run the compare-and-set, record the payment, and for a user's
- * successful card payment save or touch the card. Any failed statement rolls all of it back. A
- * replay or a contradiction writes nothing and is not an error.
- */
+/** The one writer of transaction status. */
 export function recordOutcome(
   deps: Pick<Deps, 'db' | 'logger'>,
   outcome: Settling,

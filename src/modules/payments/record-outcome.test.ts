@@ -46,7 +46,6 @@ const newCard: CardUse = {
   kind: 'saved',
 }
 
-/** A db whose transaction belongs to user 7, created as `createdAs`, stored at `status`. */
 const storedAs = (createdAs: 'guest' | 'user', status: TransactionStatus = 'pending') =>
   createFakeDb()
     .on(lockTransaction, () => ({ amountInCents: 5000, createdAs, status, userId: 7 }))

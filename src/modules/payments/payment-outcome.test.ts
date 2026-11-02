@@ -45,7 +45,6 @@ const absorb = (at: TransactionStatus, why: 'contradiction' | 'replay'): Plan =>
   why,
 })
 
-/** Every stored status against every outcome. */
 const PLAN_TABLE: [TransactionStatus, Settling['kind'], Plan][] = [
   ['pending', 'succeeded', move('pending', 'success')],
   ['pending', 'failed', move('pending', 'failed')],
@@ -57,13 +56,11 @@ const PLAN_TABLE: [TransactionStatus, Settling['kind'], Plan][] = [
 
 const RANK: Record<TransactionStatus, number> = { failed: 1, pending: 0, success: 2 }
 
-/** The status a row ends in after one outcome. */
 const apply = (status: TransactionStatus, kind: Settling['kind']): TransactionStatus => {
   const plan = planTransition(stored(status), OUTCOMES[kind])
   return plan.kind === 'move' ? plan.transition.to : status
 }
 
-/** The statuses a row passes through, starting at `start`. */
 function run(start: TransactionStatus, sequence: readonly Settling['kind'][]) {
   const trail = [start]
   for (const kind of sequence) {
@@ -72,7 +69,6 @@ function run(start: TransactionStatus, sequence: readonly Settling['kind'][]) {
   return trail
 }
 
-/** Every sequence of outcomes of length 1 to `maxLength`. */
 function sequences(maxLength: number): Settling['kind'][][] {
   let frontier: Settling['kind'][][] = [[]]
   const all: Settling['kind'][][] = []

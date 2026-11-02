@@ -43,7 +43,6 @@ type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
 
 export type Settling = FailedOutcome | SucceededOutcome
 
-/** Exhaustive. A new Settling kind fails typecheck here until it has a status. */
 export function targetOf(outcome: Settling): Reachable {
   switch (outcome.kind) {
     case 'succeeded': {
@@ -58,7 +57,6 @@ export function targetOf(outcome: Settling): Reachable {
   }
 }
 
-/** The row as `lockTransaction` read it, under the row lock. */
 export interface StoredTransaction {
   readonly amountInCents: number
   readonly createdAs: 'guest' | 'user'
@@ -80,7 +78,6 @@ export interface Transition {
 }
 
 export type Plan =
-  /** Nothing to write. `replay` is the same outcome twice. `contradiction` is a different final answer. */
   | {
       readonly at: TransactionStatus
       readonly kind: 'absorb'
@@ -88,7 +85,6 @@ export type Plan =
     }
   | { readonly kind: 'move'; readonly transition: Transition }
 
-/** What one outcome does to one locked row. Pure: a replay is absorbed before anything else. */
 export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
   const to = targetOf(outcome)
   if (stored.status === to) {

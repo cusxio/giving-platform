@@ -97,8 +97,8 @@ export const lockTransaction = defineQuery(
 )
 
 /**
- * The compare-and-set. Its WHERE lists the statuses the table allows into `to`, so the database
- * refuses what the table refuses even if a plan were wrong. Null when no such row.
+ * The WHERE repeats the table, so the database refuses what the table refuses even if a plan is
+ * wrong.
  */
 export const moveTransaction = defineQuery(
   'payments.moveTransaction',
