@@ -132,15 +132,14 @@ function moneyMismatchOf(stored: StoredTransaction, outcome: Settling): MoneyMis
     : { received: record, why: 'amount_mismatch' }
 }
 
-/**
- * A success for other money than the row's goes to `held` instead of `success`. A success onto a
- * `success` row is a replay whatever its money, and so is a success for other money onto `held`.
- */
 export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
   const reported = targetOf(outcome)
+  if (stored.status === reported) {
+    return { at: stored.status, kind: 'absorb', why: 'replay' }
+  }
   const mismatch = moneyMismatchOf(stored, outcome)
   const to = mismatch === null ? reported : 'held'
-  if (stored.status === reported || stored.status === to) {
+  if (stored.status === to) {
     return { at: stored.status, kind: 'absorb', why: 'replay' }
   }
   if (!canMove(stored.status, to)) {
@@ -195,11 +194,6 @@ type DecisionContext =
   | { readonly ageMinutes: number; readonly transactionId: string }
   | { readonly claim: UnconfirmedClaim }
 
-/**
- * A cancelled claim settles failed, with the reply's record, when the gateway still reports the
- * attempt pending with no transaction of its own: it answers that way forever for a page left
- * before any bank step.
- */
 export function decide(outcome: PaymentOutcome, context: DecisionContext): Decision {
   switch (outcome.kind) {
     case 'succeeded':

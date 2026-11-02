@@ -1,11 +1,6 @@
 export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'held'] as const
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number]
 
-/**
- * `success`, `failed` and `held` absorb: a replay or a contradicting later reply cannot move them.
- * `held` is a success for other money than the row's, left for an operator to resolve with the
- * gateway.
- */
 export const TRANSITIONS = {
   failed: [],
   held: [],
