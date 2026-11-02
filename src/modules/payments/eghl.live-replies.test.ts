@@ -7,7 +7,7 @@ import { testDeps } from '#/server/testing/test-deps'
 
 import { handleEghlCallback, handleEghlReturnGet } from './eghl.http.server'
 import { outcomeOf, replyOf } from './eghl.outcome'
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
+import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema } from './eghl.wire'
 import {
   findPendingAmountInCents,
@@ -20,11 +20,11 @@ const { eghl } = testDeps().config
 
 const inboundActionOf = (reply: EghlPaymentResponse) =>
   ({ pending: 'leave-pending', settled: 'settle-success', unconfirmed: 'confirm-by-query' })[
-    replyOf(reply).kind
+    replyOf(reply as Verified<EghlPaymentResponse>).kind
   ]
 
 const finalStatusOf = (answer: EghlQueryResponse) =>
-  outcomeOf(answer).match({
+  outcomeOf(answer as Verified<EghlQueryResponse>).match({
     err: () => null,
     ok: (outcome) =>
       ({ failed: 'failed', notFound: null, pending: null, succeeded: 'success' })[outcome.kind],

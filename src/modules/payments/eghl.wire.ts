@@ -176,3 +176,13 @@ export const EghlQueryResponseSchema = Compile(
 
 export type EghlPaymentResponse = ReturnType<typeof EghlPaymentResponseSchema.Parse>
 export type EghlQueryResponse = ReturnType<typeof EghlQueryResponseSchema.Parse>
+
+declare const verified: unique symbol
+
+/**
+ * A reply or status answer the adapter checked: the schema parsed it, its signature matches, and
+ * a status answer names the PaymentID and Amount its query asked about.
+ */
+export type Verified<Wire extends EghlPaymentResponse | EghlQueryResponse> = Wire & {
+  readonly [verified]: true
+}

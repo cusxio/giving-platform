@@ -1,7 +1,8 @@
 import type { Result } from 'better-result'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
+import type { outcomeOf, replyOf } from './eghl.outcome'
+import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import type { PaymentGateway } from './gateway'
 import type { GatewayReply, PaymentOutcome, PaymentRecord } from './payment-outcome'
 
@@ -60,6 +61,15 @@ describe('the payment gateway port', () => {
 
     expectTypeOf<EghlPaymentResponse>().not.toExtend<GatewayReply>()
     expectTypeOf<EghlQueryResponse>().not.toExtend<PaymentOutcome>()
+  })
+
+  it('maps only a reply or answer the adapter verified', () => {
+    expect.assertions(0)
+
+    expectTypeOf<EghlPaymentResponse>().not.toExtend<Parameters<typeof replyOf>[0]>()
+    expectTypeOf<EghlQueryResponse>().not.toExtend<Parameters<typeof outcomeOf>[0]>()
+    expectTypeOf<Verified<EghlPaymentResponse>>().toExtend<Parameters<typeof replyOf>[0]>()
+    expectTypeOf<Verified<EghlQueryResponse>>().toExtend<Parameters<typeof outcomeOf>[0]>()
   })
 
   it('settles a reply only on a success', () => {

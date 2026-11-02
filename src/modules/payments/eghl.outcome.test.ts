@@ -4,25 +4,26 @@ import { TZDate } from '#/core/date'
 import { errValue } from '#/server/testing/result'
 
 import { outcomeOf, replyOf } from './eghl.outcome'
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
+import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 
-const paid = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymentResponse => ({
-  Amount: '50.00',
-  CurrencyCode: 'MYR',
-  HashValue: 'hash',
-  HashValue2: 'hash2',
-  OrderNumber: 'txn_abc123',
-  PaymentID: 'txn_abc123',
-  PymtMethod: 'CC',
-  RespTime: '2026-10-31 11:30:00',
-  ServiceID: 'service-123',
-  TransactionType: 'SALE',
-  TxnID: 'CIVtxn_abc123',
-  TxnMessage: 'Transaction Successful',
-  TxnStatus: EghlTxnStatus.Success,
-  ...overrides,
-})
+const paid = (overrides: Partial<EghlPaymentResponse> = {}) =>
+  ({
+    Amount: '50.00',
+    CurrencyCode: 'MYR',
+    HashValue: 'hash',
+    HashValue2: 'hash2',
+    OrderNumber: 'txn_abc123',
+    PaymentID: 'txn_abc123',
+    PymtMethod: 'CC',
+    RespTime: '2026-10-31 11:30:00',
+    ServiceID: 'service-123',
+    TransactionType: 'SALE',
+    TxnID: 'CIVtxn_abc123',
+    TxnMessage: 'Transaction Successful',
+    TxnStatus: EghlTxnStatus.Success,
+    ...overrides,
+  }) as Verified<EghlPaymentResponse>
 
 const inboundActionOf = (reply: Pick<EghlPaymentResponse, 'TxnStatus'>) =>
   ({ pending: 'leave-pending', settled: 'settle-success', unconfirmed: 'confirm-by-query' })[
@@ -30,7 +31,11 @@ const inboundActionOf = (reply: Pick<EghlPaymentResponse, 'TxnStatus'>) =>
   ]
 
 const finalStatusOf = (answer: Pick<EghlQueryResponse, 'TxnExists' | 'TxnMessage' | 'TxnStatus'>) =>
-  outcomeOf({ ...paid(), TransactionType: 'QUERY', ...answer } as EghlQueryResponse).match({
+  outcomeOf({
+    ...paid(),
+    TransactionType: 'QUERY',
+    ...answer,
+  } as Verified<EghlQueryResponse>).match({
     err: () => null,
     ok: (outcome) =>
       ({ failed: 'failed', notFound: null, pending: null, succeeded: 'success' })[outcome.kind],
@@ -151,7 +156,7 @@ const newCard = {
   TokenType: 'OCP',
 }
 
-const settledOf = (wire: EghlPaymentResponse) => {
+const settledOf = (wire: Verified<EghlPaymentResponse>) => {
   const reply = replyOf(wire)
   if (reply.kind !== 'settled') {
     throw new Error(`expected a settled reply, got ${reply.kind}`)
@@ -184,6 +189,15 @@ describe('what a paid reply records', () => {
 
     expect(settledOf(paid({ Amount })).record.amountInCents).toBe(cents)
   })
+
+  it.each(['50.5', '50', '50.000', '-1.00', ' 50.00', '1e3.00', ''])(
+    'refuses %j, which the schema never lets through',
+    (Amount) => {
+      expect.hasAssertions()
+
+      expect(() => replyOf(paid({ Amount }))).toThrow('is not ringgit with two decimals')
+    },
+  )
 
   it('takes the payment time from RespTime2 when RespTime is absent', () => {
     expect.hasAssertions()
@@ -243,7 +257,7 @@ const answered = (overrides: Partial<EghlQueryResponse>) =>
     TransactionType: 'QUERY',
     TxnExists: EghlTxnExists.Exists,
     ...overrides,
-  }) as EghlQueryResponse
+  }) as Verified<EghlQueryResponse>
 
 describe('what a status query answer says', () => {
   it.each([

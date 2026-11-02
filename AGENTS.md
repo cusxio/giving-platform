@@ -63,8 +63,8 @@ An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exac
 `payments/gateway.ts` is the port: `deps.eghl` takes and returns only the domain types of `payments/payment-outcome.ts` (`GatewayReply`, `PaymentOutcome`, `PaymentRecord`, amounts in cents). eGHL wire fields (PascalCase) stay in three files:
 
 - `eghl.wire.ts` holds the reply schemas and status enums.
-- `eghl.outcome.ts` maps a verified wire reply or answer to a domain value. It is pure.
-- `eghl.gateway.server.ts` signs, sends and verifies, and logs each wire status code (`eghl.reply.verified`, `eghl.query.answered`).
+- `eghl.outcome.ts` maps a verified wire reply or answer to a domain value. It is pure, and takes only a `Verified` value.
+- `eghl.gateway.server.ts` signs, sends and verifies, and logs each wire status code (`eghl.reply.verified`, `eghl.query.answered`). It alone marks a reply `Verified`, once its signature matches, and an answer once its signature matches and it names the queried PaymentID and Amount.
 
 A busy gateway (an internal error) is `Err(EghlGatewayBusyError)` from `queryStatus`, not an outcome. `gateway.types.test.ts` fails tsc when a PascalCase key reaches anything the port takes or returns. Handlers and the cron never import `eghl.wire.ts`.
 

@@ -4,15 +4,21 @@ import { assertExhaustive } from '#/core/assert-exhaustive'
 import { TZDate } from '#/core/date'
 
 import { EghlGatewayBusyError } from './eghl.errors'
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
+import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 import type { CardUse, GatewayReply, PaymentOutcome, PaymentRecord } from './payment-outcome'
 
 type Wire = EghlPaymentResponse | EghlQueryResponse
 
+const AMOUNT = /^(?<ringgit>\d+)\.(?<cents>\d{2})$/u
+
+/** Never through a float: the settlement compares these cents with the stored amount. */
 function centsOf(amount: string): number {
-  const [ringgit = '', cents = ''] = amount.split('.')
-  return Number(ringgit) * 100 + Number(cents)
+  const parts = AMOUNT.exec(amount)?.groups
+  if (parts?.ringgit === undefined || parts.cents === undefined) {
+    throw new Error(`eGHL amount "${amount}" is not ringgit with two decimals`)
+  }
+  return Number(parts.ringgit) * 100 + Number(parts.cents)
 }
 
 /** The gateway sends Malaysia time with no zone. */
@@ -56,7 +62,7 @@ const isDuplicatePaymentId = (message: string) =>
 
 const saysCancel = (message: string) => message.toLowerCase().includes('cancel')
 
-export function replyOf(wire: EghlPaymentResponse): GatewayReply {
+export function replyOf(wire: Verified<EghlPaymentResponse>): GatewayReply {
   switch (wire.TxnStatus) {
     case EghlTxnStatus.Success: {
       return {
@@ -115,7 +121,9 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
   }
 }
 
-export function outcomeOf(wire: EghlQueryResponse): Result<PaymentOutcome, EghlGatewayBusyError> {
+export function outcomeOf(
+  wire: Verified<EghlQueryResponse>,
+): Result<PaymentOutcome, EghlGatewayBusyError> {
   switch (wire.TxnExists) {
     case EghlTxnExists.InternalError: {
       return Result.err(new EghlGatewayBusyError({ queryDesc: wire.QueryDesc }))

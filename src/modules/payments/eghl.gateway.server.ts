@@ -19,7 +19,7 @@ import {
   ParseError,
 } from './eghl.errors'
 import { isUnexpectedForSale, outcomeOf, replyOf } from './eghl.outcome'
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
+import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
 
@@ -185,7 +185,7 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
           },
           'Gateway reply signature verified',
         )
-        return Result.ok(replyOf(reply))
+        return Result.ok(replyOf(reply as Verified<EghlPaymentResponse>))
       }),
 
     queryStatus: ({ transactionId, amountInCents }) =>
@@ -245,7 +245,7 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
         }
 
         logAnswer(logger, reply)
-        return outcomeOf(reply)
+        return outcomeOf(reply as Verified<EghlQueryResponse>)
       }),
   }
 }
