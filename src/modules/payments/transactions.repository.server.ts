@@ -1,5 +1,5 @@
 import type { InferInsertModel } from 'drizzle-orm'
-import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
 import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
@@ -25,6 +25,7 @@ export const hasGuestTransaction = defineQuery(
   (found) => found.length > 0,
 )
 
+/** A late success adds a payments row to a failed one, so the receipt reads the latest. */
 export const findReceipt = defineQuery(
   'payments.findReceipt',
   (db, transactionId: TransactionId) =>
@@ -37,7 +38,9 @@ export const findReceipt = defineQuery(
       .from(transactions)
       .innerJoin(users, eq(users.id, transactions.userId))
       .leftJoin(payments, eq(payments.transactionId, transactions.id))
-      .where(eq(transactions.id, transactionId)),
+      .where(eq(transactions.id, transactionId))
+      .orderBy(desc(payments.id))
+      .limit(1),
   firstOrNull,
 )
 

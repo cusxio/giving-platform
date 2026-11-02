@@ -7,7 +7,7 @@ import { errValue, okValue } from '#/server/testing/result'
 
 import type { PaymentRecord, Settling, Transition } from './payment-outcome'
 import { planTransition } from './payment-outcome'
-import { lockTransaction, moveTransaction } from './transactions.repository.server'
+import { findReceipt, lockTransaction, moveTransaction } from './transactions.repository.server'
 
 const TRANSACTION_ID = 'T2000000000000000001'
 
@@ -110,6 +110,26 @@ describe('the settlement statements', () => {
       expect(statement?.params).toStrictEqual([to, expect.any(String), TRANSACTION_ID, 'pending'])
     },
   )
+})
+
+describe('the receipt read', () => {
+  it('joins only the latest payments row, so a corrected row shows its success', async () => {
+    expect.hasAssertions()
+
+    const statements = await sent((db) => db.run(findReceipt(TRANSACTION_ID)))
+
+    expect(statements).toStrictEqual([
+      {
+        params: [TRANSACTION_ID, 1],
+        sql:
+          'select "payments"."message", "transactions"."id", "transactions"."status", ' +
+          '"users"."email", "users"."first_name", "users"."status" from "transactions" ' +
+          'inner join "users" on "users"."id" = "transactions"."user_id" ' +
+          'left join "payments" on "payments"."transaction_id" = "transactions"."id" ' +
+          'where "transactions"."id" = $1 order by "payments"."id" desc limit $2',
+      },
+    ])
+  })
 })
 
 // oxlint-disable typescript/no-misused-spread -- each spread is a forgery tsc must refuse
