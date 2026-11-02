@@ -126,7 +126,10 @@ export default defineConfig({
   ],
   options: { typeAware: true },
   plugins: ['unicorn', 'oxc', 'import', 'promise', 'eslint'],
+  jsPlugins: ['./lint/payments-plugin.ts'],
   rules: {
+    'payments/no-verified-cast': 'error',
+
     // Formatting and style opinions handled by the project/codebase conventions.
     'eslint/func-style': 'off',
     'eslint/no-continue': 'off',
@@ -346,6 +349,11 @@ export default defineConfig({
     {
       files: ['src/modules/payments/record-outcome.server.ts'],
       rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    // The adapter marks a reply Verified after its checks; the mapper's tests feed it wire shapes.
+    {
+      files: ['src/modules/payments/eghl.gateway.server.ts', 'src/modules/payments/eghl.*.test.ts'],
+      rules: { 'payments/no-verified-cast': 'off' },
     },
   ],
 })

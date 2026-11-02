@@ -23,6 +23,7 @@ tasks:
       - group: sources
       - /.gitignore
       - /oxlint.config.ts
+      - /lint/**/*
     options:
       affectedFiles: args
       shell: false
