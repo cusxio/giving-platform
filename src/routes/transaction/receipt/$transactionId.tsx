@@ -6,6 +6,7 @@ import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 import { receiptQuery } from '#/modules/payments'
 
 import { Failed } from './-components/failed'
+import { Held } from './-components/held'
 import { Pending } from './-components/pending'
 import { Success } from './-components/success'
 
@@ -38,6 +39,8 @@ function RouteComponent() {
           )}
 
           {transaction.status === 'pending' && <Pending transaction={transaction} />}
+
+          {transaction.status === 'held' && <Held transaction={transaction} />}
         </div>
       </div>
 
