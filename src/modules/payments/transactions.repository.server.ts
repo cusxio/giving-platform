@@ -2,9 +2,12 @@ import type { InferInsertModel } from 'drizzle-orm'
 import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
+import { sourcesOf } from '#/core/transaction-status'
 import { affectedRows, defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { PaymentInsert, Transaction, User } from '#/server/schema.server'
 import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
+
+import type { Transition } from './payment-outcome'
 
 export type TransactionId = Transaction['id']
 
@@ -76,15 +79,40 @@ export const findPendingAmountInCents = defineQuery(
   (found) => found[0]?.amount,
 )
 
-/** Moves a pending transaction to a final status. Null when it is no longer pending or unknown. */
-export const settleTransaction = defineQuery(
-  'payments.settleTransaction',
-  (db, transactionId: TransactionId, status: Exclude<Transaction['status'], 'pending'>) =>
+/** Locks the row for the rest of the settlement, so a callback, a return and the cron take turns. */
+export const lockTransaction = defineQuery(
+  'payments.lockTransaction',
+  (db, transactionId: TransactionId) =>
+    db
+      .select({
+        amountInCents: transactions.amount,
+        createdAs: transactions.createdAs,
+        status: transactions.status,
+        userId: transactions.userId,
+      })
+      .from(transactions)
+      .where(eq(transactions.id, transactionId))
+      .for('update'),
+  firstOrNull,
+)
+
+/**
+ * The compare-and-set. Its WHERE lists the statuses the table allows into `to`, so the database
+ * refuses what the table refuses even if a plan were wrong. Null when no such row.
+ */
+export const moveTransaction = defineQuery(
+  'payments.moveTransaction',
+  (db, transition: Transition) =>
     db
       .update(transactions)
-      .set({ status })
-      .where(and(eq(transactions.id, transactionId), eq(transactions.status, 'pending')))
-      .returning({ createdAs: transactions.createdAs, userId: transactions.userId }),
+      .set({ status: transition.to })
+      .where(
+        and(
+          eq(transactions.id, transition.transactionId),
+          inArray(transactions.status, sourcesOf(transition.to)),
+        ),
+      )
+      .returning({ status: transactions.status }),
   firstOrNull,
 )
 

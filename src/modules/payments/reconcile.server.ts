@@ -143,7 +143,7 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
       continue
     }
 
-    if (finalizationResult.value.finalized) {
+    if (finalizationResult.value.kind === 'moved') {
       finalizedCount++
     }
   }

@@ -118,7 +118,10 @@ const gatewayAnswering = (replies: Record<string, QueryResult>) =>
 const finalizeBy =
   (outcomes: Record<string, FinalizeResult> = {}) =>
   (outcome: Settling) =>
-    Promise.resolve(outcomes[outcome.record.transactionId] ?? Result.ok({ finalized: true }))
+    Promise.resolve(
+      outcomes[outcome.record.transactionId] ??
+        Result.ok({ from: 'pending', kind: 'moved', to: 'success' } as const),
+    )
 
 const notFound = () => Result.ok<PaymentOutcome>({ kind: 'notFound' })
 
@@ -236,7 +239,7 @@ describe('eGHL cron', () => {
     const run = await runCron({
       db,
       finalize: finalizeBy({
-        txn_already_final: Result.ok({ finalized: false }),
+        txn_already_final: Result.ok({ at: 'success', kind: 'absorbed', why: 'replay' } as const),
         txn_finalize_error: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
       }),
       replies,

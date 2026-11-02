@@ -2,15 +2,17 @@ import { pino } from 'pino'
 import type { Logger } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { TransactionStatus } from '#/core/transaction-status'
 import type { FakeDb } from '#/server/testing/fake-db'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { errValue, okValue } from '#/server/testing/result'
 import { testDeps } from '#/server/testing/test-deps'
 
 import type { CardUse, PaymentRecord, Settling } from './payment-outcome'
 import { recordOutcome } from './record-outcome.server'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
-import { insertPayment, settleTransaction } from './transactions.repository.server'
+import { insertPayment, lockTransaction, moveTransaction } from './transactions.repository.server'
 
 const NOW = new Date('2026-10-31T04:00:00Z')
 
@@ -44,10 +46,11 @@ const newCard: CardUse = {
   kind: 'saved',
 }
 
-/** A db whose pending transaction belongs to user 7, created as `createdAs`. */
-const pendingFor = (createdAs: 'guest' | 'user') =>
+/** A db whose transaction belongs to user 7, created as `createdAs`, stored at `status`. */
+const storedAs = (createdAs: 'guest' | 'user', status: TransactionStatus = 'pending') =>
   createFakeDb()
-    .on(settleTransaction, () => ({ createdAs, userId: 7 }))
+    .on(lockTransaction, () => ({ amountInCents: 5000, createdAs, status, userId: 7 }))
+    .on(moveTransaction, ({ to }) => ({ status: to }))
     .on(insertPayment, () => {})
     .on(upsertSavedCard, () => {})
     .on(touchSavedCard, () => {})
@@ -62,6 +65,8 @@ const payment = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+const MOVE = { from: 'pending', to: 'success', transactionId: 'txn_abc123' }
+
 /** Runs recordOutcome with the clock at NOW. */
 const record = async (db: FakeDb, outcome: Settling, logger?: Logger) => {
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
@@ -73,34 +78,93 @@ const record = async (db: FakeDb, outcome: Settling, logger?: Logger) => {
 }
 
 describe('recording a payment outcome', () => {
-  it('settles the pending transaction and records the payment at the gateway time', async () => {
+  it('locks the row, moves it, and records the payment at the gateway time', async () => {
     expect.hasAssertions()
 
-    const db = pendingFor('guest')
+    const db = storedAs('guest')
     const result = await record(db, succeeded())
 
-    expect(okValue(result)).toStrictEqual({ finalized: true })
+    expect(okValue(result)).toStrictEqual({ from: 'pending', kind: 'moved', to: 'success' })
     expect(db.transactions).toStrictEqual(['commit'])
-    expect(db.calls).toMatchObject([
-      { args: ['txn_abc123', 'success'], name: 'payments.settleTransaction' },
+    expect(db.roundTrips).toStrictEqual([
+      ['payments.lockTransaction'],
+      ['payments.moveTransaction'],
+      ['payments.insertPayment'],
+    ])
+    expect(db.calls).toStrictEqual([
+      { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      { args: [MOVE], name: 'payments.moveTransaction' },
       { args: [payment()], name: 'payments.insertPayment' },
     ])
   })
 
-  it('leaves a transaction that is no longer pending alone', async () => {
+  it('moves a pending row to failed on a failed outcome', async () => {
     expect.hasAssertions()
 
-    const db = createFakeDb().on(settleTransaction, () => null)
+    const db = storedAs('guest')
     const result = await record(db, failed())
 
-    expect(okValue(result)).toStrictEqual({ finalized: false })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.settleTransaction'])
+    expect(okValue(result)).toStrictEqual({ from: 'pending', kind: 'moved', to: 'failed' })
+    expect(db.calls[1]).toStrictEqual({
+      args: [{ ...MOVE, to: 'failed' }],
+      name: 'payments.moveTransaction',
+    })
+  })
+
+  it('leaves an unknown transaction alone', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb().on(lockTransaction, () => null)
+    const result = await record(db, failed())
+
+    expect(okValue(result)).toStrictEqual({ kind: 'unknown' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.transactions).toStrictEqual(['commit'])
+  })
+
+  it('absorbs a replay of the stored status without writing', async () => {
+    expect.hasAssertions()
+
+    const db = storedAs('user', 'success')
+    const result = await record(db, succeeded(newCard))
+
+    expect(okValue(result)).toStrictEqual({ at: 'success', kind: 'absorbed', why: 'replay' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.transactions).toStrictEqual(['commit'])
+  })
+
+  it('absorbs an answer that contradicts a final status without writing', async () => {
+    expect.hasAssertions()
+
+    const db = storedAs('user', 'failed')
+    const result = await record(db, succeeded(newCard))
+
+    expect(okValue(result)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'contradiction' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+  })
+
+  it('fails the settlement when the compare-and-set finds no row after the lock', async () => {
+    expect.hasAssertions()
+
+    const db = storedAs('guest').on(moveTransaction, () => null)
+    const result = await record(db, succeeded())
+
+    expect(errValue(result)).toMatchObject({
+      _tag: 'InfraError',
+      op: 'payments.moveTransaction',
+      reason: 'no-row',
+    })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.moveTransaction',
+    ])
+    expect(db.transactions).toStrictEqual(['rollback'])
   })
 
   it("saves the card from a user's successful payment", async () => {
     expect.hasAssertions()
 
-    const db = pendingFor('user')
+    const db = storedAs('user')
     await record(db, succeeded(newCard))
 
     expect(db.calls.at(-1)).toStrictEqual({
@@ -121,7 +185,7 @@ describe('recording a payment outcome', () => {
   it('touches the saved card a user paid with by token alone', async () => {
     expect.hasAssertions()
 
-    const db = pendingFor('user')
+    const db = storedAs('user')
     await record(db, succeeded({ kind: 'reused', token: 'tok_saved' }))
 
     expect(db.calls.at(-1)).toStrictEqual({
@@ -137,11 +201,12 @@ describe('recording a payment outcome', () => {
   ] as const)('saves no card for %s', async (_case, createdAs, outcome) => {
     expect.hasAssertions()
 
-    const db = pendingFor(createdAs)
+    const db = storedAs(createdAs)
     await record(db, outcome)
 
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
-      'payments.settleTransaction',
+      'payments.lockTransaction',
+      'payments.moveTransaction',
       'payments.insertPayment',
     ])
   })
@@ -149,11 +214,11 @@ describe('recording a payment outcome', () => {
   it('records the payment at the time of recording when the gateway gave none', async () => {
     expect.hasAssertions()
 
-    const db = pendingFor('guest')
+    const db = storedAs('guest')
     await record(db, succeeded(null, paidRecord({ paidAt: null })))
 
     // now() is a TZDate, which toStrictEqual would not equate with a Date of the same time.
-    expect(db.calls[1]).toMatchObject({
+    expect(db.calls[2]).toMatchObject({
       args: [payment({ paidAt: NOW })],
       name: 'payments.insertPayment',
     })
@@ -162,11 +227,9 @@ describe('recording a payment outcome', () => {
   it('rolls the settlement back and names the failed write', async () => {
     expect.hasAssertions()
 
-    const db = createFakeDb()
-      .on(settleTransaction, () => ({ createdAs: 'guest', userId: 7 }))
-      .on(insertPayment, () => {
-        throw new Error('insert failed')
-      })
+    const db = storedAs('guest').on(insertPayment, () => {
+      throw new Error('insert failed')
+    })
     const result = await record(db, succeeded())
 
     expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.insertPayment' })
@@ -176,21 +239,22 @@ describe('recording a payment outcome', () => {
   it('rolls the settlement and the payment back when the card cannot be saved', async () => {
     expect.hasAssertions()
 
-    const db = pendingFor('user').on(upsertSavedCard, () => {
+    const db = storedAs('user').on(upsertSavedCard, () => {
       throw new Error('upsert failed')
     })
     const result = await record(db, succeeded(newCard))
 
     expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.upsertSavedCard' })
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
-      'payments.settleTransaction',
+      'payments.lockTransaction',
+      'payments.moveTransaction',
       'payments.insertPayment',
       'payments.upsertSavedCard',
     ])
     expect(db.transactions).toStrictEqual(['rollback'])
   })
 
-  it('logs the replay of a settled transaction', async () => {
+  it('logs a replay and an unknown transaction as idempotent, as before', async () => {
     expect.hasAssertions()
 
     const events: unknown[] = []
@@ -202,11 +266,33 @@ describe('recording a payment outcome', () => {
         },
       },
     )
-    const db = createFakeDb().on(settleTransaction, () => null)
-    await record(db, succeeded(), logger)
+    await record(storedAs('guest', 'success'), succeeded(), logger)
+    await record(
+      createFakeDb().on(lockTransaction, () => null),
+      succeeded(),
+      logger,
+    )
 
     expect(events).toMatchObject([
       { event: 'payment.finalize.idempotent', transaction_id: 'txn_abc123' },
+      { event: 'payment.finalize.idempotent', transaction_id: 'txn_abc123' },
+    ])
+  })
+
+  it('logs a contradiction as a warning naming both statuses', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    await record(storedAs('guest', 'success'), failed(), logger)
+
+    expect(events).toStrictEqual([
+      expect.objectContaining({
+        event: 'payment.finalize.contradiction',
+        level: 40,
+        status: 'success',
+        to: 'failed',
+        transaction_id: 'txn_abc123',
+      }),
     ])
   })
 })

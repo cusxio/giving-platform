@@ -12,7 +12,8 @@ import { EghlPaymentResponseSchema, EghlQueryResponseSchema } from './eghl.wire'
 import {
   findPendingAmountInCents,
   insertPayment,
-  settleTransaction,
+  lockTransaction,
+  moveTransaction,
 } from './transactions.repository.server'
 
 const { eghl } = testDeps().config
@@ -124,7 +125,13 @@ const answering = (answer: Record<string, string>) =>
 const pendingTransaction = () =>
   createFakeDb()
     .on(findPendingAmountInCents, () => 100)
-    .on(settleTransaction, () => ({ createdAs: 'guest', userId: 5 }))
+    .on(lockTransaction, () => ({
+      amountInCents: 100,
+      createdAs: 'guest',
+      status: 'pending',
+      userId: 5,
+    }))
+    .on(moveTransaction, ({ to }) => ({ status: to }))
     .on(insertPayment, () => {})
 
 const withGateway = async <T>(gateway: typeof fetch, run: () => Promise<T>) => {
@@ -241,8 +248,8 @@ describe('a cancel or timeout return today', () => {
     const { db } = await returnWith(cancelOrTimeoutReturn, syntheticConfirmedFailureAnswer)
 
     expect(db.calls).toContainEqual({
-      args: [PAYMENT_ID, 'failed'],
-      name: 'payments.settleTransaction',
+      args: [{ from: 'pending', to: 'failed', transactionId: PAYMENT_ID }],
+      name: 'payments.moveTransaction',
     })
   })
 })

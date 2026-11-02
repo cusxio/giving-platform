@@ -1,4 +1,6 @@
 import { assertExhaustive } from '#/core/assert-exhaustive'
+import type { Reachable, TransactionStatus } from '#/core/transaction-status'
+import { canMove } from '#/core/transaction-status'
 
 interface SavedCardToken {
   readonly exp: string
@@ -40,6 +42,68 @@ type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
 
 export type Settling = FailedOutcome | SucceededOutcome
+
+/** Exhaustive. A new Settling kind fails typecheck here until it has a status. */
+export function targetOf(outcome: Settling): Reachable {
+  switch (outcome.kind) {
+    case 'succeeded': {
+      return 'success'
+    }
+    case 'failed': {
+      return 'failed'
+    }
+    default: {
+      return assertExhaustive(outcome)
+    }
+  }
+}
+
+/** The row as `lockTransaction` read it, under the row lock. */
+export interface StoredTransaction {
+  readonly amountInCents: number
+  readonly createdAs: 'guest' | 'user'
+  readonly status: TransactionStatus
+  readonly userId: number
+}
+
+declare const transitionBrand: unique symbol
+
+/**
+ * A status change the table allows. Only `planTransition` makes one, so `moveTransaction` can
+ * only ever write a pair `TRANSITIONS` lists.
+ */
+export interface Transition {
+  readonly [transitionBrand]: true
+  readonly from: TransactionStatus
+  readonly to: Reachable
+  readonly transactionId: string
+}
+
+export type Plan =
+  /** Nothing to write. `replay` is the same outcome twice. `contradiction` is a different final answer. */
+  | {
+      readonly at: TransactionStatus
+      readonly kind: 'absorb'
+      readonly why: 'contradiction' | 'replay'
+    }
+  | { readonly kind: 'move'; readonly transition: Transition }
+
+/** What one outcome does to one locked row. Pure: a replay is absorbed before anything else. */
+export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
+  const to = targetOf(outcome)
+  if (stored.status === to) {
+    return { at: stored.status, kind: 'absorb', why: 'replay' }
+  }
+  if (!canMove(stored.status, to)) {
+    return { at: stored.status, kind: 'absorb', why: 'contradiction' }
+  }
+  const transition = {
+    from: stored.status,
+    to,
+    transactionId: outcome.record.transactionId,
+  } as Transition
+  return { kind: 'move', transition }
+}
 
 /**
  * What a callback or return request amounts to. A reply's signature does not cover its message,

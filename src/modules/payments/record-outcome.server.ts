@@ -1,41 +1,80 @@
 import { Result } from 'better-result'
 
 import { now } from '#/core/date'
+import type { Reachable, TransactionStatus } from '#/core/transaction-status'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
+import { required } from '#/server/infra-error'
 
-import type { Settling } from './payment-outcome'
+import type { Plan, Settling } from './payment-outcome'
+import { planTransition, targetOf } from './payment-outcome'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
-import { insertPayment, settleTransaction } from './transactions.repository.server'
+import { insertPayment, lockTransaction, moveTransaction } from './transactions.repository.server'
+
+export type Recorded =
+  | {
+      readonly at: TransactionStatus
+      readonly kind: 'absorbed'
+      readonly why: 'contradiction' | 'replay'
+    }
+  | { readonly from: TransactionStatus; readonly kind: 'moved'; readonly to: Reachable }
+  | { readonly kind: 'unknown' }
+
+function logAbsorbed(
+  logger: Deps['logger'],
+  transactionId: string,
+  plan: Extract<Plan, { kind: 'absorb' }>,
+  to: Reachable,
+) {
+  if (plan.why === 'replay') {
+    logger.info(
+      { event: 'payment.finalize.idempotent', transaction_id: transactionId },
+      'Transaction already processed or not found',
+    )
+    return
+  }
+  logger.warn(
+    { event: 'payment.finalize.contradiction', status: plan.at, to, transaction_id: transactionId },
+    'Final answer contradicts the stored status, leaving it as it is',
+  )
+}
 
 /**
- * The one writer of a settled status. Moves a pending transaction to the outcome's status and
- * records the payment, and for a user's successful card payment saves or touches the card, all
- * in one transaction that any failed statement rolls back. A transaction that is no longer
- * pending is left alone.
+ * The one writer of transaction status. Inside one transaction: lock the row, plan the move from
+ * the table, and on a move run the compare-and-set, record the payment, and for a user's
+ * successful card payment save or touch the card. Any failed statement rolls all of it back. A
+ * replay or a contradiction writes nothing and is not an error.
  */
 export function recordOutcome(
   deps: Pick<Deps, 'db' | 'logger'>,
   outcome: Settling,
-): Promise<Result<{ finalized: boolean }, InfraError>> {
+): Promise<Result<Recorded, InfraError>> {
   const { record } = outcome
-  const status = outcome.kind === 'succeeded' ? 'success' : 'failed'
   const card = outcome.kind === 'succeeded' ? outcome.card : null
   const paidAt = record.paidAt ?? now()
 
   return deps.db.transaction((tx) =>
     Result.gen(async function* settle() {
-      const transaction = yield* Result.await(
-        tx.run(settleTransaction(record.transactionId, status)),
-      )
+      const stored = yield* Result.await(tx.run(lockTransaction(record.transactionId)))
 
-      if (transaction === null) {
+      if (stored === null) {
         deps.logger.info(
           { event: 'payment.finalize.idempotent', transaction_id: record.transactionId },
           'Transaction already processed or not found',
         )
-        return Result.ok({ finalized: false })
+        const unknown: Recorded = { kind: 'unknown' }
+        return Result.ok(unknown)
       }
+
+      const plan = planTransition(stored, outcome)
+      if (plan.kind === 'absorb') {
+        logAbsorbed(deps.logger, record.transactionId, plan, targetOf(outcome))
+        const absorbed: Recorded = { at: plan.at, kind: 'absorbed', why: plan.why }
+        return Result.ok(absorbed)
+      }
+
+      const moved = yield* Result.await(tx.run(moveTransaction(plan.transition)))
+      yield* required(moved, moveTransaction.queryName)
 
       yield* Result.await(
         tx.run(
@@ -50,8 +89,14 @@ export function recordOutcome(
         ),
       )
 
-      if (card === null || transaction.createdAs !== 'user') {
-        return Result.ok({ finalized: true })
+      const recorded: Recorded = {
+        from: plan.transition.from,
+        kind: 'moved',
+        to: plan.transition.to,
+      }
+
+      if (card === null || stored.createdAs !== 'user') {
+        return Result.ok(recorded)
       }
 
       yield* Result.await(
@@ -63,13 +108,13 @@ export function recordOutcome(
                 cardNoMask: card.card.mask,
                 cardType: card.card.type,
                 token: card.card.token,
-                userId: transaction.userId,
+                userId: stored.userId,
               })
-            : touchSavedCard(transaction.userId, card.token),
+            : touchSavedCard(stored.userId, card.token),
         ),
       )
 
-      return Result.ok({ finalized: true })
+      return Result.ok(recorded)
     }),
   )
 }

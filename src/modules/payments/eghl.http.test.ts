@@ -163,7 +163,9 @@ const stubPaymentService = (
   logger = pino({ level: 'silent' }),
   db: FakeDb = createFakeDb().on(findPendingAmountInCents, () => AMOUNT_IN_CENTS),
 ) => {
-  finalizePaymentFromCallback.mockReset().mockResolvedValue(Result.ok({ finalized: true }))
+  finalizePaymentFromCallback
+    .mockReset()
+    .mockResolvedValue(Result.ok({ from: 'pending', kind: 'moved', to: 'success' } as const))
   return testDeps({ db, logger })
 }
 

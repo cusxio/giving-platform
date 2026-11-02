@@ -10,6 +10,7 @@ import type { EghlReplyError } from './eghl.errors'
 import { EghlGatewayBusyError } from './eghl.errors'
 import type { GatewayReply, PaymentRecord } from './payment-outcome'
 import { replyRecord } from './payment-outcome'
+import type { Recorded } from './record-outcome.server'
 import { recordOutcome } from './record-outcome.server'
 import { findPendingAmountInCents } from './transactions.repository.server'
 
@@ -50,7 +51,7 @@ function refuseReply(
   })
 }
 
-type Settlement = Promise<Result<{ finalized: boolean }, InfraError>>
+type Settlement = Promise<Result<Recorded | { readonly kind: 'waiting' }, InfraError>>
 
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
 async function settleInboundReply(deps: SettlementDeps, reply: GatewayReply): Settlement {
@@ -68,7 +69,7 @@ async function settleInboundReply(deps: SettlementDeps, reply: GatewayReply): Se
         { event: 'eghl.settlement.not_final', transaction_id: reply.record.transactionId },
         'Reply does not settle the transaction, leaving it pending',
       )
-      return Result.ok({ finalized: false })
+      return Result.ok({ kind: 'waiting' } as const)
     }
     default: {
       return assertExhaustive(reply)
@@ -81,7 +82,7 @@ function leftPending(deps: SettlementDeps, transactionId: PaymentRecord['transac
     { event: 'eghl.settlement.not_final', transaction_id: transactionId },
     'Gateway status does not settle the transaction, leaving it pending',
   )
-  return Result.ok({ finalized: false })
+  return Result.ok({ kind: 'waiting' } as const)
 }
 
 async function confirmByQuery(
@@ -94,7 +95,7 @@ async function confirmByQuery(
     return Result.err(amountResult.error)
   }
   if (amountResult.value === undefined) {
-    return Result.ok({ finalized: false })
+    return Result.ok({ kind: 'waiting' } as const)
   }
 
   const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
@@ -110,7 +111,7 @@ async function confirmByQuery(
       },
       'Could not confirm the reply with the gateway, leaving it pending',
     )
-    return Result.ok({ finalized: false })
+    return Result.ok({ kind: 'waiting' } as const)
   }
 
   const outcome = queryResult.value
