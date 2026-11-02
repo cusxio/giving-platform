@@ -150,10 +150,6 @@ export const CARD_FIELD_LENGTHS = {
 
 const WITHOUT_NUL = String.raw`^[^\u0000]*$`
 
-/**
- * What a card must look like to be saved. A reply's own schema leaves these fields unbounded so
- * that a card that breaks them costs only the card, never the payment.
- */
 export const EghlCardFieldsSchema = Compile(
   Type.Object({
     CardExp: Type.Optional(

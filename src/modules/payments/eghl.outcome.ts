@@ -16,17 +16,12 @@ import type { CardUse, GatewayReply, PaymentOutcome, PaymentRecord } from './pay
 
 type Wire = EghlPaymentResponse | EghlQueryResponse
 
-/**
- * The lengths of `payments.message` and `payments.payment_method`, which these fields fill. The
- * message's documented length (spec 2.2) is the same; the method's is shorter.
- */
 export const TEXT_COLUMN_LENGTHS = { PymtMethod: 10, TxnMessage: 255 } as const
 
 type TextField = keyof typeof TEXT_COLUMN_LENGTHS
 
 type CardField = keyof typeof CARD_FIELD_LENGTHS
 
-/** A reply or answer field cut or dropped to fit its column. */
 export type ClippedField = CardField | TextField
 
 const isCardField = (name: string): name is CardField => Object.hasOwn(CARD_FIELD_LENGTHS, name)
@@ -62,18 +57,13 @@ function paidAtOf({ RespTime, RespTime2 }: Wire): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
-/**
- * A token that breaks `EghlCardFieldsSchema` drops the card. Details that break it, or are
- * missing, leave the token alone, which touches a card the donor already saved. Nothing is cut.
- */
 function cardOf(wire: Wire, clipped: ClippedField[]): CardUse | null {
   const { CardExp, CardHolder, CardNoMask, CardType, Token, TokenType } = wire
   if (TokenType !== 'OCP' || Token === undefined) {
     return null
   }
-  const card = { CardExp, CardHolder, CardNoMask, CardType, Token }
   const refused = new Set(
-    EghlCardFieldsSchema.Errors(card)
+    EghlCardFieldsSchema.Errors({ CardExp, CardHolder, CardNoMask, CardType, Token })
       .map(({ instancePath }) => instancePath.slice(1))
       .filter((name) => isCardField(name)),
   )
@@ -112,7 +102,6 @@ const isDuplicatePaymentId = (message: string) =>
 
 const saysCancel = (message: string) => message.toLowerCase().includes('cancel')
 
-/** `clipped` collects the fields cut or dropped to fit their columns. */
 export function replyOf(
   wire: Verified<EghlPaymentResponse>,
   clipped: ClippedField[] = [],
@@ -179,7 +168,6 @@ function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): Pa
   }
 }
 
-/** `clipped` collects the fields cut or dropped to fit their columns. */
 export function outcomeOf(
   wire: Verified<EghlQueryResponse>,
   clipped: ClippedField[] = [],

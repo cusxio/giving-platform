@@ -12,7 +12,8 @@ interface SavedCardToken {
 
 /**
  * Whether a successful payment touches the donor's saved cards. `saved` has the details to
- * upsert. `reused` is a saved card's token charged again: only its last-used time moves.
+ * upsert. `reused` is a saved card's token charged again, or a card whose details are unusable:
+ * only its last-used time moves.
  */
 export type CardUse =
   | { readonly kind: 'reused'; readonly token: string }

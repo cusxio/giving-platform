@@ -14,7 +14,6 @@ export function safeSum(column: AnyColumn) {
 type ColumnLength<Column> =
   Column extends PgColumn<infer _Data, infer _Runtime, { length: infer L }> ? L : never
 
-/** Whether a varchar column was declared `Length` characters long, for tsc to pin a limit to it. */
 export type SameLength<Length extends number, Column> = [Length] extends [ColumnLength<Column>]
   ? [ColumnLength<Column>] extends [Length]
     ? true

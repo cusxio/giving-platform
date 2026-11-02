@@ -261,6 +261,28 @@ describe('the eGHL client reading replies', () => {
       expect(JSON.stringify(events)).not.toContain('secret')
     })
 
+    it('settles a signed success whose card fields do not fit, without the card', async () => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      const result = await readReturn(
+        buildResponse({
+          CardExp: '1299',
+          CardNoMask: '411111******1111',
+          CardType: 'VISA',
+          Token: 'T'.repeat(51),
+          TokenType: 'OCP',
+        }),
+        logger,
+      )
+
+      expect(okValue(result)).toMatchObject({ kind: 'settled', outcome: { card: null } })
+      expect(events).toMatchObject([
+        { event: 'eghl.reply.verified' },
+        { event: 'payment.fields_clipped', fields: ['CardExp', 'Token'] },
+      ])
+    })
+
     it('rejects the reply when the signature is missing', async () => {
       expect.hasAssertions()
       const response = buildResponse({ HashValue2: '' })

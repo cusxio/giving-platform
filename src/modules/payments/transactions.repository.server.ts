@@ -131,7 +131,7 @@ export const moveTransaction = defineQuery(
   firstOrNull,
 )
 
-/** @public Fails typecheck when a column and the length the eGHL adapter fits its text to differ. */
+/** @public */
 export const paymentTextFitsColumns: [
   SameLength<(typeof TEXT_COLUMN_LENGTHS)['TxnMessage'], typeof payments.message>,
   SameLength<(typeof TEXT_COLUMN_LENGTHS)['PymtMethod'], typeof payments.paymentMethod>,

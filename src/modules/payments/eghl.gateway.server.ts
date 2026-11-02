@@ -83,7 +83,6 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
   }
 }
 
-/** Names the fields, never their values. */
 function logClipped(logger: Logger, transactionId: string, clipped: readonly ClippedField[]) {
   if (clipped.length === 0) {
     return

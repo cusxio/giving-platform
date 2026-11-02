@@ -41,7 +41,7 @@ export const findSavedCard = defineQuery(
   firstOrNull,
 )
 
-/** @public Fails typecheck when a card field's documented length and its column differ. */
+/** @public */
 export const cardFieldsFitColumns: [
   SameLength<(typeof CARD_FIELD_LENGTHS)['CardExp'], typeof savedPaymentMethods.cardExp>,
   SameLength<(typeof CARD_FIELD_LENGTHS)['CardHolder'], typeof savedPaymentMethods.cardHolder>,
