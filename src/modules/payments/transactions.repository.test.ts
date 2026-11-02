@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { sourcesOf } from '#/core/transaction-status'
 import { createDriverDb } from '#/server/testing/driver-db'
+import { errValue, okValue } from '#/server/testing/result'
 
 import type { PaymentRecord, Transition } from './payment-outcome'
 import { planTransition } from './payment-outcome'
@@ -29,6 +30,12 @@ async function sent(run: (db: ReturnType<typeof createDriverDb>) => Promise<unkn
   return statements
 }
 
+/** Locks a row whose status column holds `status`. */
+const lockedAs = (status: string) =>
+  createDriverDb(() => Promise.resolve({ rowCount: 1, rows: [[100, 'guest', status, 7]] })).run(
+    lockTransaction(TRANSACTION_ID),
+  )
+
 const planned = (to: 'failed' | 'success'): Transition => {
   const plan = planTransition(
     { amountInCents: 1, createdAs: 'guest', status: 'pending', userId: 1 },
@@ -54,6 +61,33 @@ describe('the settlement statements', () => {
           'where "transactions"."id" = $1 for update',
       },
     ])
+  })
+
+  it('reads the locked row with its status', async () => {
+    expect.hasAssertions()
+
+    expect(okValue(await lockedAs('pending'))).toStrictEqual({
+      amountInCents: 100,
+      createdAs: 'guest',
+      status: 'pending',
+      userId: 7,
+    })
+  })
+
+  it('fails the lock, naming the value, when the status is not one the table knows', async () => {
+    expect.hasAssertions()
+
+    const failure = errValue(await lockedAs('refunded'))
+
+    expect(failure).toMatchObject({
+      _tag: 'InfraError',
+      op: 'payments.lockTransaction',
+      reason: 'failed',
+    })
+    expect(failure.cause).toMatchObject({
+      message: 'transaction status "refunded" is not one of pending, success, failed',
+      name: 'UnknownStatusError',
+    })
   })
 
   it.each(['success', 'failed'] as const)(

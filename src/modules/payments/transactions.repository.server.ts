@@ -2,7 +2,7 @@ import type { InferInsertModel } from 'drizzle-orm'
 import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
-import { sourcesOf } from '#/core/transaction-status'
+import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
 import { affectedRows, defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { PaymentInsert, Transaction, User } from '#/server/schema.server'
 import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
@@ -79,7 +79,24 @@ export const findPendingAmountInCents = defineQuery(
   (found) => found[0]?.amount,
 )
 
-/** Locks the row for the rest of the settlement, so a callback, a return and the cron take turns. */
+/** A status column value outside `TRANSACTION_STATUSES`, such as one a later version wrote. */
+class UnknownStatusError extends Error {
+  override name = 'UnknownStatusError'
+}
+
+const knownStatus = <Row extends { status: string }>(row: Row | null): Row | null => {
+  if (row !== null && !(TRANSACTION_STATUSES as readonly string[]).includes(row.status)) {
+    throw new UnknownStatusError(
+      `transaction status "${row.status}" is not one of ${TRANSACTION_STATUSES.join(', ')}`,
+    )
+  }
+  return row
+}
+
+/**
+ * Locks the row for the rest of the settlement, so a callback, a return and the cron take turns.
+ * An unknown status fails the statement, so the settlement is an `InfraError`, never a guess.
+ */
 export const lockTransaction = defineQuery(
   'payments.lockTransaction',
   (db, transactionId: TransactionId) =>
@@ -93,7 +110,7 @@ export const lockTransaction = defineQuery(
       .from(transactions)
       .where(eq(transactions.id, transactionId))
       .for('update'),
-  firstOrNull,
+  (found) => knownStatus(firstOrNull(found)),
 )
 
 /**
