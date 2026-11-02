@@ -10,6 +10,28 @@ import type { CardUse, GatewayReply, PaymentOutcome, PaymentRecord } from './pay
 
 type Wire = EghlPaymentResponse | EghlQueryResponse
 
+/**
+ * The lengths of `payments.message` and `payments.payment_method`, which these fields fill. The
+ * message's documented length (spec 2.2) is the same; the method's is shorter.
+ */
+export const TEXT_COLUMN_LENGTHS = { PymtMethod: 10, TxnMessage: 255 } as const
+
+type TextField = keyof typeof TEXT_COLUMN_LENGTHS
+
+/** A reply or answer field cut or dropped to fit its column. */
+export type ClippedField = TextField
+
+/** Postgres cannot store NUL, and a URL-decoded field can carry one. */
+function textOf(wire: Wire, field: TextField, clipped: ClippedField[]): string {
+  const raw = wire[field]
+  // oxlint-disable-next-line typescript/no-misused-spread -- Postgres counts a varchar's length in code points, which is what spread yields
+  const fitted = [...raw.replaceAll('\u0000', '')].slice(0, TEXT_COLUMN_LENGTHS[field]).join('')
+  if (fitted !== raw) {
+    clipped.push(field)
+  }
+  return fitted
+}
+
 const AMOUNT = /^(?<ringgit>\d+)\.(?<cents>\d{2})$/u
 
 function centsOf(amount: string): number {
@@ -44,12 +66,12 @@ function cardOf(wire: Wire): CardUse | null {
   }
 }
 
-function recordOf(wire: Wire): PaymentRecord {
+function recordOf(wire: Wire, clipped: ClippedField[]): PaymentRecord {
   return {
     amountInCents: centsOf(wire.Amount),
     currency: wire.CurrencyCode,
-    message: wire.TxnMessage,
-    method: wire.PymtMethod,
+    message: textOf(wire, 'TxnMessage', clipped),
+    method: textOf(wire, 'PymtMethod', clipped),
     paidAt: paidAtOf(wire),
     providerTxnId: wire.TxnID,
     transactionId: wire.PaymentID,
@@ -61,23 +83,27 @@ const isDuplicatePaymentId = (message: string) =>
 
 const saysCancel = (message: string) => message.toLowerCase().includes('cancel')
 
-export function replyOf(wire: Verified<EghlPaymentResponse>): GatewayReply {
+/** `clipped` collects the fields cut or dropped to fit their columns. */
+export function replyOf(
+  wire: Verified<EghlPaymentResponse>,
+  clipped: ClippedField[] = [],
+): GatewayReply {
   switch (wire.TxnStatus) {
     case EghlTxnStatus.Success: {
       return {
         kind: 'settled',
-        outcome: { card: cardOf(wire), kind: 'succeeded', record: recordOf(wire) },
+        outcome: { card: cardOf(wire), kind: 'succeeded', record: recordOf(wire, clipped) },
       }
     }
     case EghlTxnStatus.Failed: {
       const abandoned = wire.TxnID === '' && saysCancel(wire.TxnMessage)
       return {
-        claim: { kind: abandoned ? 'cancelled' : 'failed', record: recordOf(wire) },
+        claim: { kind: abandoned ? 'cancelled' : 'failed', record: recordOf(wire, clipped) },
         kind: 'unconfirmed',
       }
     }
     case EghlTxnStatus.Pending: {
-      return { kind: 'pending', record: recordOf(wire) }
+      return { kind: 'pending', record: recordOf(wire, clipped) }
     }
     default: {
       return assertExhaustive(wire.TxnStatus)
@@ -88,8 +114,8 @@ export function replyOf(wire: Verified<EghlPaymentResponse>): GatewayReply {
 export const isUnexpectedForSale = ({ TxnStatus }: EghlQueryResponse) =>
   TxnStatus === EghlQueryTxnStatus.Authorized || TxnStatus === EghlQueryTxnStatus.Captured
 
-function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
-  const record = recordOf(wire)
+function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): PaymentOutcome {
+  const record = recordOf(wire, clipped)
   const { TxnStatus } = wire
   switch (TxnStatus) {
     case EghlTxnStatus.Success: {
@@ -120,8 +146,10 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
   }
 }
 
+/** `clipped` collects the fields cut or dropped to fit their columns. */
 export function outcomeOf(
   wire: Verified<EghlQueryResponse>,
+  clipped: ClippedField[] = [],
 ): Result<PaymentOutcome, EghlGatewayBusyError> {
   switch (wire.TxnExists) {
     case EghlTxnExists.InternalError: {
@@ -131,7 +159,7 @@ export function outcomeOf(
       return Result.ok({ kind: 'notFound' })
     }
     case EghlTxnExists.Exists: {
-      return Result.ok(existingOutcomeOf(wire))
+      return Result.ok(existingOutcomeOf(wire, clipped))
     }
     default: {
       return assertExhaustive(wire)

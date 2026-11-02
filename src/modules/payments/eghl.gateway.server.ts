@@ -18,6 +18,7 @@ import {
   EghlVerificationError,
   ParseError,
 } from './eghl.errors'
+import type { ClippedField } from './eghl.outcome'
 import { isUnexpectedForSale, outcomeOf, replyOf } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
@@ -80,6 +81,17 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
   } else {
     logger.info(fields, 'Gateway answered the status query')
   }
+}
+
+/** Names the fields, never their values. */
+function logClipped(logger: Logger, transactionId: string, clipped: readonly ClippedField[]) {
+  if (clipped.length === 0) {
+    return
+  }
+  logger.warn(
+    { event: 'payment.fields_clipped', fields: clipped, transaction_id: transactionId },
+    'Gateway fields do not fit their columns, cutting or dropping them',
+  )
 }
 
 export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGateway {
@@ -186,7 +198,10 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
           },
           'Gateway reply signature verified',
         )
-        return Result.ok(replyOf(reply as Verified<EghlPaymentResponse>))
+        const clipped: ClippedField[] = []
+        const mapped = replyOf(reply as Verified<EghlPaymentResponse>, clipped)
+        logClipped(logger, reply.PaymentID, clipped)
+        return Result.ok(mapped)
       }),
 
     queryStatus: ({ transactionId, amountInCents }) =>
@@ -246,7 +261,10 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
         }
 
         logAnswer(logger, reply)
-        return outcomeOf(reply as Verified<EghlQueryResponse>)
+        const clipped: ClippedField[] = []
+        const outcome = outcomeOf(reply as Verified<EghlQueryResponse>, clipped)
+        logClipped(logger, reply.PaymentID, clipped)
+        return outcome
       }),
   }
 }

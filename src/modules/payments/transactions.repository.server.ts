@@ -6,7 +6,9 @@ import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
 import { defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { PaymentInsert, Transaction, User } from '#/server/schema.server'
 import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
+import type { SameLength } from '#/server/sql.server'
 
+import type { TEXT_COLUMN_LENGTHS } from './eghl.outcome'
 import type { Transition } from './payment-outcome'
 
 export type TransactionId = Transaction['id']
@@ -128,6 +130,12 @@ export const moveTransaction = defineQuery(
       .returning({ status: transactions.status }),
   firstOrNull,
 )
+
+/** @public Fails typecheck when a column and the length the eGHL adapter fits its text to differ. */
+export const paymentTextFitsColumns: [
+  SameLength<(typeof TEXT_COLUMN_LENGTHS)['TxnMessage'], typeof payments.message>,
+  SameLength<(typeof TEXT_COLUMN_LENGTHS)['PymtMethod'], typeof payments.paymentMethod>,
+] = [true, true]
 
 export const insertPayment = defineQuery(
   'payments.insertPayment',

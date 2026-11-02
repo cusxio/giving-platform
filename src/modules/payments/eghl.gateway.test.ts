@@ -239,6 +239,28 @@ describe('the eGHL client reading replies', () => {
       ])
     })
 
+    it('logs the names of fields cut to fit, never their values', async () => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      const result = await readReturn(
+        buildResponse({ PymtMethod: 'CARD-ONLINE', TxnMessage: 'secret '.repeat(50) }),
+        logger,
+      )
+
+      expect(okValue(result)).toMatchObject({ kind: 'settled' })
+      expect(events).toMatchObject([
+        { event: 'eghl.reply.verified' },
+        {
+          event: 'payment.fields_clipped',
+          fields: ['TxnMessage', 'PymtMethod'],
+          level: 40,
+          transaction_id: 'txn_abc123',
+        },
+      ])
+      expect(JSON.stringify(events)).not.toContain('secret')
+    })
+
     it('rejects the reply when the signature is missing', async () => {
       expect.hasAssertions()
       const response = buildResponse({ HashValue2: '' })

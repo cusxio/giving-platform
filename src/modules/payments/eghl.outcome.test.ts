@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { TZDate } from '#/core/date'
 import { errValue } from '#/server/testing/result'
 
+import type { ClippedField } from './eghl.outcome'
 import { outcomeOf, replyOf } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+import { replyRecord } from './payment-outcome'
 
 const paid = (overrides: Partial<EghlPaymentResponse> = {}) =>
   ({
@@ -311,6 +313,81 @@ describe('what a status query answer says', () => {
     expect(
       outcomeOf(answered({ ...newCard, TxnStatus: EghlTxnStatus.Success })).unwrap(),
     ).toMatchObject({ card: { card: { token: 'tok_new' }, kind: 'saved' }, kind: 'succeeded' })
+  })
+})
+
+const clippedBy = (wire: Verified<EghlPaymentResponse>) => {
+  const clipped: ClippedField[] = []
+  const reply = replyOf(wire, clipped)
+  return { clipped, record: replyRecord(reply) }
+}
+
+describe('text that must fit its payments column', () => {
+  it.each([
+    ['a message at its 255-character column', { TxnMessage: 'M'.repeat(255) }, 'M'.repeat(255), []],
+    ['a message one over', { TxnMessage: 'M'.repeat(256) }, 'M'.repeat(255), ['TxnMessage']],
+    [
+      'a message whose 255th character is an emoji',
+      { TxnMessage: `${'M'.repeat(254)}😀` },
+      `${'M'.repeat(254)}😀`,
+      [],
+    ],
+    [
+      'a message with an emoji one past the column',
+      { TxnMessage: `${'M'.repeat(255)}😀` },
+      'M'.repeat(255),
+      ['TxnMessage'],
+    ],
+    [
+      'a message with a NUL',
+      { TxnMessage: 'Transaction\u0000 Successful' },
+      'Transaction Successful',
+      ['TxnMessage'],
+    ],
+  ])('keeps %s as the column can hold it', (_case, overrides, message, clipped) => {
+    expect.hasAssertions()
+
+    expect(clippedBy(paid(overrides))).toMatchObject({ clipped, record: { message } })
+  })
+
+  it.each([
+    ['a method at its 10-character column', 'M'.repeat(10), 'M'.repeat(10), []],
+    ['a method one over', 'M'.repeat(11), 'M'.repeat(10), ['PymtMethod']],
+    ['a method with a NUL', 'C\u0000C', 'CC', ['PymtMethod']],
+  ])('keeps %s as the column can hold it', (_case, PymtMethod, method, clipped) => {
+    expect.hasAssertions()
+
+    expect(clippedBy(paid({ PymtMethod }))).toMatchObject({ clipped, record: { method } })
+  })
+
+  it("fits a cancel's unsigned message, which a cancel records", () => {
+    expect.hasAssertions()
+    const clipped: ClippedField[] = []
+    const message = `Buyer cancelled ${'x'.repeat(300)}`
+
+    const reply = replyOf(
+      paid({ TxnID: '', TxnMessage: message, TxnStatus: EghlTxnStatus.Failed }),
+      clipped,
+    )
+
+    expect(reply).toMatchObject({
+      claim: { kind: 'cancelled', record: { message: message.slice(0, 255) } },
+      kind: 'unconfirmed',
+    })
+    expect(clipped).toStrictEqual(['TxnMessage'])
+  })
+
+  it('fits the message of a status query answer', () => {
+    expect.hasAssertions()
+    const clipped: ClippedField[] = []
+
+    const outcome = outcomeOf(
+      answered({ TxnMessage: 'F'.repeat(300), TxnStatus: EghlTxnStatus.Failed }),
+      clipped,
+    )
+
+    expect(outcome.unwrap()).toMatchObject({ kind: 'failed', record: { message: 'F'.repeat(255) } })
+    expect(clipped).toStrictEqual(['TxnMessage'])
   })
 })
 
