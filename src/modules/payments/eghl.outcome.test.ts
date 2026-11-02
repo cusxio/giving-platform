@@ -315,8 +315,17 @@ const pendingAnswer = (TxnStatus: EghlQueryResponse['TxnStatus'], TxnMessage = '
 describe("a failed reply's claim", () => {
   it.each([
     ['a cancel or timeout, with no gateway transaction', '', 'Buyer cancelled', 'cancelled'],
-    ['any other message with no gateway transaction', '', 'Card declined', 'cancelled'],
+    ['a cancel in any case, with no gateway transaction', '', 'CANCELLED BY BUYER', 'cancelled'],
     ["a repeated PaymentID's rejection", '', 'Duplicate Payment ID', 'failed'],
+    ['a reworded repeated PaymentID rejection', '', 'Duplicate PaymentID', 'failed'],
+    [
+      'a failure that does not say cancel, with no gateway transaction',
+      '',
+      'Transaction Failed',
+      'failed',
+    ],
+    ['a failure with no message and no gateway transaction', '', '', 'failed'],
+    ['a decline with no gateway transaction', '', 'Card declined', 'failed'],
     ['a failure with a gateway transaction', 'CIVtxn_abc123', 'Buyer cancelled', 'failed'],
   ])('is %s', (_case, txnId, message, kind) => {
     expect.hasAssertions()

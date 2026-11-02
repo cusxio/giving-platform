@@ -54,6 +54,8 @@ function recordOf(wire: Wire): PaymentRecord {
 const isDuplicatePaymentId = (message: string) =>
   message.toLowerCase().includes('duplicate payment id')
 
+const saysCancel = (message: string) => message.toLowerCase().includes('cancel')
+
 export function replyOf(wire: EghlPaymentResponse): GatewayReply {
   switch (wire.TxnStatus) {
     case EghlTxnStatus.Success: {
@@ -63,7 +65,7 @@ export function replyOf(wire: EghlPaymentResponse): GatewayReply {
       }
     }
     case EghlTxnStatus.Failed: {
-      const abandoned = wire.TxnID === '' && !isDuplicatePaymentId(wire.TxnMessage)
+      const abandoned = wire.TxnID === '' && saysCancel(wire.TxnMessage)
       return {
         claim: { kind: abandoned ? 'cancelled' : 'failed', record: recordOf(wire) },
         kind: 'unconfirmed',

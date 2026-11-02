@@ -285,3 +285,34 @@ describe("a refreshed page's duplicate PaymentID return", () => {
     expect(redirect).toMatchObject(toReceipt)
   })
 })
+
+const failedWithout = (TxnMessage: string) =>
+  withBothHashes({ ...cancelOrTimeoutReturn, TxnMessage })
+
+describe('a failed reply with no gateway transaction that does not say cancel', () => {
+  it.each(['Duplicate PaymentID', 'Transaction Failed', ''])(
+    'leaves the transaction pending and shows the receipt for %j when the gateway answers for an opened page',
+    async (message) => {
+      expect.hasAssertions()
+
+      const { db, gateway, redirect } = await returnWith(failedWithout(message), openedPageAnswer)
+
+      expect(paymentsQueried(gateway)).toStrictEqual([PAYMENT_ID])
+      expect(queriesRun(db)).toStrictEqual(['payments.findPendingAmountInCents'])
+      expect(redirect).toMatchObject(toReceipt)
+    },
+  )
+
+  it.each(['Duplicate PaymentID', 'Transaction Failed', ''])(
+    'acknowledges the callback and leaves the transaction pending for %j when the gateway answers for an opened page',
+    async (message) => {
+      expect.hasAssertions()
+
+      const { db, gateway, response } = await callbackWith(failedWithout(message), openedPageAnswer)
+
+      expect(paymentsQueried(gateway)).toStrictEqual([PAYMENT_ID])
+      expect(queriesRun(db)).toStrictEqual(['payments.findPendingAmountInCents'])
+      await expect(response.text()).resolves.toBe('OK')
+    },
+  )
+})

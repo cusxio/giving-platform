@@ -116,7 +116,8 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
 
 /**
  * `cancelled` is a page left before any bank step, by a cancel or a timeout: the reply has no
- * gateway transaction and is not a repeated PaymentID.
+ * gateway transaction and its message says cancel. The message is not signed, so any other text,
+ * such as a repeated PaymentID's rejection, is a `failed` claim.
  */
 export interface UnconfirmedClaim {
   readonly kind: 'cancelled' | 'failed'
