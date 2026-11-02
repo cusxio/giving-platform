@@ -122,10 +122,8 @@ interface HoldCause {
 }
 
 /**
- * eGHL gives a payment's failure and its success the same TxnID, and a reply's signature has no
- * nonce or time. A success under a TxnID the transaction recorded is a replay of a success an
- * operator failed by hand, or a gateway that contradicts its own failure, and nothing here tells
- * the two apart.
+ * eGHL gives a PaymentID's failure and its success the same TxnID, and a reply's signature has no
+ * nonce or time.
  */
 const recordedBefore = (stored: StoredTransaction, record: PaymentRecord): boolean =>
   record.providerTxnId !== '' && stored.providerTxnIds.includes(record.providerTxnId)

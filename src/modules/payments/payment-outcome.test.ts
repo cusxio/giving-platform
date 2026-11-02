@@ -187,7 +187,6 @@ const STEP_KINDS = Object.keys(STEPS) as Step[]
 
 const RANK: Record<TransactionStatus, number> = { failed: 1, held: 2, pending: 0, success: 2 }
 
-/** A row and the TxnID of each of its payments rows. */
 interface Row {
   readonly status: TransactionStatus
   readonly txnIds: readonly string[]
@@ -204,8 +203,7 @@ const STARTS = {
 type Start = keyof typeof STARTS
 const START_NAMES = Object.keys(STARTS) as Start[]
 
-/** Plans the step and, as the writer does, adds a payments row on a move that carries a record. */
-const apply = (row: Row, step: Step): Row => {
+const planAndRecord = (row: Row, step: Step): Row => {
   const outcome = STEPS[step]
   const plan = planTransition({ ...stored(row.status), providerTxnIds: row.txnIds }, outcome)
   if (plan.kind === 'absorb') {
@@ -221,7 +219,7 @@ const apply = (row: Row, step: Step): Row => {
 function run(start: Row, sequence: readonly Step[]) {
   const trail = [start]
   for (const step of sequence) {
-    trail.push(apply(trail.at(-1)!, step))
+    trail.push(planAndRecord(trail.at(-1)!, step))
   }
   return trail
 }
@@ -246,7 +244,7 @@ function sequences(maxLength: number): Step[][] {
 
 const movesInto = (to: TransactionStatus) =>
   START_NAMES.filter((start) => STARTS[start].status !== to).flatMap((start) =>
-    STEP_KINDS.filter((step) => apply(STARTS[start], step).status === to).map((step) => [
+    STEP_KINDS.filter((step) => planAndRecord(STARTS[start], step).status === to).map((step) => [
       start,
       step,
     ]),
