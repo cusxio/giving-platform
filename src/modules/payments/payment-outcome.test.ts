@@ -190,7 +190,6 @@ function sequences(maxLength: number): Step[][] {
   return all
 }
 
-/** Each status other than `to`, with each one step that moves it into `to`. */
 const movesInto = (to: TransactionStatus) =>
   TRANSACTION_STATUSES.filter((start) => start !== to).flatMap((start) =>
     STEP_KINDS.filter((step) => apply(start, step) === to).map((step) => [start, step]),

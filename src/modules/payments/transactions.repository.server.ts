@@ -25,7 +25,6 @@ export const hasGuestTransaction = defineQuery(
   (found) => found.length > 0,
 )
 
-/** A late success adds a payments row to a failed one, so the receipt reads the latest. */
 export const findReceipt = defineQuery(
   'payments.findReceipt',
   (db, transactionId: TransactionId) =>

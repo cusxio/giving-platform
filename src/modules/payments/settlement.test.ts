@@ -118,7 +118,6 @@ describe('a success whose money does not match the row, on every channel', () =>
   )
 })
 
-/** One row whose status the writes change, so a test can settle it several times in order. */
 const rowExpiredByTheCron = async () => {
   let status: 'failed' | 'held' | 'pending' | 'success' = 'pending'
   const db = createFakeDb()
