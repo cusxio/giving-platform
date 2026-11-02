@@ -129,7 +129,6 @@ const SIGNED_SUCCESS = {
   outcome: { card: null, kind: 'succeeded', record: paid({}) },
 } as const
 
-/** One guest row the fakes keep: its status and the TxnID of each payments row written for it. */
 const statefulRow = () => {
   let status: 'failed' | 'held' | 'pending' | 'success' = 'pending'
   const providerTxnIds: (string | null)[] = []

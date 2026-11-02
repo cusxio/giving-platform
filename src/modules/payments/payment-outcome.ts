@@ -76,7 +76,6 @@ export const PAYMENT_CURRENCY = 'MYR'
 export interface StoredTransaction {
   readonly amountInCents: number
   readonly createdAs: 'guest' | 'user'
-  /** The gateway's TxnID on each of the transaction's payments rows. */
   readonly providerTxnIds: readonly (string | null)[]
   readonly status: TransactionStatus
   readonly userId: number
@@ -137,7 +136,7 @@ function moneyMismatchOf(stored: StoredTransaction, outcome: Settling): MoneyMis
 
 /**
  * A reply's signature carries no nonce or time, so a donor can resend a success the transaction
- * already recorded, as onto a success row an operator later marked failed.
+ * already recorded.
  */
 const recordedBefore = (stored: StoredTransaction, outcome: Settling): boolean =>
   outcome.kind === 'succeeded' && stored.providerTxnIds.includes(outcome.record.providerTxnId)
