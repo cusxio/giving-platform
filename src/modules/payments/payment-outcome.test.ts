@@ -59,12 +59,19 @@ const stored = (status: TransactionStatus): StoredTransaction => ({
   userId: 7,
 })
 
-const transition = (to: Reachable) => ({ from: 'pending', to, transactionId: 'txn_abc123' })
-const move = (to: 'failed' | 'success') => ({ kind: 'move', transition: transition(to) })
-const hold = (why: HoldReason, money: Money) => ({
+const transition = (to: Reachable, from: TransactionStatus) => ({
+  from,
+  to,
+  transactionId: 'txn_abc123',
+})
+const move = (to: 'failed' | 'success', from: TransactionStatus = 'pending') => ({
+  kind: 'move',
+  transition: transition(to, from),
+})
+const hold = (why: HoldReason, money: Money, from: TransactionStatus = 'pending') => ({
   kind: 'hold',
   received: MONEY[money],
-  transition: transition('held'),
+  transition: transition('held', from),
   why,
 })
 
@@ -110,7 +117,20 @@ const PLAN_TABLE: [TransactionStatus, Settling['kind'], Record<Money, Expected>]
   ['success', 'succeeded', each(absorb('success', 'replay'))],
   ['success', 'failed', each(absorb('success', 'contradiction'))],
   ['success', 'expired', each(absorb('success', 'contradiction'))],
-  ['failed', 'succeeded', each(absorb('failed', 'contradiction'))],
+  [
+    'failed',
+    'succeeded',
+    {
+      'another amount': hold('amount_mismatch', 'another amount', 'failed'),
+      'another amount and currency': hold(
+        'currency_mismatch',
+        'another amount and currency',
+        'failed',
+      ),
+      'another currency': hold('currency_mismatch', 'another currency', 'failed'),
+      'same money': move('success', 'failed'),
+    },
+  ],
   ['failed', 'failed', each(absorb('failed', 'replay'))],
   ['failed', 'expired', each(absorb('failed', 'replay'))],
   [
@@ -170,6 +190,15 @@ function sequences(maxLength: number): Step[][] {
   return all
 }
 
+/** Each status other than `to`, with each one step that moves it into `to`. */
+const movesInto = (to: TransactionStatus) =>
+  TRANSACTION_STATUSES.filter((start) => start !== to).flatMap((start) =>
+    STEP_KINDS.filter((step) => apply(start, step) === to).map((step) => [start, step]),
+  )
+
+const PAYING_STEPS = new Set<Step>(['mismatched', 'succeeded'])
+const paid = (sequence: readonly Step[]) => sequence.some((step) => PAYING_STEPS.has(step))
+
 const neverDecreases = (trail: readonly TransactionStatus[]) =>
   trail.every((status, index) => index === 0 || RANK[status] >= RANK[trail[index - 1]!])
 
@@ -221,16 +250,40 @@ describe('any sequence of outcomes', () => {
     expect(violations).toStrictEqual([])
   })
 
-  it('never leaves held, and reaches it only from pending through a mismatched success', () => {
+  it('never leaves held, and reaches it only through a mismatched success', () => {
     expect.hasAssertions()
 
     const leftHeld = all.filter((sequence) => run('held', sequence).some((s) => s !== 'held'))
-    const intoHeld = TRANSACTION_STATUSES.filter((start) => start !== 'held').flatMap((start) =>
-      STEP_KINDS.filter((step) => apply(start, step) === 'held').map((step) => [start, step]),
-    )
 
     expect(leftHeld).toStrictEqual([])
-    expect(intoHeld).toStrictEqual([['pending', 'mismatched']])
+    expect(movesInto('held')).toStrictEqual([
+      ['pending', 'mismatched'],
+      ['failed', 'mismatched'],
+    ])
+  })
+
+  it('never leaves success, and reaches it only through a matching success', () => {
+    expect.hasAssertions()
+
+    const leftSuccess = all.filter((sequence) =>
+      run('success', sequence).some((s) => s !== 'success'),
+    )
+
+    expect(leftSuccess).toStrictEqual([])
+    expect(movesInto('success')).toStrictEqual([
+      ['pending', 'succeeded'],
+      ['failed', 'succeeded'],
+    ])
+  })
+
+  it.each(TRANSACTION_STATUSES)('from %s never ends failed once a success arrived', (start) => {
+    expect.hasAssertions()
+
+    const failedAfterPaying = all
+      .filter((sequence) => paid(sequence))
+      .filter((sequence) => run(start, sequence).at(-1) === 'failed')
+
+    expect(failedAfterPaying).toStrictEqual([])
   })
 
   it.each(TRANSACTION_STATUSES)('from %s ends where its replay ends', (start) => {

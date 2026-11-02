@@ -31,17 +31,17 @@ describe('the transaction status machine', () => {
     expect(inverseLists(from, to)).toBe(listed)
   })
 
-  it('moves only out of pending, and never back into it', () => {
+  it('moves out of pending, lets a success correct failed, and never returns to pending', () => {
     expect.hasAssertions()
 
-    expect(sourcesOf('success')).toStrictEqual(['pending'])
+    expect(sourcesOf('success')).toStrictEqual(['pending', 'failed'])
     expect(sourcesOf('failed')).toStrictEqual(['pending'])
-    expect(sourcesOf('held')).toStrictEqual(['pending'])
+    expect(sourcesOf('held')).toStrictEqual(['pending', 'failed'])
     expect(TRANSACTION_STATUSES.filter((from) => canMove(from, 'pending'))).toStrictEqual([])
     expectTypeOf<Reachable>().toEqualTypeOf<'failed' | 'held' | 'success'>()
   })
 
-  it.each(['success', 'failed', 'held'] as const)('moves nothing out of %s', (from) => {
+  it.each(['success', 'held'] as const)('moves nothing out of %s', (from) => {
     expect.hasAssertions()
 
     expect(TRANSACTION_STATUSES.filter((to) => canMove(from, to))).toStrictEqual([])

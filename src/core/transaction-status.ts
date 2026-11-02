@@ -2,7 +2,7 @@ export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'held'] as 
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number]
 
 export const TRANSITIONS = {
-  failed: [],
+  failed: ['success', 'held'],
   held: [],
   pending: ['success', 'failed', 'held'],
   success: [],

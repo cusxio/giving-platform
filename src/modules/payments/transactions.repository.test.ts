@@ -96,18 +96,22 @@ describe('the settlement statements', () => {
     })
   })
 
-  it.each(['success', 'failed', 'held'] as const)(
+  it.each([
+    ['success', 'in ($4, $5)', ['pending', 'failed']],
+    ['failed', 'in ($4)', ['pending']],
+    ['held', 'in ($4, $5)', ['pending', 'failed']],
+  ] as const)(
     'moves into %s only from the statuses the table lists',
-    async (to) => {
+    async (to, sources, params) => {
       expect.hasAssertions()
 
       const [statement] = await sent((db) => db.run(moveTransaction(planned(to))))
 
       expect(statement?.sql).toBe(
         'update "transactions" set "status" = $1, "updated_at" = $2 ' +
-          'where ("transactions"."id" = $3 and "transactions"."status" in ($4)) returning "status"',
+          `where ("transactions"."id" = $3 and "transactions"."status" ${sources}) returning "status"`,
       )
-      expect(statement?.params).toStrictEqual([to, expect.any(String), TRANSACTION_ID, 'pending'])
+      expect(statement?.params).toStrictEqual([to, expect.any(String), TRANSACTION_ID, ...params])
     },
   )
 })

@@ -169,10 +169,10 @@ describe('recording a payment outcome', () => {
   it('absorbs an answer that contradicts a final status without writing', async () => {
     expect.hasAssertions()
 
-    const db = storedAs('user', 'failed')
-    const result = await record(db, succeeded(newCard))
+    const db = storedAs('user', 'success')
+    const result = await record(db, failed())
 
-    expect(okValue(result)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'contradiction' })
+    expect(okValue(result)).toStrictEqual({ at: 'success', kind: 'absorbed', why: 'contradiction' })
     expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
   })
 
@@ -404,6 +404,7 @@ describe('a success whose money does not match the row', () => {
           amount_in_cents: paid.amountInCents,
           currency: paid.currency,
           event,
+          from: 'pending',
           level: 50,
           method: 'CC',
           provider_txn_id: 'CIVtxn_abc123',
@@ -423,5 +424,120 @@ describe('a success whose money does not match the row', () => {
     const { span } = await inRequestSpan(() => record(storedAs('guest'), succeeded()))
 
     expect(span.status.code).toBe(SpanStatusCode.UNSET)
+  })
+})
+
+describe('a success onto a failed row', () => {
+  it('moves the row to success and records a new payment, keeping the failed one', async () => {
+    expect.hasAssertions()
+
+    const db = storedAs('guest', 'failed')
+    const result = await record(db, succeeded())
+
+    expect(okValue(result)).toStrictEqual({
+      from: 'failed',
+      kind: 'moved',
+      to: 'success',
+      via: 'succeeded',
+    })
+    expect(db.calls).toStrictEqual([
+      { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      {
+        args: [expect.objectContaining({ ...MOVE, from: 'failed' })],
+        name: 'payments.moveTransaction',
+      },
+      { args: [payment()], name: 'payments.insertPayment' },
+    ])
+    expect(db.transactions).toStrictEqual(['commit'])
+  })
+
+  it.each([
+    ['saves a new card', newCard, 'payments.upsertSavedCard'],
+    ['touches a saved card', { kind: 'reused', token: 'tok_saved' }, 'payments.touchSavedCard'],
+  ] as const)("%s from a user's late payment", async (_case, card, write) => {
+    expect.hasAssertions()
+
+    const db = storedAs('user', 'failed')
+    await record(db, succeeded(card))
+
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.moveTransaction',
+      'payments.insertPayment',
+      write,
+    ])
+  })
+
+  it('logs the late success as an error naming the charge, and fails the request span', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const { span } = await inRequestSpan(() =>
+      record(storedAs('guest', 'failed'), succeeded(), logger),
+    )
+
+    expect(events).toStrictEqual([
+      expect.objectContaining({
+        event: 'payment.finalize.late_success',
+        from: 'failed',
+        level: 50,
+        provider_txn_id: 'CIVtxn_abc123',
+        source: 'callback',
+        transaction_id: 'txn_abc123',
+      }),
+    ])
+    expect(span.status.code).toBe(SpanStatusCode.ERROR)
+    expect(span.attributes['error.type']).toBe('payment.finalize.late_success')
+  })
+
+  it('rolls the late success back without the alert when the payment cannot be written', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = storedAs('guest', 'failed').on(insertPayment, () => {
+      throw new Error('insert failed')
+    })
+    const result = await record(db, succeeded(), logger)
+
+    expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.insertPayment' })
+    expect(db.transactions).toStrictEqual(['rollback'])
+    expect(events).toStrictEqual([])
+  })
+
+  it('moves the row to held for other money, with the hold alert naming the failed status', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = storedAs('user', 'failed')
+    const result = await record(db, succeeded(newCard, paidRecord({ amountInCents: 9900 })), logger)
+
+    expect(okValue(result)).toStrictEqual({ kind: 'held', why: 'amount_mismatch' })
+    expect(db.calls).toStrictEqual([
+      { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      {
+        args: [expect.objectContaining({ from: 'failed', to: 'held' })],
+        name: 'payments.moveTransaction',
+      },
+    ])
+    expect(events).toStrictEqual([
+      expect.objectContaining({
+        event: 'payment.finalize.amount_mismatch',
+        from: 'failed',
+        level: 50,
+      }),
+    ])
+  })
+
+  it.each([
+    ['a failure', failed()],
+    ['an expiry', { kind: 'expired', transactionId: 'txn_abc123' }],
+  ] as const)('leaves a failed row as it is on %s', async (_case, outcome) => {
+    expect.hasAssertions()
+
+    const db = storedAs('guest', 'failed')
+    const result = await record(db, outcome)
+
+    expect(okValue(result)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'replay' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
   })
 })

@@ -88,6 +88,7 @@ export function recordOutcome(
             amount_in_cents: plan.received.amountInCents,
             currency: plan.received.currency,
             event: `payment.finalize.${plan.why}`,
+            from: plan.transition.from,
             method: plan.received.method,
             provider_txn_id: plan.received.providerTxnId,
             stored_amount_in_cents: stored.amountInCents,
@@ -125,24 +126,35 @@ export function recordOutcome(
       )
 
       const card = outcome.kind === 'succeeded' ? outcome.card : null
-      if (card === null || stored.createdAs !== 'user') {
-        return Result.ok(recorded)
+      if (card !== null && stored.createdAs === 'user') {
+        yield* Result.await(
+          tx.run(
+            card.kind === 'saved'
+              ? upsertSavedCard({
+                  cardExp: card.card.exp,
+                  cardHolder: card.card.holder,
+                  cardNoMask: card.card.mask,
+                  cardType: card.card.type,
+                  token: card.card.token,
+                  userId: stored.userId,
+                })
+              : touchSavedCard(stored.userId, card.token),
+          ),
+        )
       }
 
-      yield* Result.await(
-        tx.run(
-          card.kind === 'saved'
-            ? upsertSavedCard({
-                cardExp: card.card.exp,
-                cardHolder: card.card.holder,
-                cardNoMask: card.card.mask,
-                cardType: card.card.type,
-                token: card.card.token,
-                userId: stored.userId,
-              })
-            : touchSavedCard(stored.userId, card.token),
-        ),
-      )
+      if (plan.transition.from !== 'pending') {
+        logAlert(
+          deps.logger,
+          {
+            event: 'payment.finalize.late_success',
+            from: plan.transition.from,
+            provider_txn_id: record.providerTxnId,
+            ...logFields,
+          },
+          'Gateway reports a success for a transaction recorded as failed, recording the success',
+        )
+      }
 
       return Result.ok(recorded)
     }),

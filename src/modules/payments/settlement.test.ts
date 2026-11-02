@@ -118,6 +118,103 @@ describe('a success whose money does not match the row, on every channel', () =>
   )
 })
 
+/** One row whose status the writes change, so a test can settle it several times in order. */
+const rowExpiredByTheCron = async () => {
+  let status: 'failed' | 'held' | 'pending' | 'success' = 'pending'
+  const db = createFakeDb()
+    .on(findPendingAmountInCents, () => (status === 'pending' ? STORED_CENTS : undefined))
+    .on(lockTransaction, () => ({
+      amountInCents: STORED_CENTS,
+      createdAs: 'guest',
+      status,
+      userId: 7,
+    }))
+    .on(moveTransaction, ({ to }) => {
+      status = to
+      return { status: to }
+    })
+    .on(insertPayment, () => {})
+  const { events, logger } = recordingLogger()
+  const base = testDeps({ db, logger })
+  const queryStatus = vi.fn<PaymentGateway['queryStatus']>(() =>
+    Promise.resolve(Result.ok({ kind: 'notFound' })),
+  )
+  const deps = { ...base, eghl: { ...base.eghl, queryStatus } }
+  await settlePolled(deps, {
+    amountInCents: STORED_CENTS,
+    createdAt: new Date(Date.now() - 40 * 60_000),
+    transactionId: 'txn_abc123',
+  })
+  const expiredAt = { calls: db.calls.length, events: events.length }
+  queryStatus.mockClear()
+  return {
+    callsSince: () => db.calls.slice(expiredAt.calls).map(({ name }) => name),
+    deps,
+    eventsSince: () => events.slice(expiredAt.events),
+    queryStatus,
+    status: () => status,
+  }
+}
+
+describe('a row the cron expired', () => {
+  it.each(['callback', 'return'] as const)(
+    'becomes success on a signed %s success, with its one payments row and an error alert',
+    async (source) => {
+      expect.hasAssertions()
+
+      const { callsSince, deps, eventsSince, status } = await rowExpiredByTheCron()
+      const expired = status()
+      const settled = await settleReply(
+        deps,
+        { kind: 'settled', outcome: { card: null, kind: 'succeeded', record: paid({}) } },
+        source,
+      )
+
+      expect(okValue(settled)).toStrictEqual({
+        from: 'failed',
+        kind: 'moved',
+        to: 'success',
+        via: 'succeeded',
+      })
+      expect([expired, status()]).toStrictEqual(['failed', 'success'])
+      expect(callsSince()).toStrictEqual([
+        'payments.lockTransaction',
+        'payments.moveTransaction',
+        'payments.insertPayment',
+      ])
+      expect(eventsSince()).toStrictEqual([
+        expect.objectContaining({
+          event: 'payment.finalize.late_success',
+          from: 'failed',
+          level: 50,
+          provider_txn_id: 'CIVtxn_abc123',
+          source,
+        }),
+      ])
+    },
+  )
+
+  it('stays failed on a failed reply, without asking the gateway', async () => {
+    expect.hasAssertions()
+
+    const { callsSince, deps, queryStatus, status } = await rowExpiredByTheCron()
+    const expired = status()
+    const settled = await settleReply(
+      deps,
+      {
+        claim: { kind: 'failed', record: paid({ message: 'Card declined' }) },
+        kind: 'unconfirmed',
+      },
+      'callback',
+    )
+
+    expect(okValue(settled)).toStrictEqual({ kind: 'waiting', why: 'not_pending' })
+    expect([expired, status()]).toStrictEqual(['failed', 'failed'])
+    expect(queryStatus).not.toHaveBeenCalled()
+    expect(callsSince()).toStrictEqual(['payments.findPendingAmountInCents'])
+  })
+})
+
 describe('a held row', () => {
   it('stays held when the cron reads it as expired, should the cron ever select it', async () => {
     expect.hasAssertions()
