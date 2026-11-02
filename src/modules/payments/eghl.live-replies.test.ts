@@ -6,7 +6,8 @@ import { createFakeDb } from '#/server/testing/fake-db'
 import { testDeps } from '#/server/testing/test-deps'
 
 import { handleEghlCallback, handleEghlReturnGet } from './eghl.http.server'
-import { finalStatusOf, inboundActionOf } from './eghl.outcome'
+import { outcomeOf, replyOf } from './eghl.outcome'
+import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema } from './eghl.wire'
 import {
   findPendingAmountInCents,
@@ -15,6 +16,19 @@ import {
 } from './transactions.repository.server'
 
 const { eghl } = testDeps().config
+
+/** The decisions these tests pinned in W0, read off the domain mapping that replaced them. */
+const inboundActionOf = (reply: EghlPaymentResponse) =>
+  ({ pending: 'leave-pending', settled: 'settle-success', unconfirmed: 'confirm-by-query' })[
+    replyOf(reply).kind
+  ]
+
+const finalStatusOf = (answer: EghlQueryResponse) =>
+  outcomeOf(answer).match({
+    err: () => null,
+    ok: (outcome) =>
+      ({ failed: 'failed', notFound: null, pending: null, succeeded: 'success' })[outcome.kind],
+  })
 
 const PAYMENT_ID = 'liveReply00000000001'
 

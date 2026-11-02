@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { Result } from 'better-result'
+import type { Logger } from 'pino'
 import queryString from 'query-string'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
@@ -17,6 +18,7 @@ import {
   EghlVerificationError,
   ParseError,
 } from './eghl.errors'
+import { isUnexpectedForSale, outcomeOf, replyOf } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
@@ -65,7 +67,22 @@ type SignedReply = Pick<
 
 type HashValue2Field = 'HashValue2' | 'OrderNumber' | 'Param6' | 'Param7'
 
-export function createEghlClient(config: EghlConfig): PaymentGateway {
+function logAnswer(logger: Logger, answer: EghlQueryResponse) {
+  const fields = {
+    event: 'eghl.query.answered',
+    status: answer.TxnStatus,
+    transaction_id: answer.PaymentID,
+    txn_exists: answer.TxnExists,
+  }
+  if (isUnexpectedForSale(answer)) {
+    logger.error(fields, 'Gateway reports a status a sale cannot reach, leaving it pending')
+  } else {
+    logger.info(fields, 'Gateway answered the status query')
+  }
+}
+
+/** The eGHL adapter. It logs each verified reply's and answer's status code through `logger`. */
+export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGateway {
   const hashValueFields = (reply: SignedReply) => [
     config.password,
     reply.TxnID,
@@ -158,7 +175,18 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
           catch: parseFailed,
           try: () => EghlPaymentResponseSchema.Parse(fields),
         })
-        return matchesHashValue2(reply) ? Result.ok(reply) : Result.err(new EghlVerificationError())
+        if (!matchesHashValue2(reply)) {
+          return Result.err(new EghlVerificationError())
+        }
+        logger.info(
+          {
+            event: 'eghl.reply.verified',
+            status: reply.TxnStatus,
+            transaction_id: reply.PaymentID,
+          },
+          'Gateway reply signature verified',
+        )
+        return Result.ok(replyOf(reply))
       }),
 
     queryStatus: ({ transactionId, amountInCents }) =>
@@ -217,7 +245,8 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
           return Result.err(new EghlQueryMismatchError())
         }
 
-        return Result.ok(reply)
+        logAnswer(logger, reply)
+        return outcomeOf(reply)
       }),
   }
 }

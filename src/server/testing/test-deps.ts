@@ -14,6 +14,7 @@ const eghl = {
 
 /** Deps for a workflow test. Nothing touches env, the network, or a database unless overridden. */
 export function testDeps(overrides: Partial<Deps> = {}): Deps {
+  const logger = overrides.logger ?? pino({ level: 'silent' })
   return {
     config: {
       cronSecret: 'test-cron-secret',
@@ -21,9 +22,9 @@ export function testDeps(overrides: Partial<Deps> = {}): Deps {
       mail: { apiKey: undefined, rootDomain: undefined },
     },
     db: createFakeDb(),
-    eghl: createEghlClient(eghl),
+    eghl: createEghlClient(eghl, logger),
     hashToken: (raw) => `hashed:${raw}`,
-    logger: pino({ level: 'silent' }),
+    logger,
     mailer: { send: () => Promise.reject(new Error('testDeps has no mailer; pass one in')) },
     ...overrides,
   }

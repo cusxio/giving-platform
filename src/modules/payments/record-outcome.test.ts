@@ -7,38 +7,41 @@ import { createFakeDb } from '#/server/testing/fake-db'
 import { errValue, okValue } from '#/server/testing/result'
 import { testDeps } from '#/server/testing/test-deps'
 
-import type { EghlPaymentResponse } from './eghl.wire'
-import { EghlTxnStatus } from './eghl.wire'
+import type { CardUse, PaymentRecord, Settling } from './payment-outcome'
 import { recordOutcome } from './record-outcome.server'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
 import { insertPayment, settleTransaction } from './transactions.repository.server'
 
 const NOW = new Date('2026-10-31T04:00:00Z')
 
-const reply = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymentResponse => ({
-  Amount: '50.00',
-  CurrencyCode: 'MYR',
-  HashValue: 'hash',
-  HashValue2: 'hash2',
-  OrderNumber: 'txn_abc123',
-  PaymentID: 'txn_abc123',
-  PymtMethod: 'CC',
-  RespTime: '2026-10-31 11:30:00',
-  ServiceID: 'service-123',
-  TransactionType: 'SALE',
-  TxnID: 'CIVtxn_abc123',
-  TxnMessage: 'Transaction Successful',
-  TxnStatus: EghlTxnStatus.Success,
+const paidRecord = (overrides: Partial<PaymentRecord> = {}): PaymentRecord => ({
+  amountInCents: 5000,
+  currency: 'MYR',
+  message: 'Transaction Successful',
+  method: 'CC',
+  paidAt: new Date('2026-10-31T03:30:00Z'),
+  providerTxnId: 'CIVtxn_abc123',
+  transactionId: 'txn_abc123',
   ...overrides,
 })
 
-const newCard = {
-  CardExp: '209912',
-  CardHolder: 'ADA LOVELACE',
-  CardNoMask: '411111******1111',
-  CardType: 'VISA',
-  Token: 'tok_new',
-  TokenType: 'OCP',
+const succeeded = (card: CardUse | null = null, record = paidRecord()): Settling => ({
+  card,
+  kind: 'succeeded',
+  record,
+})
+
+const failed = (): Settling => ({ kind: 'failed', record: paidRecord() })
+
+const newCard: CardUse = {
+  card: {
+    exp: '209912',
+    holder: 'ADA LOVELACE',
+    mask: '411111******1111',
+    token: 'tok_new',
+    type: 'VISA',
+  },
+  kind: 'saved',
 }
 
 /** A db whose pending transaction belongs to user 7, created as `createdAs`. */
@@ -60,15 +63,10 @@ const payment = (overrides: Record<string, unknown> = {}) => ({
 })
 
 /** Runs recordOutcome with the clock at NOW. */
-const record = async (
-  db: FakeDb,
-  response: EghlPaymentResponse,
-  status: 'failed' | 'success',
-  logger?: Logger,
-) => {
+const record = async (db: FakeDb, outcome: Settling, logger?: Logger) => {
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
   try {
-    return await recordOutcome(testDeps({ db, ...(logger && { logger }) }), response, status)
+    return await recordOutcome(testDeps({ db, ...(logger && { logger }) }), outcome)
   } finally {
     vi.useRealTimers()
   }
@@ -79,11 +77,10 @@ describe('recording a payment outcome', () => {
     expect.hasAssertions()
 
     const db = pendingFor('guest')
-    const result = await record(db, reply(), 'success')
+    const result = await record(db, succeeded())
 
     expect(okValue(result)).toStrictEqual({ finalized: true })
     expect(db.transactions).toStrictEqual(['commit'])
-    // paidAt is a TZDate, which toStrictEqual would not equate with a Date of the same time.
     expect(db.calls).toMatchObject([
       { args: ['txn_abc123', 'success'], name: 'payments.settleTransaction' },
       { args: [payment()], name: 'payments.insertPayment' },
@@ -94,7 +91,7 @@ describe('recording a payment outcome', () => {
     expect.hasAssertions()
 
     const db = createFakeDb().on(settleTransaction, () => null)
-    const result = await record(db, reply(), 'failed')
+    const result = await record(db, failed())
 
     expect(okValue(result)).toStrictEqual({ finalized: false })
     expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.settleTransaction'])
@@ -104,7 +101,7 @@ describe('recording a payment outcome', () => {
     expect.hasAssertions()
 
     const db = pendingFor('user')
-    await record(db, reply(newCard), 'success')
+    await record(db, succeeded(newCard))
 
     expect(db.calls.at(-1)).toStrictEqual({
       args: [
@@ -125,7 +122,7 @@ describe('recording a payment outcome', () => {
     expect.hasAssertions()
 
     const db = pendingFor('user')
-    await record(db, reply({ Token: 'tok_saved', TokenType: 'OCP' }), 'success')
+    await record(db, succeeded({ kind: 'reused', token: 'tok_saved' }))
 
     expect(db.calls.at(-1)).toStrictEqual({
       args: [7, 'tok_saved'],
@@ -134,13 +131,14 @@ describe('recording a payment outcome', () => {
   })
 
   it.each([
-    ['a guest payment', 'guest', 'success'],
-    ['a failed payment', 'user', 'failed'],
-  ] as const)('saves no card for %s', async (_case, createdAs, status) => {
+    ['a guest payment', 'guest', succeeded(newCard)],
+    ['a failed payment', 'user', failed()],
+    ['a payment with no one-click card', 'user', succeeded(null)],
+  ] as const)('saves no card for %s', async (_case, createdAs, outcome) => {
     expect.hasAssertions()
 
     const db = pendingFor(createdAs)
-    await record(db, reply(newCard), status)
+    await record(db, outcome)
 
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
       'payments.settleTransaction',
@@ -148,34 +146,15 @@ describe('recording a payment outcome', () => {
     ])
   })
 
-  it('saves no card when the token is not a one-click payment token', async () => {
-    expect.hasAssertions()
-
-    const db = pendingFor('user')
-    await record(db, reply({ ...newCard, TokenType: 'OTHER' }), 'success')
-
-    expect(db.calls.map(({ name }) => name)).toStrictEqual([
-      'payments.settleTransaction',
-      'payments.insertPayment',
-    ])
-  })
-
-  it.each([
-    [
-      'RespTime2 when RespTime is absent',
-      { RespTime: undefined, RespTime2: '2026-10-30 08:00:00' },
-      new Date('2026-10-30T00:00:00Z'),
-    ],
-    ['now when the reply has no time', { RespTime: undefined }, NOW],
-    ['now when the time does not parse', { RespTime: 'not a time' }, NOW],
-  ])('records the payment time from %s', async (_case, overrides, paidAt) => {
+  it('records the payment at the time of recording when the gateway gave none', async () => {
     expect.hasAssertions()
 
     const db = pendingFor('guest')
-    await record(db, reply(overrides), 'success')
+    await record(db, succeeded(null, paidRecord({ paidAt: null })))
 
+    // now() is a TZDate, which toStrictEqual would not equate with a Date of the same time.
     expect(db.calls[1]).toMatchObject({
-      args: [payment({ paidAt })],
+      args: [payment({ paidAt: NOW })],
       name: 'payments.insertPayment',
     })
   })
@@ -188,7 +167,7 @@ describe('recording a payment outcome', () => {
       .on(insertPayment, () => {
         throw new Error('insert failed')
       })
-    const result = await record(db, reply(), 'success')
+    const result = await record(db, succeeded())
 
     expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.insertPayment' })
     expect(db.transactions).toStrictEqual(['rollback'])
@@ -200,7 +179,7 @@ describe('recording a payment outcome', () => {
     const db = pendingFor('user').on(upsertSavedCard, () => {
       throw new Error('upsert failed')
     })
-    const result = await record(db, reply(newCard), 'success')
+    const result = await record(db, succeeded(newCard))
 
     expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.upsertSavedCard' })
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
@@ -224,7 +203,7 @@ describe('recording a payment outcome', () => {
       },
     )
     const db = createFakeDb().on(settleTransaction, () => null)
-    await record(db, reply(), 'success', logger)
+    await record(db, succeeded(), logger)
 
     expect(events).toMatchObject([
       { event: 'payment.finalize.idempotent', transaction_id: 'txn_abc123' },

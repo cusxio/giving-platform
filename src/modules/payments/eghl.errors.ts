@@ -34,6 +34,7 @@ export type EghlReplyError =
 
 export type EghlQueryError =
   | EghlFetchError
+  | EghlGatewayBusyError
   | EghlQueryMismatchError
   | EghlQueryResponseError
   | EghlServerError

@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto'
 
+import { pino } from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
+import { recordingLogger } from '#/server/testing/recording-logger'
 import { errValue, okValue } from '#/server/testing/result'
 
 import { createEghlClient } from './eghl.gateway.server'
 import type { EghlPaymentResponse } from './eghl.wire'
-import { EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 
 const config = {
   baseUrl: 'https://app.give.test',
@@ -14,6 +16,8 @@ const config = {
   serviceId: 'service-123',
   url: 'https://eghl.test/pay',
 }
+
+const silent = pino({ level: 'silent' })
 
 const hashValue = (value: string) => createHash('sha256').update(value).digest('hex')
 
@@ -50,7 +54,7 @@ describe('the eGHL client', () => {
   it('builds a signed payment request that eGHL accepts', () => {
     expect.hasAssertions()
 
-    const url = createEghlClient(config).paymentRequestUrl(request)
+    const url = createEghlClient(config, silent).paymentRequestUrl(request)
 
     const parsed = new URL(url)
     expect(`${parsed.origin}${parsed.pathname}`).toBe(config.url)
@@ -74,7 +78,10 @@ describe('the eGHL client', () => {
   it('charges a saved card by its token, signing the token too', () => {
     expect.hasAssertions()
 
-    const url = createEghlClient(config).paymentRequestUrl({ ...request, token: 'tok_visa' })
+    const url = createEghlClient(config, silent).paymentRequestUrl({
+      ...request,
+      token: 'tok_visa',
+    })
 
     const params = new URL(url).searchParams
     expect(params.get('Token')).toBe('tok_visa')
@@ -177,18 +184,18 @@ const existingTransactionReply = (overrides: Partial<EghlPaymentResponse> = {}) 
   }).toString()
 }
 
-const readReturn = (response: EghlPaymentResponse) =>
-  createEghlClient(config).readReply(
+const readReturn = (response: EghlPaymentResponse, logger = silent) =>
+  createEghlClient(config, logger).readReply(
     new Request(`${expectedReturnURL}?${new URLSearchParams(response).toString()}`),
   )
 
-const queryAgainstGatewayReply = async (body: string) => {
+const queryAgainstGatewayReply = async (body: string, logger = silent) => {
   vi.stubGlobal(
     'fetch',
     vi.fn<typeof fetch>(() => Promise.resolve(new Response(body, { status: 200 }))),
   )
   try {
-    return await createEghlClient(config).queryStatus({
+    return await createEghlClient(config, logger).queryStatus({
       amountInCents: 5000,
       transactionId: 'txn_abc123',
     })
@@ -199,11 +206,37 @@ const queryAgainstGatewayReply = async (body: string) => {
 
 describe('the eGHL client reading replies', () => {
   describe('readReply', () => {
-    it('returns the reply when it is signed by eGHL', async () => {
+    it('returns what a reply signed by eGHL says, in domain terms', async () => {
       expect.hasAssertions()
       const response = buildResponse()
 
-      expect(okValue(await readReturn(response))).toMatchObject(response)
+      expect(okValue(await readReturn(response))).toStrictEqual({
+        kind: 'settled',
+        outcome: {
+          card: null,
+          kind: 'succeeded',
+          record: {
+            amountInCents: 5000,
+            currency: 'MYR',
+            message: 'Transaction Successful',
+            method: 'ANY',
+            paidAt: null,
+            providerTxnId: 'CIVtxn_abc123',
+            transactionId: 'txn_abc123',
+          },
+        },
+      })
+    })
+
+    it('logs the status code of a signed reply', async () => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      await readReturn(buildResponse({ TxnStatus: EghlTxnStatus.Failed }), logger)
+
+      expect(events).toMatchObject([
+        { event: 'eghl.reply.verified', level: 30, status: '1', transaction_id: 'txn_abc123' },
+      ])
     })
 
     it('rejects the reply when the signature is missing', async () => {
@@ -228,20 +261,20 @@ describe('the eGHL client reading replies', () => {
       expect.hasAssertions()
       const response = buildResponse()
 
-      const result = await createEghlClient(config).readReply(
+      const result = await createEghlClient(config, silent).readReply(
         new Request(expectedCallbackURL, {
           body: new URLSearchParams(response).toString(),
           method: 'POST',
         }),
       )
 
-      expect(okValue(result)).toMatchObject(response)
+      expect(okValue(result)).toMatchObject({ kind: 'settled' })
     })
 
     it('rejects a reply that is not a GET or a POST', async () => {
       expect.hasAssertions()
 
-      const result = await createEghlClient(config).readReply(
+      const result = await createEghlClient(config, silent).readReply(
         new Request(expectedCallbackURL, { method: 'PUT' }),
       )
 
@@ -263,7 +296,7 @@ describe('the eGHL client reading replies', () => {
 
       const result = await queryAgainstGatewayReply(hashValueOnlyReply())
 
-      expect(okValue(result)).toMatchObject({ TxnExists: EghlTxnExists.NotFound, TxnStatus: '-1' })
+      expect(okValue(result)).toStrictEqual({ kind: 'notFound' })
     })
 
     it('rejects a not-found reply whose HashValue does not match', async () => {
@@ -302,11 +335,61 @@ describe('the eGHL client reading replies', () => {
       const result = await queryAgainstGatewayReply(existingTransactionReply())
 
       expect(okValue(result)).toMatchObject({
-        Amount: '50.00',
-        PaymentID: 'txn_abc123',
-        TxnStatus: EghlTxnStatus.Failed,
+        kind: 'failed',
+        record: { amountInCents: 5000, transactionId: 'txn_abc123' },
       })
     })
+
+    it('answers a verified internal error as a busy gateway', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({
+          TxnExists: EghlTxnExists.InternalError,
+          TxnStatus: EghlQueryTxnStatus.InternalError,
+        }),
+      )
+
+      expect(errValue(result)).toMatchObject({
+        _tag: 'EghlGatewayBusyError',
+        queryDesc: 'Not found',
+      })
+    })
+
+    it('logs the status code of a verified answer', async () => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      await queryAgainstGatewayReply(existingTransactionReply(), logger)
+
+      expect(events).toMatchObject([
+        {
+          event: 'eghl.query.answered',
+          level: 30,
+          status: '1',
+          transaction_id: 'txn_abc123',
+          txn_exists: '0',
+        },
+      ])
+    })
+
+    it.each([EghlQueryTxnStatus.Authorized, EghlQueryTxnStatus.Captured])(
+      'leaves a sale the gateway reports with status %s pending, and logs it as an error',
+      async (TxnStatus) => {
+        expect.hasAssertions()
+        const { events, logger } = recordingLogger()
+
+        const result = await queryAgainstGatewayReply(
+          existingTransactionReply({ TxnStatus } as unknown as Partial<EghlPaymentResponse>),
+          logger,
+        )
+
+        expect(okValue(result)).toMatchObject({ kind: 'pending' })
+        expect(events).toMatchObject([
+          { event: 'eghl.query.answered', level: 50, status: TxnStatus },
+        ])
+      },
+    )
 
     it('rejects a verified reply for another payment', async () => {
       expect.hasAssertions()

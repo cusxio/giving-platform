@@ -17,22 +17,24 @@ import { EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 import type { recordOutcome } from './record-outcome.server'
 import { findPendingAmountInCents, insertPayment } from './transactions.repository.server'
 
-type Finalize = (
-  response: Parameters<typeof recordOutcome>[1],
-  status: Parameters<typeof recordOutcome>[2],
-) => ReturnType<typeof recordOutcome>
+type Finalize = (outcome: Parameters<typeof recordOutcome>[1]) => ReturnType<typeof recordOutcome>
 
 /** Stands in for recordOutcome, the one writer, so each test sees what would be settled. */
 const finalizePaymentFromCallback = vi.hoisted(() => vi.fn<Finalize>())
 
 vi.mock(import('./record-outcome.server'), () => ({
-  recordOutcome: (_deps, response, status) => finalizePaymentFromCallback(response, status),
+  recordOutcome: (_deps, outcome) => finalizePaymentFromCallback(outcome),
 }))
 
 const { eghl } = testDeps().config
 
 const TRANSACTION_ID = 'txn_abc123'
 const AMOUNT_IN_CENTS = 5000
+
+/** recordOutcome was asked to settle the stored transaction once, with an outcome of `kind`. */
+const settling = (kind: 'failed' | 'succeeded') => [
+  [{ kind, record: { transactionId: TRANSACTION_ID } }],
+]
 
 const sha256 = (fields: readonly string[]) =>
   createHash('sha256')
@@ -196,10 +198,7 @@ describe('eGHL callback route', () => {
 
     expect(response.status).toBe(200)
     await expect(response.text()).resolves.toBe('OK')
-    expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
-      expect.objectContaining({ PaymentID: TRANSACTION_ID }),
-      'success',
-    )
+    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settling('succeeded'))
   })
 
   it('acknowledges a pending reply without settling the transaction', async () => {
@@ -241,15 +240,14 @@ describe('eGHL callback route', () => {
   it('settles a failed reply as failed once the gateway confirms the failure', async () => {
     expect.hasAssertions()
 
+    const gateway = gatewayAnswering(EghlTxnStatus.Failed, 'Transaction Failed')
     const { finalizePaymentFromCallback, response } = await postCallback(
       signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed'),
-      gatewayAnswering(EghlTxnStatus.Failed, 'Transaction Failed'),
+      gateway,
     )
 
-    expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
-      expect.objectContaining({ PaymentID: TRANSACTION_ID, TransactionType: 'QUERY' }),
-      'failed',
-    )
+    expect(gateway.mock.calls.map(([url]) => url)).toStrictEqual([eghl.url])
+    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settling('failed'))
     await expect(response.text()).resolves.toBe('OK')
   })
 
@@ -261,10 +259,7 @@ describe('eGHL callback route', () => {
       gatewayAnswering(EghlTxnStatus.Success, 'Transaction Successful'),
     )
 
-    expect(finalizePaymentFromCallback).toHaveBeenCalledWith(
-      expect.objectContaining({ PaymentID: TRANSACTION_ID }),
-      'success',
-    )
+    expect(finalizePaymentFromCallback.mock.calls).toMatchObject(settling('succeeded'))
   })
 
   it('rejects a reply whose HashValue2 does not match, whatever fields it adds', async () => {
@@ -617,5 +612,58 @@ describe('a defect while settling', () => {
     })
     expect(events.some(({ event }) => event?.endsWith('.defect') === true)).toBe(false)
     expect(span.status.code).toBe(SpanStatusCode.UNSET)
+  })
+})
+
+const eghlEvents = (events: { event?: string }[]) =>
+  events.filter(({ event }) => event?.startsWith('eghl.') === true)
+
+describe('logging a verified reply', () => {
+  it('logs the amount in cents while processing, and leaves the wire status to the adapter', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    await handleEghlCallback(stubPaymentService(logger), post(CALLBACK_URL, successBody()))
+
+    expect(eghlEvents(events)).toMatchObject([
+      { event: 'eghl.callback.received' },
+      { event: 'eghl.reply.verified', status: '0', transaction_id: TRANSACTION_ID },
+      {
+        amount_in_cents: AMOUNT_IN_CENTS,
+        event: 'eghl.callback.processing',
+        provider_txn_id: `CIV${TRANSACTION_ID}`,
+        transaction_id: TRANSACTION_ID,
+      },
+      { event: 'eghl.callback.success' },
+    ])
+    expect(events.find(({ event }) => event === 'eghl.callback.processing')).not.toHaveProperty(
+      'status',
+    )
+  })
+
+  it('logs the answer the gateway gave to the confirming query', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    await withGateway(gatewayAnswering(EghlTxnStatus.Pending, 'Transaction Pending'), async () =>
+      handleEghlCallback(
+        stubPaymentService(logger),
+        post(CALLBACK_URL, signedCallbackBody(EghlTxnStatus.Failed, 'Transaction Failed')),
+      ),
+    )
+
+    expect(eghlEvents(events)).toMatchObject([
+      { event: 'eghl.callback.received' },
+      { event: 'eghl.reply.verified', status: '1' },
+      { amount_in_cents: AMOUNT_IN_CENTS, event: 'eghl.callback.processing' },
+      {
+        event: 'eghl.query.answered',
+        status: '2',
+        transaction_id: TRANSACTION_ID,
+        txn_exists: '0',
+      },
+      { event: 'eghl.settlement.not_final', transaction_id: TRANSACTION_ID },
+      { event: 'eghl.callback.success' },
+    ])
   })
 })

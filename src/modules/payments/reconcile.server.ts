@@ -3,8 +3,7 @@ import type { Deps } from '#/server/deps.server'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlQueryError } from './eghl.errors'
-import { finalStatusOf } from './eghl.outcome'
-import { EghlTxnExists } from './eghl.wire'
+import { EghlGatewayBusyError } from './eghl.errors'
 import { recordOutcome } from './record-outcome.server'
 import {
   markPendingTransactionsFailed,
@@ -22,8 +21,11 @@ const LOG_EVENTS = {
 }
 
 /** How a failed status query is logged: its tag, and the error behind it when there is one. */
-const queryFailureFields = (error: EghlQueryError) =>
-  error.match<EghlQueryError, { 'error.type': string; err?: unknown }>({
+const queryFailureFields = (error: Exclude<EghlQueryError, EghlGatewayBusyError>) =>
+  error.match<
+    Exclude<EghlQueryError, EghlGatewayBusyError>,
+    { 'error.type': string; err?: unknown }
+  >({
     EghlFetchError: ({ _tag, cause }) => ({ 'error.type': _tag, err: cause }),
     EghlQueryMismatchError: ({ _tag }) => ({ 'error.type': _tag }),
     EghlQueryResponseError: ({ _tag }) => ({ 'error.type': _tag }),
@@ -68,37 +70,34 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
     })
 
     if (result.isErr()) {
-      logger.error(
-        {
-          ...queryFailureFields(result.error),
-          event: LOG_EVENTS.QUERY_FAILED,
-          transaction_id: pendingTransaction.transactionId,
-        },
-        'Failed to query eGHL status',
-      )
+      const { error } = result
+      if (EghlGatewayBusyError.is(error)) {
+        logger.warn(
+          {
+            event: LOG_EVENTS.QUERY_FAILED,
+            query_desc: error.queryDesc,
+            transaction_id: pendingTransaction.transactionId,
+          },
+          'eGHL returned internal error. Will retry on next run',
+        )
+      } else {
+        logger.error(
+          {
+            ...queryFailureFields(error),
+            event: LOG_EVENTS.QUERY_FAILED,
+            transaction_id: pendingTransaction.transactionId,
+          },
+          'Failed to query eGHL status',
+        )
+      }
       errorCount++
       continue
     }
 
-    const eghlResponse = result.value
-
-    // EGHL internal error - skip and retry on next cron run
-    if (eghlResponse.TxnExists === EghlTxnExists.InternalError) {
-      logger.warn(
-        {
-          event: LOG_EVENTS.QUERY_FAILED,
-          query_desc: eghlResponse.QueryDesc,
-          transaction_id: pendingTransaction.transactionId,
-          txn_exists: eghlResponse.TxnExists,
-        },
-        'eGHL returned internal error. Will retry on next run',
-      )
-      errorCount++
-      continue
-    }
+    const outcome = result.value
 
     // Transaction not found at eGHL
-    if (eghlResponse.TxnExists === EghlTxnExists.NotFound) {
+    if (outcome.kind === 'notFound') {
       // SAFEGUARD: Only mark as failed if it's older than 30 minutes.
       // This accounts for the 10-minute gateway timeout + buffers.
       if (isBefore(pendingTransaction.createdAt, addMinutes(now(), -30))) {
@@ -118,15 +117,9 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
       continue
     }
 
-    const finalStatus = finalStatusOf(eghlResponse)
-
-    if (finalStatus === null) {
+    if (outcome.kind === 'pending') {
       logger.info(
-        {
-          event: LOG_EVENTS.STILL_PENDING,
-          status: eghlResponse.TxnStatus,
-          transaction_id: eghlResponse.PaymentID,
-        },
+        { event: LOG_EVENTS.STILL_PENDING, transaction_id: pendingTransaction.transactionId },
         'Gateway status does not settle the transaction. Skipping',
       )
       continue
@@ -134,21 +127,17 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
 
     // Success or Failed at eGHL -> Sync to DB
     logger.info(
-      {
-        event: LOG_EVENTS.SYNCING_STATUS,
-        status: eghlResponse.TxnStatus,
-        transaction_id: eghlResponse.PaymentID,
-      },
+      { event: LOG_EVENTS.SYNCING_STATUS, transaction_id: pendingTransaction.transactionId },
       'Final status found at gateway. Finalizing',
     )
 
     // Sequential by design: payment finalization has DB side effects and should be throttled.
     // oxlint-disable-next-line no-await-in-loop
-    const finalizationResult = await recordOutcome(deps, eghlResponse, finalStatus)
+    const finalizationResult = await recordOutcome(deps, outcome)
 
     if (finalizationResult.isErr()) {
       logInfraFailure(logger, 'eghl.cron', finalizationResult.error, {
-        transaction_id: eghlResponse.PaymentID,
+        transaction_id: pendingTransaction.transactionId,
       })
       errorCount++
       continue

@@ -8,29 +8,25 @@ import { recordingLogger } from '#/server/testing/recording-logger'
 import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
-import { EghlServerError } from './eghl.errors'
-import type { EghlQueryResponse } from './eghl.wire'
-import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+import { EghlGatewayBusyError, EghlServerError } from './eghl.errors'
 import type { PaymentGateway } from './gateway'
+import type { PaymentOutcome, Settling } from './payment-outcome'
 import { handleReconcile } from './reconcile.server'
 import type { recordOutcome } from './record-outcome.server'
 
 type FinalizeResult = Awaited<ReturnType<typeof recordOutcome>>
 
 const settlement = vi.hoisted(() => ({
-  finalize: (_response: unknown, _status: unknown): Promise<FinalizeResult> => {
+  finalize: (_outcome: unknown): Promise<FinalizeResult> => {
     throw new Error('runCron sets finalize')
   },
 }))
 
 vi.mock(import('./record-outcome.server'), () => ({
-  recordOutcome: (_deps, response, status) => settlement.finalize(response, status),
+  recordOutcome: (_deps, outcome) => settlement.finalize(outcome),
 }))
 
 const settings = { CRON_SECRET: 'cron-secret', EGHL_SERVICE_ID: testDeps().config.eghl.serviceId }
-
-const { Exists, InternalError, NotFound } = EghlTxnExists
-const { InternalError: QueryInternalError, NotFound: QueryNotFound } = EghlQueryTxnStatus
 
 const NOW = new Date('2025-06-01T12:00:00Z')
 const minutesAgo = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000)
@@ -94,28 +90,22 @@ const fakeDb = (
   return { db: createDriverDb(client), statements }
 }
 
-const queryReply = (
-  PaymentID: string,
-  TxnExists: EghlTxnExists,
-  TxnStatus: EghlQueryTxnStatus | EghlTxnStatus,
-  TxnMessage = '',
-) =>
-  ({
-    Amount: '50.00',
-    CurrencyCode: 'MYR',
-    HashValue: 'hash',
-    HashValue2: 'hash2',
-    OrderNumber: PaymentID,
-    PaymentID,
-    PymtMethod: 'ANY',
-    QueryDesc: 'desc',
-    ServiceID: settings.EGHL_SERVICE_ID,
-    TransactionType: 'QUERY',
-    TxnExists,
-    TxnID: `CIV${PaymentID}`,
-    TxnMessage,
-    TxnStatus,
-  }) as EghlQueryResponse
+/** What the gateway says about `transactionId`, as the port reports it. */
+const answer = (
+  transactionId: string,
+  kind: 'failed' | 'pending' | 'succeeded',
+): PaymentOutcome => {
+  const record = {
+    amountInCents: 5000,
+    currency: 'MYR',
+    message: '',
+    method: 'ANY',
+    paidAt: null,
+    providerTxnId: `CIV${transactionId}`,
+    transactionId,
+  }
+  return kind === 'succeeded' ? { card: null, kind, record } : { kind, record }
+}
 
 type QueryResult = Awaited<ReturnType<PaymentGateway['queryStatus']>>
 
@@ -128,10 +118,10 @@ const gatewayAnswering = (replies: Record<string, QueryResult>) =>
 /** Finalizes every reply as a fresh settlement unless `outcomes` names its PaymentID. */
 const finalizeBy =
   (outcomes: Record<string, FinalizeResult> = {}) =>
-  (response: EghlQueryResponse) =>
-    Promise.resolve(outcomes[response.PaymentID] ?? Result.ok({ finalized: true }))
+  (outcome: Settling) =>
+    Promise.resolve(outcomes[outcome.record.transactionId] ?? Result.ok({ finalized: true }))
 
-const notFound = (id: string) => Result.ok(queryReply(id, NotFound, QueryNotFound))
+const notFound = () => Result.ok<PaymentOutcome>({ kind: 'notFound' })
 
 const runCron = async ({
   authorization = `Bearer ${settings.CRON_SECRET}`,
@@ -141,12 +131,12 @@ const runCron = async ({
 }: {
   authorization?: string | null
   db: ReturnType<typeof fakeDb>['db']
-  finalize?: (response: EghlQueryResponse) => Promise<FinalizeResult>
+  finalize?: (outcome: Settling) => Promise<FinalizeResult>
   replies?: Record<string, QueryResult>
 }) => {
   const queryTransactionStatus = gatewayAnswering(replies)
-  const finalizePaymentFromCallback = vi.fn<typeof settlement.finalize>((response) =>
-    finalize(response as EghlQueryResponse),
+  const finalizePaymentFromCallback = vi.fn<typeof settlement.finalize>((outcome) =>
+    finalize(outcome as Settling),
   )
   settlement.finalize = finalizePaymentFromCallback
   const logger = {
@@ -228,27 +218,20 @@ describe('eGHL cron', () => {
       pending('txn_finalize_error', 40),
     ]
     const reply = {
-      txn_already_final: queryReply('txn_already_final', Exists, EghlTxnStatus.Success),
-      txn_duplicate: queryReply(
-        'txn_duplicate',
-        Exists,
-        EghlTxnStatus.Failed,
-        'Duplicate Payment ID',
-      ),
-      txn_failed: queryReply('txn_failed', Exists, EghlTxnStatus.Failed, 'Card declined'),
-      txn_finalize_error: queryReply('txn_finalize_error', Exists, EghlTxnStatus.Success),
-      txn_internal_error: queryReply('txn_internal_error', InternalError, QueryInternalError),
-      txn_missing_old: queryReply('txn_missing_old', NotFound, QueryNotFound),
-      txn_missing_settled_meanwhile: queryReply(
-        'txn_missing_settled_meanwhile',
-        NotFound,
-        QueryNotFound,
-      ),
-      txn_missing_recent: queryReply('txn_missing_recent', NotFound, QueryNotFound),
-      txn_still_pending: queryReply('txn_still_pending', Exists, EghlTxnStatus.Pending),
-      txn_success: queryReply('txn_success', Exists, EghlTxnStatus.Success),
+      txn_already_final: answer('txn_already_final', 'succeeded'),
+      txn_duplicate: answer('txn_duplicate', 'pending'),
+      txn_failed: answer('txn_failed', 'failed'),
+      txn_finalize_error: answer('txn_finalize_error', 'succeeded'),
+      txn_missing_old: { kind: 'notFound' },
+      txn_missing_settled_meanwhile: { kind: 'notFound' },
+      txn_missing_recent: { kind: 'notFound' },
+      txn_still_pending: answer('txn_still_pending', 'pending'),
+      txn_success: answer('txn_success', 'succeeded'),
     }
-    const replies = Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, Result.ok(r)]))
+    const replies = {
+      ...Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, Result.ok(r)])),
+      txn_internal_error: Result.err(new EghlGatewayBusyError({ queryDesc: 'desc' })),
+    }
     const { db, statements } = fakeDb(rows, { updatedRows: 1 })
 
     const run = await runCron({
@@ -276,10 +259,10 @@ describe('eGHL cron', () => {
       rows.map(({ amountInCents, transactionId }) => ({ amountInCents, transactionId })),
     )
     expect(run.finalizeCalls).toStrictEqual([
-      [reply.txn_success, 'success'],
-      [reply.txn_failed, 'failed'],
-      [reply.txn_already_final, 'success'],
-      [reply.txn_finalize_error, 'success'],
+      [reply.txn_success],
+      [reply.txn_failed],
+      [reply.txn_already_final],
+      [reply.txn_finalize_error],
     ])
     expect(statements.slice(1)).toStrictEqual([
       {
@@ -303,10 +286,7 @@ describe('eGHL cron', () => {
       failOn: 'update',
     })
 
-    const run = await runCron({
-      db,
-      replies: { txn_a: notFound('txn_a'), txn_b: notFound('txn_b') },
-    })
+    const run = await runCron({ db, replies: { txn_a: notFound(), txn_b: notFound() } })
 
     expect(run).toMatchObject({ body: 'ok', status: 200 })
     expect(statements[1]?.params).toStrictEqual([
@@ -338,8 +318,8 @@ describe('eGHL cron', () => {
           txn_a: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
         }),
         replies: {
-          txn_a: Result.ok(queryReply('txn_a', Exists, EghlTxnStatus.Success)),
-          txn_b: Result.ok(queryReply('txn_b', Exists, EghlTxnStatus.Success)),
+          txn_a: Result.ok(answer('txn_a', 'succeeded')),
+          txn_b: Result.ok(answer('txn_b', 'succeeded')),
         },
       }),
     )
@@ -362,7 +342,7 @@ describe('eGHL cron', () => {
     const bug = new TypeError('settlement bug')
     settlement.finalize = () => Promise.reject(bug)
     const base = testDeps()
-    const reply = Result.ok(queryReply('txn_a', Exists, EghlTxnStatus.Success))
+    const reply = Result.ok(answer('txn_a', 'succeeded'))
 
     const { settled, span } = await inRequestSpan(() =>
       handleReconcile(

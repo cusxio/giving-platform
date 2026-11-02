@@ -1,10 +1,44 @@
 import { describe, expect, it } from 'vitest'
 
 import { TZDate } from '#/core/date'
+import { errValue } from '#/server/testing/result'
 
-import { finalStatusOf, inboundActionOf, replyOf } from './eghl.outcome'
-import type { EghlPaymentResponse } from './eghl.wire'
+import { outcomeOf, replyOf } from './eghl.outcome'
+import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
 import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
+
+const paid = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymentResponse => ({
+  Amount: '50.00',
+  CurrencyCode: 'MYR',
+  HashValue: 'hash',
+  HashValue2: 'hash2',
+  OrderNumber: 'txn_abc123',
+  PaymentID: 'txn_abc123',
+  PymtMethod: 'CC',
+  RespTime: '2026-10-31 11:30:00',
+  ServiceID: 'service-123',
+  TransactionType: 'SALE',
+  TxnID: 'CIVtxn_abc123',
+  TxnMessage: 'Transaction Successful',
+  TxnStatus: EghlTxnStatus.Success,
+  ...overrides,
+})
+
+/**
+ * The decisions eGHL replies got before they were mapped to domain values, read off the domain
+ * mapping. The expectations below are the ones written against those decisions, unchanged.
+ */
+const inboundActionOf = (reply: Pick<EghlPaymentResponse, 'TxnStatus'>) =>
+  ({ pending: 'leave-pending', settled: 'settle-success', unconfirmed: 'confirm-by-query' })[
+    replyOf(paid(reply)).kind
+  ]
+
+const finalStatusOf = (answer: Pick<EghlQueryResponse, 'TxnExists' | 'TxnMessage' | 'TxnStatus'>) =>
+  outcomeOf({ ...paid(), TransactionType: 'QUERY', ...answer } as EghlQueryResponse).match({
+    err: () => null,
+    ok: (outcome) =>
+      ({ failed: 'failed', notFound: null, pending: null, succeeded: 'success' })[outcome.kind],
+  })
 
 describe('eGHL inbound reply action', () => {
   it('settles a successful reply directly', () => {
@@ -112,23 +146,6 @@ describe('eGHL query reply finality', () => {
   })
 })
 
-const paid = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymentResponse => ({
-  Amount: '50.00',
-  CurrencyCode: 'MYR',
-  HashValue: 'hash',
-  HashValue2: 'hash2',
-  OrderNumber: 'txn_abc123',
-  PaymentID: 'txn_abc123',
-  PymtMethod: 'CC',
-  RespTime: '2026-10-31 11:30:00',
-  ServiceID: 'service-123',
-  TransactionType: 'SALE',
-  TxnID: 'CIVtxn_abc123',
-  TxnMessage: 'Transaction Successful',
-  TxnStatus: EghlTxnStatus.Success,
-  ...overrides,
-})
-
 const newCard = {
   CardExp: '209912',
   CardHolder: 'ADA LOVELACE',
@@ -220,5 +237,69 @@ describe('what a paid reply records', () => {
     expect.hasAssertions()
 
     expect(settledOf(paid(overrides)).card).toBeNull()
+  })
+})
+
+const answered = (overrides: Partial<EghlQueryResponse>) =>
+  ({
+    ...paid(),
+    QueryDesc: 'Exists',
+    TransactionType: 'QUERY',
+    TxnExists: EghlTxnExists.Exists,
+    ...overrides,
+  }) as EghlQueryResponse
+
+describe('what a status query answer says', () => {
+  it.each([
+    [EghlTxnStatus.Success, 'Transaction Successful', 'succeeded'],
+    [EghlTxnStatus.Failed, 'Transaction Failed', 'failed'],
+    [EghlTxnStatus.Failed, 'Duplicate Payment ID', 'pending'],
+    [EghlTxnStatus.Pending, '', 'pending'],
+    [EghlQueryTxnStatus.Authorized, '', 'pending'],
+    [EghlQueryTxnStatus.Captured, '', 'pending'],
+    [EghlQueryTxnStatus.Refunded, '', 'pending'],
+    [EghlQueryTxnStatus.Reversed, '', 'pending'],
+    [EghlQueryTxnStatus.ReversalPending, '', 'pending'],
+    [EghlQueryTxnStatus.NotFound, '', 'pending'],
+    [EghlQueryTxnStatus.InternalError, '', 'pending'],
+  ])(
+    'reads an existing payment with status %s and message %j as %s',
+    (TxnStatus, TxnMessage, kind) => {
+      expect.hasAssertions()
+
+      expect(outcomeOf(answered({ TxnMessage, TxnStatus })).unwrap().kind).toBe(kind)
+    },
+  )
+
+  it('reads a payment the gateway never saw as not found', () => {
+    expect.hasAssertions()
+
+    expect(
+      outcomeOf(
+        answered({ TxnExists: EghlTxnExists.NotFound, TxnStatus: EghlQueryTxnStatus.NotFound }),
+      ).unwrap(),
+    ).toStrictEqual({ kind: 'notFound' })
+  })
+
+  it('reads an internal error as a busy gateway, with its description', () => {
+    expect.hasAssertions()
+
+    const busy = outcomeOf(
+      answered({
+        QueryDesc: 'System busy',
+        TxnExists: EghlTxnExists.InternalError,
+        TxnStatus: EghlQueryTxnStatus.InternalError,
+      }),
+    )
+
+    expect(errValue(busy)).toMatchObject({ _tag: 'EghlGatewayBusyError', queryDesc: 'System busy' })
+  })
+
+  it('carries the card a successful answer reports', () => {
+    expect.hasAssertions()
+
+    expect(
+      outcomeOf(answered({ ...newCard, TxnStatus: EghlTxnStatus.Success })).unwrap(),
+    ).toMatchObject({ card: { card: { token: 'tok_new' }, kind: 'saved' }, kind: 'succeeded' })
   })
 })

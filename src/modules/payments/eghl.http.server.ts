@@ -7,8 +7,9 @@ import type { InfraError } from '#/server/infra-error'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import type { EghlReplyError } from './eghl.errors'
-import { finalStatusOf, inboundActionOf } from './eghl.outcome'
-import type { EghlPaymentResponse } from './eghl.wire'
+import { EghlGatewayBusyError } from './eghl.errors'
+import type { GatewayReply, PaymentRecord } from './payment-outcome'
+import { replyRecord } from './payment-outcome'
 import { recordOutcome } from './record-outcome.server'
 import { findPendingAmountInCents } from './transactions.repository.server'
 
@@ -52,33 +53,40 @@ function refuseReply(
 type Settlement = Promise<Result<{ finalized: boolean }, InfraError>>
 
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
-async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentResponse): Settlement {
+async function settleInboundReply(deps: SettlementDeps, reply: GatewayReply): Settlement {
   const { logger } = deps
-  const action = inboundActionOf(reply)
 
-  switch (action) {
-    case 'settle-success': {
-      return recordOutcome(deps, reply, 'success')
+  switch (reply.kind) {
+    case 'settled': {
+      return recordOutcome(deps, reply.outcome)
     }
-    case 'confirm-by-query': {
-      return confirmByQuery(deps, reply.PaymentID)
+    case 'unconfirmed': {
+      return confirmByQuery(deps, reply.claim.record.transactionId)
     }
-    case 'leave-pending': {
+    case 'pending': {
       logger.info(
-        { event: 'eghl.settlement.not_final', transaction_id: reply.PaymentID },
+        { event: 'eghl.settlement.not_final', transaction_id: reply.record.transactionId },
         'Reply does not settle the transaction, leaving it pending',
       )
       return Result.ok({ finalized: false })
     }
     default: {
-      return assertExhaustive(action)
+      return assertExhaustive(reply)
     }
   }
 }
 
+function leftPending(deps: SettlementDeps, transactionId: PaymentRecord['transactionId']) {
+  deps.logger.info(
+    { event: 'eghl.settlement.not_final', transaction_id: transactionId },
+    'Gateway status does not settle the transaction, leaving it pending',
+  )
+  return Result.ok({ finalized: false })
+}
+
 async function confirmByQuery(
   deps: SettlementDeps,
-  transactionId: EghlPaymentResponse['PaymentID'],
+  transactionId: PaymentRecord['transactionId'],
 ): Settlement {
   const { eghl, logger } = deps
   const amountResult = await deps.db.run(findPendingAmountInCents(transactionId))
@@ -91,6 +99,9 @@ async function confirmByQuery(
 
   const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
   if (queryResult.isErr()) {
+    if (EghlGatewayBusyError.is(queryResult.error)) {
+      return leftPending(deps, transactionId)
+    }
     logger.warn(
       {
         'error.type': queryResult.error._tag,
@@ -102,20 +113,20 @@ async function confirmByQuery(
     return Result.ok({ finalized: false })
   }
 
-  const finalStatus = finalStatusOf(queryResult.value)
-  if (finalStatus === null) {
-    logger.info(
-      {
-        event: 'eghl.settlement.not_final',
-        status: queryResult.value.TxnStatus,
-        transaction_id: transactionId,
-      },
-      'Gateway status does not settle the transaction, leaving it pending',
-    )
-    return Result.ok({ finalized: false })
+  const outcome = queryResult.value
+  switch (outcome.kind) {
+    case 'succeeded':
+    case 'failed': {
+      return recordOutcome(deps, outcome)
+    }
+    case 'pending':
+    case 'notFound': {
+      return leftPending(deps, transactionId)
+    }
+    default: {
+      return assertExhaustive(outcome)
+    }
   }
-
-  return recordOutcome(deps, queryResult.value, finalStatus)
 }
 
 async function callback(deps: SettlementDeps, request: Request) {
@@ -133,30 +144,30 @@ async function callback(deps: SettlementDeps, request: Request) {
       : internalError
   }
 
-  const eghlResponse = responseResult.value
+  const reply = responseResult.value
+  const record = replyRecord(reply)
 
   logger.info(
     {
-      amount: eghlResponse.Amount,
+      amount_in_cents: record.amountInCents,
       event: 'eghl.callback.processing',
-      provider_txn_id: eghlResponse.TxnID,
-      status: eghlResponse.TxnStatus,
-      transaction_id: eghlResponse.PaymentID,
+      provider_txn_id: record.providerTxnId,
+      transaction_id: record.transactionId,
     },
     'Signature verified, processing payment finalization',
   )
 
-  const finalizationResult = await settleInboundReply(deps, eghlResponse)
+  const finalizationResult = await settleInboundReply(deps, reply)
 
   if (finalizationResult.isErr()) {
     logInfraFailure(logger, 'eghl.callback', finalizationResult.error, {
-      transaction_id: eghlResponse.PaymentID,
+      transaction_id: record.transactionId,
     })
     return internalError
   }
 
   logger.info(
-    { event: 'eghl.callback.success', transaction_id: eghlResponse.PaymentID },
+    { event: 'eghl.callback.success', transaction_id: record.transactionId },
     'Callback processed and saved successfully',
   )
 
@@ -180,33 +191,30 @@ async function returnGet(deps: SettlementDeps, request: Request) {
     return errorRedirect
   }
 
-  const eghlResponse = responseResult.value
+  const reply = responseResult.value
+  const record = replyRecord(reply)
 
   logger.info(
-    {
-      event: 'eghl.return.processing',
-      status: eghlResponse.TxnStatus,
-      transaction_id: eghlResponse.PaymentID,
-    },
+    { event: 'eghl.return.processing', transaction_id: record.transactionId },
     'Signature verified, processing GET return',
   )
 
-  const finalizationResult = await settleInboundReply(deps, eghlResponse)
+  const finalizationResult = await settleInboundReply(deps, reply)
 
   if (finalizationResult.isErr()) {
     logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
-      transaction_id: eghlResponse.PaymentID,
+      transaction_id: record.transactionId,
     })
     throw errorRedirect
   }
 
   logger.info(
-    { event: 'eghl.return.success', transaction_id: eghlResponse.PaymentID },
+    { event: 'eghl.return.success', transaction_id: record.transactionId },
     'Callback processed and saved successfully',
   )
 
   throw redirect({
-    params: { transactionId: eghlResponse.PaymentID },
+    params: { transactionId: record.transactionId },
     replace: true,
     to: '/transaction/receipt/$transactionId',
   })
@@ -226,35 +234,35 @@ async function returnPost(deps: SettlementDeps, request: Request) {
     return errorRedirect
   }
 
-  const eghlResponse = responseResult.value
+  const reply = responseResult.value
+  const record = replyRecord(reply)
 
   logger.info(
     {
-      amount: eghlResponse.Amount,
+      amount_in_cents: record.amountInCents,
       event: 'eghl.return.processing',
-      provider_txn_id: eghlResponse.TxnID,
-      status: eghlResponse.TxnStatus,
-      transaction_id: eghlResponse.PaymentID,
+      provider_txn_id: record.providerTxnId,
+      transaction_id: record.transactionId,
     },
     'Signature verified, processing payment finalization',
   )
 
-  const finalizationResult = await settleInboundReply(deps, eghlResponse)
+  const finalizationResult = await settleInboundReply(deps, reply)
 
   if (finalizationResult.isErr()) {
     logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
-      transaction_id: eghlResponse.PaymentID,
+      transaction_id: record.transactionId,
     })
     return errorRedirect
   }
 
   logger.info(
-    { event: 'eghl.return.success', transaction_id: eghlResponse.PaymentID },
+    { event: 'eghl.return.success', transaction_id: record.transactionId },
     'Callback processed and saved successfully',
   )
 
   throw redirect({
-    params: { transactionId: eghlResponse.PaymentID },
+    params: { transactionId: record.transactionId },
     replace: true,
     to: '/transaction/receipt/$transactionId',
   })
