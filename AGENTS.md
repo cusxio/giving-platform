@@ -58,6 +58,16 @@ An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exac
 - Policies (`src/server/authorize.server.ts`): `anyone`, `anonymousOnly` (a signed-in caller is redirected home), `requireUser`, `requireSu`. The workflow's context is the policy's narrowed one, so `user` is non-null under `requireUser`.
 - Input: `parseWith(Compile(schema), { trim, lowercase, convert })` returns a `Parser`; `noInput` takes none. The client's input type is `Parsed<typeof parser>`, exported as `<Name>Input`. Bound string inputs with `maxLength` when they reach a sized column.
 
+## Payment gateway
+
+`payments/gateway.ts` is the port: `deps.eghl` takes and returns only the domain types of `payments/payment-outcome.ts` (`GatewayReply`, `PaymentOutcome`, `PaymentRecord`, amounts in cents). eGHL wire fields (PascalCase) stay in three files:
+
+- `eghl.wire.ts` holds the reply schemas and status enums.
+- `eghl.outcome.ts` maps a verified wire reply or answer to a domain value. It is pure.
+- `eghl.gateway.server.ts` signs, sends and verifies, and logs each wire status code (`eghl.reply.verified`, `eghl.query.answered`).
+
+A busy gateway (an internal error) is `Err(EghlGatewayBusyError)` from `queryStatus`, not an outcome. `gateway.types.test.ts` fails tsc when a PascalCase key reaches anything the port takes or returns. Handlers and the cron branch on `kind` and never import `eghl.wire.ts`.
+
 ## Logs and traces
 
 - The runner logs each outcome once: a row's own `event`, `<event>.unauthorized`, `<event>.validation_failed` (with `issues`), `<event>.failed` for an `InfraError`, and `<event>.defect` for a throw.
