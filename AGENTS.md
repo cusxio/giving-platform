@@ -66,13 +66,15 @@ An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exac
 - `eghl.outcome.ts` maps a verified wire reply or answer to a domain value. It is pure.
 - `eghl.gateway.server.ts` signs, sends and verifies, and logs each wire status code (`eghl.reply.verified`, `eghl.query.answered`).
 
-A busy gateway (an internal error) is `Err(EghlGatewayBusyError)` from `queryStatus`, not an outcome. `gateway.types.test.ts` fails tsc when a PascalCase key reaches anything the port takes or returns. Handlers and the cron branch on `kind` and never import `eghl.wire.ts`.
+A busy gateway (an internal error) is `Err(EghlGatewayBusyError)` from `queryStatus`, not an outcome. `gateway.types.test.ts` fails tsc when a PascalCase key reaches anything the port takes or returns. Handlers and the cron never import `eghl.wire.ts`.
 
 ## Transaction status
 
 `src/core/transaction-status.ts` owns the vocabulary: `TRANSACTION_STATUSES`, the `TRANSITIONS` table, `sourcesOf` (its inverse), and the history and analytics facets (`LISTED_STATUSES`, `COUNTED_STATUS`). The schema's status enum, the `TransactionStatus` type that `#/modules/payments` re-exports, and the history and analytics filters all derive from it. Add a status there; tsc then lists every `Record<TransactionStatus, ...>` and facet that needs an entry.
 
-`payments/record-outcome.server.ts` is the only writer of `transactions.status`. Inside one `db.transaction` it runs `lockTransaction` (`SELECT ... FOR UPDATE`), the pure `planTransition(stored, outcome)`, and on a move `moveTransaction(transition)`, the payments insert and the card step. `moveTransaction` takes a `Transition` that only `planTransition` constructs, and its WHERE lists `sourcesOf(to)`, so the database refuses what the table refuses. A compare-and-set that finds no row after the lock is an `InfraError`, never a silent no-op. Nothing else updates a transaction's status.
+`payments/record-outcome.server.ts` is the only writer of `transactions.status`. Inside one `db.transaction` it runs `lockTransaction` (`SELECT ... FOR UPDATE`), the pure `planTransition(stored, outcome)`, and on a move `moveTransaction(transition)`, the payments insert and the card step. `moveTransaction` takes a `Transition` that only `planTransition` constructs, and its WHERE lists `sourcesOf(to)`, so the database refuses what the table refuses. A compare-and-set that finds no row after the lock is an `InfraError`, never a silent no-op, and so is a stored status outside the tuple. Nothing else updates a transaction's status.
+
+Every channel settles through `payments/settlement.server.ts`: the callback and both returns call `settleReply(deps, reply, source)`, and the cron calls `settlePolled(deps, row)` once per pending row. Each asks the gateway when it must, lets the pure `decide(outcome, context)` in `payment-outcome.ts` say what the answer means for the row, and then records through `recordOutcome` or waits. Change what an answer means in `decide`, never in a handler or the cron. `oxlint.config.ts` enforces the path: only `settlement.server.ts` imports `record-outcome.server`, and only `record-outcome.server.ts` imports `lockTransaction` and `moveTransaction`.
 
 ## Logs and traces
 

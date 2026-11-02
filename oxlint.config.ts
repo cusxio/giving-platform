@@ -61,6 +61,20 @@ const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
   regex: String.raw`^\./server/`,
 }
 
+// One settlement path: only settlement.server.ts calls the status writer, and only the writer
+// locks or moves a transaction row.
+const ONE_SETTLEMENT_PATH: ImportPattern = {
+  message:
+    'Only payments/settlement.server.ts calls recordOutcome. Settle through settleReply or settlePolled.',
+  regex: String.raw`(^|/)record-outcome\.server$`,
+}
+const ONE_STATUS_WRITER: ImportPath = {
+  importNames: ['lockTransaction', 'moveTransaction'],
+  message:
+    'Only payments/record-outcome.server.ts locks or moves a transaction. Settle through settlement.server.ts.',
+  name: './transactions.repository.server',
+}
+
 // Lessons of the Result migration. Inside Result.gen a throw becomes a Panic, so a thrown
 // redirect or notFound reaches the browser as a 500; and a Panic is a defect, never an Err.
 const NO_PANIC: ImportPath = {
@@ -85,6 +99,8 @@ const restrict =
 const restrictImports = restrict(NO_PANIC)
 /** Server code that may run inside a workflow. */
 const restrictServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW)
+const restrictModuleImports = restrict(NO_PANIC, ONE_STATUS_WRITER)
+const restrictModuleServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW, ONE_STATUS_WRITER)
 /** The runner, and tests, which build Panics to prove the runner. */
 const restrictImportsAllowingPanic = restrict()
 const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
@@ -278,11 +294,16 @@ export default defineConfig({
     },
     {
       files: ['src/modules/**'],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_CLIENT),
+      rules: restrictModuleImports(
+        ...OUTSIDE_PLATFORM,
+        FLAT_MODULES,
+        NO_REPOSITORY_IN_CLIENT,
+        ONE_SETTLEMENT_PATH,
+      ),
     },
     {
       files: ['src/modules/**/*.server.ts', 'src/modules/*/server.ts'],
-      rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+      rules: restrictModuleServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
     },
     {
       files: ['src/modules/**/*.test.{ts,tsx}'],
@@ -290,11 +311,21 @@ export default defineConfig({
     },
     {
       files: ['src/modules/**/*.repository.server.ts'],
-      rules: restrictServerImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
+      rules: restrictModuleServerImports(
+        ...EVERYWHERE,
+        FLAT_MODULES,
+        PLATFORM_INTERNALS,
+        ONE_SETTLEMENT_PATH,
+      ),
     },
     {
       files: ['src/modules/**/*.functions.ts'],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_FUNCTIONS),
+      rules: restrictModuleImports(
+        ...OUTSIDE_PLATFORM,
+        FLAT_MODULES,
+        NO_REPOSITORY_IN_FUNCTIONS,
+        ONE_SETTLEMENT_PATH,
+      ),
     },
     // These throw a redirect or notFound outside any workflow: the runner answers policies and
     // rows with them, the eGHL routes redirect the browser, logout ends with one, and the
@@ -306,7 +337,15 @@ export default defineConfig({
     { files: ['src/server/maintenance.server.ts'], rules: restrictImports(...EVERYWHERE) },
     {
       files: ['src/modules/payments/eghl.http.server.ts', 'src/modules/auth/session.server.ts'],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+      rules: restrictModuleImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    {
+      files: ['src/modules/payments/settlement.server.ts'],
+      rules: restrictModuleServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
+    {
+      files: ['src/modules/payments/record-outcome.server.ts'],
+      rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
     },
   ],
 })
