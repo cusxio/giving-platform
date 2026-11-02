@@ -11,6 +11,7 @@ import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wi
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema } from './eghl.wire'
 import {
   findPendingAmountInCents,
+  findProviderTxnIds,
   insertPayment,
   lockTransaction,
   moveTransaction,
@@ -131,6 +132,7 @@ const pendingTransaction = () =>
       status: 'pending',
       userId: 5,
     }))
+    .on(findProviderTxnIds, () => [])
     .on(moveTransaction, ({ to }) => ({ status: to }))
     .on(insertPayment, () => {})
 
@@ -180,6 +182,7 @@ const paymentsQueried = (gateway: ReturnType<typeof answering>) =>
 const SETTLED_FAILED = [
   'payments.findPendingAmountInCents',
   'payments.lockTransaction',
+  'payments.findProviderTxnIds',
   'payments.moveTransaction',
   'payments.insertPayment',
 ]

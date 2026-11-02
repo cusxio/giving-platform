@@ -10,7 +10,12 @@ import { logAlert } from '#/server/procedure.server'
 import type { HoldReason, Plan, Settling } from './payment-outcome'
 import { planTransition, targetOf, transactionIdOf } from './payment-outcome'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
-import { insertPayment, lockTransaction, moveTransaction } from './transactions.repository.server'
+import {
+  findProviderTxnIds,
+  insertPayment,
+  lockTransaction,
+  moveTransaction,
+} from './transactions.repository.server'
 
 export type Source = 'callback' | 'cron' | 'return'
 
@@ -71,7 +76,8 @@ export function recordOutcome(
         return Result.ok(unknown)
       }
 
-      const plan = planTransition(stored, outcome)
+      const providerTxnIds = yield* Result.await(tx.run(findProviderTxnIds(transactionId)))
+      const plan = planTransition({ ...stored, providerTxnIds }, outcome)
       if (plan.kind === 'absorb') {
         logAbsorbed(deps.logger, logFields, plan, targetOf(outcome))
         const absorbed: Recorded = { at: plan.at, kind: 'absorbed', why: plan.why }
@@ -144,16 +150,24 @@ export function recordOutcome(
       }
 
       if (plan.transition.from !== 'pending') {
-        logAlert(
-          deps.logger,
-          {
-            event: 'payment.finalize.late_success',
-            from: plan.transition.from,
-            provider_txn_id: record.providerTxnId,
-            ...logFields,
-          },
-          'Gateway reports a success for a transaction recorded as failed, recording the success',
-        )
+        const late = {
+          event: 'payment.finalize.late_success',
+          from: plan.transition.from,
+          provider_txn_id: record.providerTxnId,
+          ...logFields,
+        }
+        if (providerTxnIds.length === 0) {
+          deps.logger.warn(
+            late,
+            'Gateway reports a success for a transaction expired as not found, recording the success',
+          )
+        } else {
+          logAlert(
+            deps.logger,
+            late,
+            'Gateway reports a success for a transaction it reported failed, recording the success',
+          )
+        }
       }
 
       return Result.ok(recorded)

@@ -11,6 +11,7 @@ import type { PaymentOutcome, PaymentRecord } from './payment-outcome'
 import { settlePolled, settleReply } from './settlement.server'
 import {
   findPendingAmountInCents,
+  findProviderTxnIds,
   insertPayment,
   lockTransaction,
   moveTransaction,
@@ -38,6 +39,7 @@ const pendingRow = () =>
       status: 'pending',
       userId: 7,
     }))
+    .on(findProviderTxnIds, () => [])
     .on(moveTransaction, ({ to }) => ({ status: to }))
     .on(insertPayment, () => {})
 
@@ -49,7 +51,11 @@ const depsAnswering = (answer: PaymentOutcome) => {
   return { db, deps: { ...base, eghl: { ...base.eghl, queryStatus } }, events }
 }
 
-const HELD_WRITES = ['payments.lockTransaction', 'payments.moveTransaction']
+const HELD_WRITES = [
+  'payments.lockTransaction',
+  'payments.findProviderTxnIds',
+  'payments.moveTransaction',
+]
 
 const MISMATCHES = [
   ['another amount', paid({ amountInCents: 9900 }), 'amount_mismatch'],
@@ -73,7 +79,7 @@ describe('a success whose money does not match the row, on every channel', () =>
 
     expect(okValue(settled)).toStrictEqual({ kind: 'held', why })
     expect(db.calls.map(({ name }) => name)).toStrictEqual(HELD_WRITES)
-    expect(db.calls[1]?.args).toStrictEqual([expect.objectContaining({ to: 'held' })])
+    expect(db.calls[2]?.args).toStrictEqual([expect.objectContaining({ to: 'held' })])
     expect(events.map(({ event }) => event)).toStrictEqual([`payment.finalize.${why}`])
   })
 
@@ -118,8 +124,15 @@ describe('a success whose money does not match the row, on every channel', () =>
   )
 })
 
-const rowExpiredByTheCron = async () => {
+const SIGNED_SUCCESS = {
+  kind: 'settled',
+  outcome: { card: null, kind: 'succeeded', record: paid({}) },
+} as const
+
+/** One guest row the fakes keep: its status and the TxnID of each payments row written for it. */
+const statefulRow = () => {
   let status: 'failed' | 'held' | 'pending' | 'success' = 'pending'
+  const providerTxnIds: (string | null)[] = []
   const db = createFakeDb()
     .on(findPendingAmountInCents, () => (status === 'pending' ? STORED_CENTS : undefined))
     .on(lockTransaction, () => ({
@@ -128,46 +141,85 @@ const rowExpiredByTheCron = async () => {
       status,
       userId: 7,
     }))
+    .on(findProviderTxnIds, () => [...providerTxnIds])
     .on(moveTransaction, ({ to }) => {
       status = to
       return { status: to }
     })
-    .on(insertPayment, () => {})
+    .on(insertPayment, ({ providerTransactionId }) => {
+      providerTxnIds.push(providerTransactionId ?? null)
+    })
   const { events, logger } = recordingLogger()
   const base = testDeps({ db, logger })
-  const queryStatus = vi.fn<PaymentGateway['queryStatus']>(() =>
-    Promise.resolve(Result.ok({ kind: 'notFound' })),
-  )
+  const queryStatus = vi.fn<PaymentGateway['queryStatus']>()
   const deps = { ...base, eghl: { ...base.eghl, queryStatus } }
-  await settlePolled(deps, {
-    amountInCents: STORED_CENTS,
-    createdAt: new Date(Date.now() - 40 * 60_000),
-    transactionId: 'txn_abc123',
-  })
-  const expiredAt = { calls: db.calls.length, events: events.length }
-  queryStatus.mockClear()
+  let mark = { calls: 0, events: 0 }
   return {
-    callsSince: () => db.calls.slice(expiredAt.calls).map(({ name }) => name),
+    callsSince: () => db.calls.slice(mark.calls).map(({ name }) => name),
     deps,
-    eventsSince: () => events.slice(expiredAt.events),
+    eventsSince: () => events.slice(mark.events),
+    failByHand: () => {
+      status = 'failed'
+    },
+    mark: () => {
+      mark = { calls: db.calls.length, events: events.length }
+      queryStatus.mockReset()
+    },
+    paymentRows: () => providerTxnIds.length,
     queryStatus,
     status: () => status,
   }
 }
 
+const rowExpiredByTheCron = async () => {
+  const row = statefulRow()
+  row.queryStatus.mockResolvedValue(Result.ok({ kind: 'notFound' }))
+  await settlePolled(row.deps, {
+    amountInCents: STORED_CENTS,
+    createdAt: new Date(Date.now() - 40 * 60_000),
+    transactionId: 'txn_abc123',
+  })
+  row.mark()
+  return row
+}
+
+const rowTheGatewayFailed = async () => {
+  const row = statefulRow()
+  const declined = paid({ message: 'Card declined', providerTxnId: 'CIVdeclined' })
+  row.queryStatus.mockResolvedValue(Result.ok({ kind: 'failed', record: declined }))
+  await settleReply(
+    row.deps,
+    { claim: { kind: 'failed', record: declined }, kind: 'unconfirmed' },
+    'callback',
+  )
+  row.mark()
+  return row
+}
+
+const rowFailedByHandAfterItsSuccess = async () => {
+  const row = statefulRow()
+  await settleReply(row.deps, SIGNED_SUCCESS, 'return')
+  row.failByHand()
+  row.mark()
+  return row
+}
+
+const LATE_WRITES = [
+  'payments.lockTransaction',
+  'payments.findProviderTxnIds',
+  'payments.moveTransaction',
+  'payments.insertPayment',
+]
+
 describe('a row the cron expired', () => {
   it.each(['callback', 'return'] as const)(
-    'becomes success on a signed %s success, with its one payments row and an error alert',
+    'becomes success on a signed %s success, with its one payments row and a warning',
     async (source) => {
       expect.hasAssertions()
 
-      const { callsSince, deps, eventsSince, status } = await rowExpiredByTheCron()
+      const { callsSince, deps, eventsSince, paymentRows, status } = await rowExpiredByTheCron()
       const expired = status()
-      const settled = await settleReply(
-        deps,
-        { kind: 'settled', outcome: { card: null, kind: 'succeeded', record: paid({}) } },
-        source,
-      )
+      const settled = await settleReply(deps, SIGNED_SUCCESS, source)
 
       expect(okValue(settled)).toStrictEqual({
         from: 'failed',
@@ -175,17 +227,13 @@ describe('a row the cron expired', () => {
         to: 'success',
         via: 'succeeded',
       })
-      expect([expired, status()]).toStrictEqual(['failed', 'success'])
-      expect(callsSince()).toStrictEqual([
-        'payments.lockTransaction',
-        'payments.moveTransaction',
-        'payments.insertPayment',
-      ])
+      expect([expired, status(), paymentRows()]).toStrictEqual(['failed', 'success', 1])
+      expect(callsSince()).toStrictEqual(LATE_WRITES)
       expect(eventsSince()).toStrictEqual([
         expect.objectContaining({
           event: 'payment.finalize.late_success',
           from: 'failed',
-          level: 50,
+          level: 40,
           provider_txn_id: 'CIVtxn_abc123',
           source,
         }),
@@ -214,6 +262,50 @@ describe('a row the cron expired', () => {
   })
 })
 
+describe('a row the gateway failed', () => {
+  it('becomes success on a signed success under another TxnID, with an error alert', async () => {
+    expect.hasAssertions()
+
+    const { callsSince, deps, eventsSince, paymentRows, status } = await rowTheGatewayFailed()
+    const failed = [status(), paymentRows()]
+    const settled = await settleReply(deps, SIGNED_SUCCESS, 'callback')
+
+    expect(okValue(settled)).toMatchObject({ from: 'failed', kind: 'moved', to: 'success' })
+    expect([...failed, status(), paymentRows()]).toStrictEqual(['failed', 1, 'success', 2])
+    expect(callsSince()).toStrictEqual(LATE_WRITES)
+    expect(eventsSince()).toStrictEqual([
+      expect.objectContaining({
+        event: 'payment.finalize.late_success',
+        level: 50,
+        provider_txn_id: 'CIVtxn_abc123',
+      }),
+    ])
+  })
+})
+
+describe('a success row an operator marked failed by hand', () => {
+  it.each(['callback', 'return'] as const)(
+    'stays failed when the donor replays its signed success as a %s, with no second payments row',
+    async (source) => {
+      expect.hasAssertions()
+
+      const { callsSince, deps, eventsSince, paymentRows, status } =
+        await rowFailedByHandAfterItsSuccess()
+      const settled = await settleReply(deps, SIGNED_SUCCESS, source)
+
+      expect(okValue(settled)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'replay' })
+      expect([status(), paymentRows()]).toStrictEqual(['failed', 1])
+      expect(callsSince()).toStrictEqual([
+        'payments.lockTransaction',
+        'payments.findProviderTxnIds',
+      ])
+      expect(eventsSince()).toStrictEqual([
+        expect.objectContaining({ event: 'payment.finalize.idempotent', level: 30 }),
+      ])
+    },
+  )
+})
+
 describe('a held row', () => {
   it('stays held when the cron reads it as expired, should the cron ever select it', async () => {
     expect.hasAssertions()
@@ -225,6 +317,7 @@ describe('a held row', () => {
         status: 'held',
         userId: 7,
       }))
+      .on(findProviderTxnIds, () => [])
       .on(moveTransaction, ({ to }) => ({ status: to }))
     const base = testDeps({ db })
     const queryStatus = vi.fn<PaymentGateway['queryStatus']>(() =>
@@ -240,6 +333,9 @@ describe('a held row', () => {
     )
 
     expect(okValue(settled)).toStrictEqual({ at: 'held', kind: 'absorbed', why: 'contradiction' })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
   })
 })

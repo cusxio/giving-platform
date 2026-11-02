@@ -52,9 +52,13 @@ const outcomeOf = (kind: Settling['kind'], money: Money = 'same money'): Settlin
 }
 const OUTCOME_KINDS = ['succeeded', 'failed', 'expired'] as const satisfies Settling['kind'][]
 
-const stored = (status: TransactionStatus): StoredTransaction => ({
+const stored = (
+  status: TransactionStatus,
+  providerTxnIds: readonly (string | null)[] = [],
+): StoredTransaction => ({
   amountInCents: 5000,
   createdAs: 'guest',
+  providerTxnIds,
   status,
   userId: 7,
 })
@@ -229,6 +233,39 @@ describe('planning a transition', () => {
       hold('currency_mismatch', 'another amount and currency'),
     )
     expect(planTransition(stored('success'), mismatched)).toStrictEqual(absorb('success', 'replay'))
+  })
+
+  it.each(MONIES)(
+    'absorbs a success with %s whose TxnID a payments row of a failed row carries, as a replay',
+    (money) => {
+      expect.hasAssertions()
+
+      const replayed = outcomeOf('succeeded', money)
+
+      expect(planTransition(stored('failed', [record.providerTxnId]), replayed)).toStrictEqual(
+        absorb('failed', 'replay'),
+      )
+    },
+  )
+
+  it('still calls a failure for the TxnID a success row recorded a contradiction', () => {
+    expect.hasAssertions()
+
+    expect(
+      planTransition(stored('success', [record.providerTxnId]), outcomeOf('failed')),
+    ).toStrictEqual(absorb('success', 'contradiction'))
+  })
+
+  it.each([
+    ['a gateway failure under another TxnID', ['CIVdeclined']],
+    ['a failure with no TxnID', [null, '']],
+    ['no payments row, as the cron expires it', []],
+  ] as const)('corrects a failed row that recorded %s', (_case, providerTxnIds) => {
+    expect.hasAssertions()
+
+    expect(
+      fieldsOf(planTransition(stored('failed', providerTxnIds), outcomeOf('succeeded'))),
+    ).toStrictEqual(move('success', 'failed'))
   })
 })
 

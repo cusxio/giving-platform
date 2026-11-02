@@ -7,7 +7,12 @@ import { errValue, okValue } from '#/server/testing/result'
 
 import type { PaymentRecord, Settling, Transition } from './payment-outcome'
 import { planTransition } from './payment-outcome'
-import { findReceipt, lockTransaction, moveTransaction } from './transactions.repository.server'
+import {
+  findProviderTxnIds,
+  findReceipt,
+  lockTransaction,
+  moveTransaction,
+} from './transactions.repository.server'
 
 const TRANSACTION_ID = 'T2000000000000000001'
 
@@ -44,7 +49,13 @@ const OUTCOME_INTO = {
 
 const planned = (to: Reachable): Transition => {
   const plan = planTransition(
-    { amountInCents: record.amountInCents, createdAs: 'guest', status: 'pending', userId: 1 },
+    {
+      amountInCents: record.amountInCents,
+      createdAs: 'guest',
+      providerTxnIds: [],
+      status: 'pending',
+      userId: 1,
+    },
     OUTCOME_INTO[to],
   )
   if (plan.kind === 'absorb') {
@@ -78,6 +89,21 @@ describe('the settlement statements', () => {
       status: 'pending',
       userId: 7,
     })
+  })
+
+  it('reads the gateway TxnID of every payments row of the transaction', async () => {
+    expect.hasAssertions()
+
+    const statements = await sent((db) => db.run(findProviderTxnIds(TRANSACTION_ID)))
+
+    expect(statements).toStrictEqual([
+      {
+        params: [TRANSACTION_ID],
+        sql:
+          'select "provider_transaction_id" from "payments" ' +
+          'where "payments"."transaction_id" = $1',
+      },
+    ])
   })
 
   it('fails the lock, naming the value, when the status is not one the table knows', async () => {

@@ -113,6 +113,16 @@ export const lockTransaction = defineQuery(
   (found) => knownStatus(firstOrNull(found)),
 )
 
+export const findProviderTxnIds = defineQuery(
+  'payments.findProviderTxnIds',
+  (db, transactionId: TransactionId) =>
+    db
+      .select({ providerTxnId: payments.providerTransactionId })
+      .from(payments)
+      .where(eq(payments.transactionId, transactionId)),
+  (found) => found.map(({ providerTxnId }) => providerTxnId),
+)
+
 /**
  * The WHERE repeats the table, so the database refuses what the table refuses even if a plan is
  * wrong.

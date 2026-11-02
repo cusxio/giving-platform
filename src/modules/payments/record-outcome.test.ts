@@ -14,7 +14,12 @@ import { testDeps } from '#/server/testing/test-deps'
 import type { CardUse, PaymentRecord, Settling } from './payment-outcome'
 import { recordOutcome } from './record-outcome.server'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
-import { insertPayment, lockTransaction, moveTransaction } from './transactions.repository.server'
+import {
+  findProviderTxnIds,
+  insertPayment,
+  lockTransaction,
+  moveTransaction,
+} from './transactions.repository.server'
 
 const NOW = new Date('2026-10-31T04:00:00Z')
 
@@ -48,9 +53,14 @@ const newCard: CardUse = {
   kind: 'saved',
 }
 
-const storedAs = (createdAs: 'guest' | 'user', status: TransactionStatus = 'pending') =>
+const storedAs = (
+  createdAs: 'guest' | 'user',
+  status: TransactionStatus = 'pending',
+  providerTxnIds: (string | null)[] = [],
+) =>
   createFakeDb()
     .on(lockTransaction, () => ({ amountInCents: 5000, createdAs, status, userId: 7 }))
+    .on(findProviderTxnIds, () => providerTxnIds)
     .on(moveTransaction, ({ to }) => ({ status: to }))
     .on(insertPayment, () => {})
     .on(upsertSavedCard, () => {})
@@ -94,11 +104,13 @@ describe('recording a payment outcome', () => {
     expect(db.transactions).toStrictEqual(['commit'])
     expect(db.roundTrips).toStrictEqual([
       ['payments.lockTransaction'],
+      ['payments.findProviderTxnIds'],
       ['payments.moveTransaction'],
       ['payments.insertPayment'],
     ])
     expect(db.calls).toStrictEqual([
       { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
       { args: [expect.objectContaining(MOVE)], name: 'payments.moveTransaction' },
       { args: [payment()], name: 'payments.insertPayment' },
     ])
@@ -116,7 +128,7 @@ describe('recording a payment outcome', () => {
       to: 'failed',
       via: 'failed',
     })
-    expect(db.calls[1]).toStrictEqual({
+    expect(db.calls[2]).toStrictEqual({
       args: [expect.objectContaining({ ...MOVE, to: 'failed' })],
       name: 'payments.moveTransaction',
     })
@@ -136,6 +148,7 @@ describe('recording a payment outcome', () => {
     })
     expect(db.calls).toStrictEqual([
       { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
       {
         args: [expect.objectContaining({ ...MOVE, to: 'failed' })],
         name: 'payments.moveTransaction',
@@ -162,7 +175,10 @@ describe('recording a payment outcome', () => {
     const result = await record(db, succeeded(newCard))
 
     expect(okValue(result)).toStrictEqual({ at: 'success', kind: 'absorbed', why: 'replay' })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
     expect(db.transactions).toStrictEqual(['commit'])
   })
 
@@ -173,7 +189,10 @@ describe('recording a payment outcome', () => {
     const result = await record(db, failed())
 
     expect(okValue(result)).toStrictEqual({ at: 'success', kind: 'absorbed', why: 'contradiction' })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
   })
 
   it('fails the settlement when the compare-and-set finds no row after the lock', async () => {
@@ -189,6 +208,7 @@ describe('recording a payment outcome', () => {
     })
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
       'payments.lockTransaction',
+      'payments.findProviderTxnIds',
       'payments.moveTransaction',
     ])
     expect(db.transactions).toStrictEqual(['rollback'])
@@ -239,6 +259,7 @@ describe('recording a payment outcome', () => {
 
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
       'payments.lockTransaction',
+      'payments.findProviderTxnIds',
       'payments.moveTransaction',
       'payments.insertPayment',
     ])
@@ -251,7 +272,7 @@ describe('recording a payment outcome', () => {
     await record(db, succeeded(null, paidRecord({ paidAt: null })))
 
     // now() is a TZDate, which toStrictEqual would not equate with a Date of the same time.
-    expect(db.calls[2]).toMatchObject({
+    expect(db.calls[3]).toMatchObject({
       args: [payment({ paidAt: NOW })],
       name: 'payments.insertPayment',
     })
@@ -280,6 +301,7 @@ describe('recording a payment outcome', () => {
     expect(errValue(result)).toMatchObject({ _tag: 'InfraError', op: 'payments.upsertSavedCard' })
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
       'payments.lockTransaction',
+      'payments.findProviderTxnIds',
       'payments.moveTransaction',
       'payments.insertPayment',
       'payments.upsertSavedCard',
@@ -346,6 +368,7 @@ describe('a success whose money does not match the row', () => {
       expect(okValue(result)).toStrictEqual({ kind: 'held', why })
       expect(db.calls).toStrictEqual([
         { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+        { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
         {
           args: [expect.objectContaining({ ...MOVE, to: 'held' })],
           name: 'payments.moveTransaction',
@@ -383,7 +406,10 @@ describe('a success whose money does not match the row', () => {
     const result = await record(db, outcome)
 
     expect(okValue(result)).toStrictEqual({ at: 'held', kind: 'absorbed', why })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
   })
 
   it.each([
@@ -442,6 +468,7 @@ describe('a success onto a failed row', () => {
     })
     expect(db.calls).toStrictEqual([
       { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
       {
         args: [expect.objectContaining({ ...MOVE, from: 'failed' })],
         name: 'payments.moveTransaction',
@@ -462,18 +489,19 @@ describe('a success onto a failed row', () => {
 
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
       'payments.lockTransaction',
+      'payments.findProviderTxnIds',
       'payments.moveTransaction',
       'payments.insertPayment',
       write,
     ])
   })
 
-  it('logs the late success as an error naming the charge, and fails the request span', async () => {
+  it('logs a late success over a recorded gateway failure as an error naming the charge, and fails the request span', async () => {
     expect.hasAssertions()
 
     const { events, logger } = recordingLogger()
     const { span } = await inRequestSpan(() =>
-      record(storedAs('guest', 'failed'), succeeded(), logger),
+      record(storedAs('guest', 'failed', ['CIVdeclined']), succeeded(), logger),
     )
 
     expect(events).toStrictEqual([
@@ -488,6 +516,49 @@ describe('a success onto a failed row', () => {
     ])
     expect(span.status.code).toBe(SpanStatusCode.ERROR)
     expect(span.attributes['error.type']).toBe('payment.finalize.late_success')
+  })
+
+  it('logs a late success onto a row with no payments row, as the cron expires it, as a warning', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const { span } = await inRequestSpan(() =>
+      record(storedAs('guest', 'failed'), succeeded(), logger),
+    )
+
+    expect(events).toStrictEqual([
+      expect.objectContaining({
+        event: 'payment.finalize.late_success',
+        from: 'failed',
+        level: 40,
+        provider_txn_id: 'CIVtxn_abc123',
+        source: 'callback',
+        transaction_id: 'txn_abc123',
+      }),
+    ])
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
+  })
+
+  it('absorbs a replay of the success a row failed by hand recorded, with no write, card or alert', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = storedAs('user', 'failed', ['CIVtxn_abc123'])
+    const { settled, span } = await inRequestSpan(() => record(db, succeeded(newCard), logger))
+
+    expect(settled).toMatchObject({
+      status: 'fulfilled',
+      value: { value: { at: 'failed', kind: 'absorbed', why: 'replay' } },
+    })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
+    expect(db.transactions).toStrictEqual(['commit'])
+    expect(events).toStrictEqual([
+      expect.objectContaining({ event: 'payment.finalize.idempotent', level: 30 }),
+    ])
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
   })
 
   it('rolls the late success back without the alert when the payment cannot be written', async () => {
@@ -514,6 +585,7 @@ describe('a success onto a failed row', () => {
     expect(okValue(result)).toStrictEqual({ kind: 'held', why: 'amount_mismatch' })
     expect(db.calls).toStrictEqual([
       { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
       {
         args: [expect.objectContaining({ from: 'failed', to: 'held' })],
         name: 'payments.moveTransaction',
@@ -538,6 +610,9 @@ describe('a success onto a failed row', () => {
     const result = await record(db, outcome)
 
     expect(okValue(result)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'replay' })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
   })
 })
