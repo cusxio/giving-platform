@@ -68,6 +68,12 @@ An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exac
 
 A busy gateway (an internal error) is `Err(EghlGatewayBusyError)` from `queryStatus`, not an outcome. `gateway.types.test.ts` fails tsc when a PascalCase key reaches anything the port takes or returns. Handlers and the cron branch on `kind` and never import `eghl.wire.ts`.
 
+## Transaction status
+
+`src/core/transaction-status.ts` owns the vocabulary: `TRANSACTION_STATUSES`, the `TRANSITIONS` table, `sourcesOf` (its inverse), and the history and analytics facets (`LISTED_STATUSES`, `COUNTED_STATUS`). The schema's status enum, the `TransactionStatus` type that `#/modules/payments` re-exports, and the history and analytics filters all derive from it. Add a status there; tsc then lists every `Record<TransactionStatus, ...>` and facet that needs an entry.
+
+`payments/record-outcome.server.ts` is the only writer of `transactions.status`. Inside one `db.transaction` it runs `lockTransaction` (`SELECT ... FOR UPDATE`), the pure `planTransition(stored, outcome)`, and on a move `moveTransaction(transition)`, the payments insert and the card step. `moveTransaction` takes a `Transition` that only `planTransition` constructs, and its WHERE lists `sourcesOf(to)`, so the database refuses what the table refuses. A compare-and-set that finds no row after the lock is an `InfraError`, never a silent no-op. Nothing else updates a transaction's status.
+
 ## Logs and traces
 
 - The runner logs each outcome once: a row's own `event`, `<event>.unauthorized`, `<event>.validation_failed` (with `issues`), `<event>.failed` for an `InfraError`, and `<event>.defect` for a throw.
