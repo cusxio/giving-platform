@@ -12,10 +12,9 @@ type Wire = EghlPaymentResponse | EghlQueryResponse
 
 const AMOUNT = /^(?<ringgit>\d+)\.(?<cents>\d{2})$/u
 
-/** Never through a float: the settlement compares these cents with the stored amount. */
 function centsOf(amount: string): number {
   const parts = AMOUNT.exec(amount)?.groups
-  if (parts?.ringgit === undefined || parts.cents === undefined) {
+  if (parts === undefined) {
     throw new Error(`eGHL amount "${amount}" is not ringgit with two decimals`)
   }
   return Number(parts.ringgit) * 100 + Number(parts.cents)

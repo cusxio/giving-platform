@@ -70,7 +70,6 @@ export function targetOf(outcome: Settling): Reachable {
   }
 }
 
-/** The only currency the platform asks the gateway to charge. */
 export const PAYMENT_CURRENCY = 'MYR'
 
 export interface StoredTransaction {
@@ -82,7 +81,7 @@ export interface StoredTransaction {
 
 /**
  * The private field makes TypeScript compare `Transition` nominally, so neither an object literal
- * nor a spread of a real transition passes as one. Freezing stops `Object.assign` retargeting one.
+ * nor a spread of a real transition passes as one.
  */
 class Transition {
   declare private readonly planned: true
@@ -107,14 +106,16 @@ export type Plan =
       readonly kind: 'absorb'
       readonly why: 'contradiction' | 'replay'
     }
-  /** A success for other money than the row asked for. The row stays as it is. */
   | { readonly kind: 'hold'; readonly received: PaymentRecord; readonly why: HoldReason }
   | { readonly kind: 'move'; readonly transition: Transition }
 
-/**
- * A replay is absorbed before the money check, so a replayed success never looks like a
- * mismatch. Only a move into success checks the money: a failure for other money does no harm.
- */
+function moneyMismatchOf(stored: StoredTransaction, paid: PaymentRecord): HoldReason | null {
+  if (paid.currency !== PAYMENT_CURRENCY) {
+    return 'currency_mismatch'
+  }
+  return paid.amountInCents === stored.amountInCents ? null : 'amount_mismatch'
+}
+
 export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
   const to = targetOf(outcome)
   if (stored.status === to) {
@@ -124,22 +125,15 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
     return { at: stored.status, kind: 'absorb', why: 'contradiction' }
   }
   if (outcome.kind === 'succeeded') {
-    const { record } = outcome
-    if (record.currency !== PAYMENT_CURRENCY) {
-      return { kind: 'hold', received: record, why: 'currency_mismatch' }
-    }
-    if (record.amountInCents !== stored.amountInCents) {
-      return { kind: 'hold', received: record, why: 'amount_mismatch' }
+    const mismatch = moneyMismatchOf(stored, outcome.record)
+    if (mismatch !== null) {
+      return { kind: 'hold', received: outcome.record, why: mismatch }
     }
   }
   return { kind: 'move', transition: new Transition(stored.status, to, transactionIdOf(outcome)) }
 }
 
-/**
- * `cancelled` is a page left before any bank step, by a cancel or a timeout: the reply has no
- * gateway transaction and its message says cancel. The message is not signed, so any other text,
- * such as a repeated PaymentID's rejection, is a `failed` claim.
- */
+/** `cancelled` is a page left before any bank step, by a cancel or a timeout. */
 export interface UnconfirmedClaim {
   readonly kind: 'cancelled' | 'failed'
   readonly record: PaymentRecord

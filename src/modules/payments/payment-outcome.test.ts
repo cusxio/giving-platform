@@ -25,7 +25,6 @@ const record: PaymentRecord = {
   transactionId: 'txn_abc123',
 }
 
-/** The money a reply or answer reports, against the stored 50.00 MYR. */
 const MONEY = {
   'same money': record,
   'another amount': { ...record, amountInCents: 9900 },
@@ -87,25 +86,25 @@ const hold = (why: HoldReason, money: Money): Plan => ({
   received: MONEY[money],
   why,
 })
-const each = <T>(plan: T): [T, T, T, T] => [plan, plan, plan, plan]
+const each = (plan: Expected): Record<Money, Expected> => ({
+  'another amount': plan,
+  'another amount and currency': plan,
+  'another currency': plan,
+  'same money': plan,
+})
 
 type Expected = Plan | ReturnType<typeof move>
 
-/** One row per stored status and outcome; one column per entry of MONEY, in its order. */
-const PLAN_TABLE: [
-  TransactionStatus,
-  Settling['kind'],
-  [Expected, Expected, Expected, Expected],
-][] = [
+const PLAN_TABLE: [TransactionStatus, Settling['kind'], Record<Money, Expected>][] = [
   [
     'pending',
     'succeeded',
-    [
-      move('pending', 'success'),
-      hold('amount_mismatch', 'another amount'),
-      hold('currency_mismatch', 'another currency'),
-      hold('currency_mismatch', 'another amount and currency'),
-    ],
+    {
+      'another amount': hold('amount_mismatch', 'another amount'),
+      'another amount and currency': hold('currency_mismatch', 'another amount and currency'),
+      'another currency': hold('currency_mismatch', 'another currency'),
+      'same money': move('pending', 'success'),
+    },
   ],
   ['pending', 'failed', each(move('pending', 'failed'))],
   ['pending', 'expired', each(move('pending', 'failed'))],
@@ -117,10 +116,9 @@ const PLAN_TABLE: [
   ['failed', 'expired', each(absorb('failed', 'replay'))],
 ]
 const PLAN_CELLS = PLAN_TABLE.flatMap(([status, kind, plans]) =>
-  plans.map((plan, column) => [status, kind, MONIES[column]!, plan] as const),
+  MONIES.map((money) => [status, kind, money, plans[money]] as const),
 )
 
-/** The sequence alphabet: each outcome kind, plus a success whose amount differs from the row. */
 const STEPS = {
   expired: outcomeOf('expired'),
   failed: outcomeOf('failed'),

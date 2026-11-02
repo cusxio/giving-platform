@@ -15,7 +15,6 @@ interface ImportPath {
 // Import boundaries. An override replaces the rule's whole pattern and path lists, so each zone
 // below composes these constants instead of repeating them.
 
-// An import may name the source file's extension, as in `./x.server.js`.
 const SOURCE_SUFFIX = String.raw`(\.[jt]s)?`
 
 // Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
