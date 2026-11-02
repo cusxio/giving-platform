@@ -299,3 +299,51 @@ describe('what a status query answer says', () => {
     ).toMatchObject({ card: { card: { token: 'tok_new' }, kind: 'saved' }, kind: 'succeeded' })
   })
 })
+
+const failedReply = (TxnID: string, TxnMessage: string) =>
+  replyOf(paid({ TxnID, TxnMessage, TxnStatus: EghlTxnStatus.Failed }))
+
+const pendingAnswer = (TxnStatus: EghlQueryResponse['TxnStatus'], TxnMessage = '') =>
+  outcomeOf({
+    ...paid(),
+    TransactionType: 'QUERY',
+    TxnExists: EghlTxnExists.Exists,
+    TxnMessage,
+    TxnStatus,
+  }).unwrap()
+
+describe("a failed reply's claim", () => {
+  it.each([
+    ['a cancel or timeout, with no gateway transaction', '', 'Buyer cancelled', 'cancelled'],
+    ['any other message with no gateway transaction', '', 'Card declined', 'cancelled'],
+    ["a repeated PaymentID's rejection", '', 'Duplicate Payment ID', 'failed'],
+    ['a failure with a gateway transaction', 'CIVtxn_abc123', 'Buyer cancelled', 'failed'],
+  ])('is %s', (_case, txnId, message, kind) => {
+    expect.hasAssertions()
+
+    expect(failedReply(txnId, message)).toMatchObject({ claim: { kind }, kind: 'unconfirmed' })
+  })
+})
+
+describe("a pending answer's kind of pending", () => {
+  it('is the gateway pending for its own pending status', () => {
+    expect.hasAssertions()
+
+    expect(pendingAnswer(EghlTxnStatus.Pending)).toMatchObject({ answer: 'pending' })
+  })
+
+  it.each([
+    ['a repeated PaymentID', EghlTxnStatus.Failed, 'Duplicate Payment ID'],
+    ['authorized', EghlQueryTxnStatus.Authorized, ''],
+    ['captured', EghlQueryTxnStatus.Captured, ''],
+    ['an internal error code', EghlQueryTxnStatus.InternalError, ''],
+    ['a not-found code', EghlQueryTxnStatus.NotFound, ''],
+    ['refunded', EghlQueryTxnStatus.Refunded, ''],
+    ['reversal pending', EghlQueryTxnStatus.ReversalPending, ''],
+    ['reversed', EghlQueryTxnStatus.Reversed, ''],
+  ] as const)('is not final for %s', (_case, status, message) => {
+    expect.hasAssertions()
+
+    expect(pendingAnswer(status, message)).toMatchObject({ answer: 'not_final', kind: 'pending' })
+  })
+})

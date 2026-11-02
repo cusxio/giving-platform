@@ -51,6 +51,9 @@ function recordOf(wire: Wire): PaymentRecord {
   }
 }
 
+const isDuplicatePaymentId = (message: string) =>
+  message.toLowerCase().includes('duplicate payment id')
+
 export function replyOf(wire: EghlPaymentResponse): GatewayReply {
   switch (wire.TxnStatus) {
     case EghlTxnStatus.Success: {
@@ -60,7 +63,11 @@ export function replyOf(wire: EghlPaymentResponse): GatewayReply {
       }
     }
     case EghlTxnStatus.Failed: {
-      return { claim: { kind: 'failed', record: recordOf(wire) }, kind: 'unconfirmed' }
+      const abandoned = wire.TxnID === '' && !isDuplicatePaymentId(wire.TxnMessage)
+      return {
+        claim: { kind: abandoned ? 'cancelled' : 'failed', record: recordOf(wire) },
+        kind: 'unconfirmed',
+      }
     }
     case EghlTxnStatus.Pending: {
       return { kind: 'pending', record: recordOf(wire) }
@@ -74,9 +81,6 @@ export function replyOf(wire: EghlPaymentResponse): GatewayReply {
 export const isUnexpectedForSale = ({ TxnStatus }: EghlQueryResponse) =>
   TxnStatus === EghlQueryTxnStatus.Authorized || TxnStatus === EghlQueryTxnStatus.Captured
 
-const isDuplicatePaymentId = (message: string) =>
-  message.toLowerCase().includes('duplicate payment id')
-
 function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
   const record = recordOf(wire)
   const { TxnStatus } = wire
@@ -88,10 +92,12 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
       // eGHL rejects a reused PaymentID (e.g. a refreshed payment page) with a failure that
       // describes the repeated request, not the original attempt.
       return isDuplicatePaymentId(record.message)
-        ? { kind: 'pending', record }
+        ? { answer: 'not_final', kind: 'pending', record }
         : { kind: 'failed', record }
     }
-    case EghlTxnStatus.Pending:
+    case EghlTxnStatus.Pending: {
+      return { answer: 'pending', kind: 'pending', record }
+    }
     case EghlQueryTxnStatus.Authorized:
     case EghlQueryTxnStatus.Captured:
     case EghlQueryTxnStatus.InternalError:
@@ -99,7 +105,7 @@ function existingOutcomeOf(wire: EghlQueryResponse): PaymentOutcome {
     case EghlQueryTxnStatus.Refunded:
     case EghlQueryTxnStatus.ReversalPending:
     case EghlQueryTxnStatus.Reversed: {
-      return { kind: 'pending', record }
+      return { answer: 'not_final', kind: 'pending', record }
     }
     default: {
       return assertExhaustive(TxnStatus)

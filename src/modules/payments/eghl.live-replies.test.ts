@@ -177,6 +177,24 @@ const paymentsQueried = (gateway: ReturnType<typeof answering>) =>
     new URLSearchParams(init?.body as URLSearchParams).get('PaymentID'),
   )
 
+const SETTLED_FAILED = [
+  'payments.findPendingAmountInCents',
+  'payments.lockTransaction',
+  'payments.moveTransaction',
+  'payments.insertPayment',
+]
+
+const cancelledPayment = {
+  args: [
+    expect.objectContaining({
+      message: 'Buyer cancelled',
+      providerTransactionId: '',
+      transactionId: PAYMENT_ID,
+    }),
+  ],
+  name: 'payments.insertPayment',
+}
+
 const toReceipt = {
   options: { params: { transactionId: PAYMENT_ID }, to: '/transaction/receipt/$transactionId' },
 }
@@ -211,24 +229,26 @@ describe('eGHL live replies as classified today', () => {
   })
 })
 
-describe('a cancel or timeout return today', () => {
-  it('leaves the transaction pending and shows the receipt when the gateway answers for an opened page', async () => {
+describe('a cancel or timeout return', () => {
+  it("settles the transaction failed with the reply's message and shows the receipt when the gateway answers for an opened page", async () => {
     expect.hasAssertions()
 
     const { db, gateway, redirect } = await returnWith(cancelOrTimeoutReturn, openedPageAnswer)
 
     expect(paymentsQueried(gateway)).toStrictEqual([PAYMENT_ID])
-    expect(queriesRun(db)).toStrictEqual(['payments.findPendingAmountInCents'])
+    expect(queriesRun(db)).toStrictEqual(SETTLED_FAILED)
+    expect(db.calls).toContainEqual(cancelledPayment)
     expect(redirect).toMatchObject(toReceipt)
   })
 
-  it('acknowledges the callback and leaves the transaction pending when the gateway answers for an opened page', async () => {
+  it("acknowledges the callback and settles the transaction failed with the reply's message when the gateway answers for an opened page", async () => {
     expect.hasAssertions()
 
     const { db, gateway, response } = await callbackWith(cancelOrTimeoutReturn, openedPageAnswer)
 
     expect(paymentsQueried(gateway)).toStrictEqual([PAYMENT_ID])
-    expect(queriesRun(db)).toStrictEqual(['payments.findPendingAmountInCents'])
+    expect(queriesRun(db)).toStrictEqual(SETTLED_FAILED)
+    expect(db.calls).toContainEqual(cancelledPayment)
     await expect(response.text()).resolves.toBe('OK')
   })
 
@@ -254,7 +274,7 @@ describe('a cancel or timeout return today', () => {
   })
 })
 
-describe("a refreshed page's duplicate PaymentID return today", () => {
+describe("a refreshed page's duplicate PaymentID return", () => {
   it('leaves the transaction pending and shows the receipt when the gateway answers for an opened page', async () => {
     expect.hasAssertions()
 

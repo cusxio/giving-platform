@@ -154,12 +154,17 @@ const wait = (why: 'gateway_pending' | 'not_found'): Decision => ({ do: 'wait', 
 
 describe('deciding what a status query answer means', () => {
   const claim = { kind: 'failed', record: { ...record, message: 'Card declined' } } as const
+  const cancelRecord = { ...record, message: 'Buyer cancelled', providerTxnId: '' }
+  const cancelled = { claim: { kind: 'cancelled', record: cancelRecord } } as const
+  const noReference = { ...record, message: '', providerTxnId: '' }
   const answers = {
     failed: { kind: 'failed', record },
     notFound: { kind: 'notFound' },
-    pending: { kind: 'pending', record },
+    pending: { answer: 'pending', kind: 'pending', record },
     succeeded: { card: null, kind: 'succeeded', record },
   } as const satisfies Record<PaymentOutcome['kind'], PaymentOutcome>
+  const openedPage = { answer: 'pending', kind: 'pending', record: noReference } as const
+  const repeatedId = { answer: 'not_final', kind: 'pending', record: noReference } as const
   const expire: Decision = {
     do: 'record',
     settling: { kind: 'expired', transactionId: 'txn_abc123' },
@@ -170,6 +175,7 @@ describe('deciding what a status query answer means', () => {
     ['a failure, against a claim', answers.failed, { claim }, answers.failed],
     ['a success, for the cron', answers.succeeded, polledAt(45), answers.succeeded],
     ['a failure, for the cron', answers.failed, polledAt(45), answers.failed],
+    ['a success, against a cancelled claim', answers.succeeded, cancelled, answers.succeeded],
   ] as const)('records %s as the gateway gave it', (_case, outcome, context, settling) => {
     expect.hasAssertions()
 
@@ -182,9 +188,23 @@ describe('deciding what a status query answer means', () => {
     ['not found, against a claim', answers.notFound, { claim }, wait('not_found')],
     ['not found, for the cron at 30 minutes', answers.notFound, polledAt(30), wait('not_found')],
     ['not found, for the cron past 30 minutes', answers.notFound, polledAt(30.001), expire],
+    ['a failed claim, pending with no reference', openedPage, { claim }, wait('gateway_pending')],
+    ['a cancel, pending with a reference', answers.pending, cancelled, wait('gateway_pending')],
+    ['a cancel, a rejected repeat', repeatedId, cancelled, wait('gateway_pending')],
+    ['a cancel, not found', answers.notFound, cancelled, wait('not_found')],
+    ['the cron, pending with no reference', openedPage, polledAt(2000), wait('gateway_pending')],
   ] as const)('decides %s', (_case, outcome, context, decision) => {
     expect.hasAssertions()
 
     expect(decide(outcome, context)).toStrictEqual(decision)
+  })
+
+  it("settles a cancel the gateway still reports pending with no reference as failed, with the reply's record", () => {
+    expect.hasAssertions()
+
+    expect(decide(openedPage, cancelled)).toStrictEqual({
+      do: 'record',
+      settling: { kind: 'failed', record: cancelRecord },
+    })
   })
 })

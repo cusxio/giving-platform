@@ -100,7 +100,20 @@ const answer = (
     providerTxnId: `CIV${transactionId}`,
     transactionId,
   }
-  return kind === 'succeeded' ? { card: null, kind, record } : { kind, record }
+  switch (kind) {
+    case 'succeeded': {
+      return { card: null, kind, record }
+    }
+    case 'pending': {
+      return { answer: 'pending', kind, record }
+    }
+    case 'failed': {
+      return { kind, record }
+    }
+    default: {
+      return kind satisfies never
+    }
+  }
 }
 
 type QueryResult = Awaited<ReturnType<PaymentGateway['queryStatus']>>

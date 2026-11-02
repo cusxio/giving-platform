@@ -36,7 +36,15 @@ export type PaymentOutcome =
   | { readonly card: CardUse | null; readonly kind: 'succeeded'; readonly record: PaymentRecord }
   | { readonly kind: 'failed'; readonly record: PaymentRecord }
   | { readonly kind: 'notFound' }
-  | { readonly kind: 'pending'; readonly record: PaymentRecord }
+  | {
+      /**
+       * `pending` is the gateway's own pending status. `not_final` is any other answer that
+       * settles nothing, such as a repeated PaymentID's rejection or an authorized sale.
+       */
+      readonly answer: 'not_final' | 'pending'
+      readonly kind: 'pending'
+      readonly record: PaymentRecord
+    }
 
 type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
@@ -114,12 +122,21 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
 }
 
 /**
+ * A reply's claim that the attempt ended unpaid. `cancelled` is a page left before any bank step,
+ * by a cancel or a timeout: the reply has no gateway transaction and is not a repeated PaymentID.
+ */
+export interface UnconfirmedClaim {
+  readonly kind: 'cancelled' | 'failed'
+  readonly record: PaymentRecord
+}
+
+/**
  * What a callback or return request amounts to. A reply's signature does not cover its message,
  * so only a success is `settled` by the reply alone. A reply that says the payment failed is
  * `unconfirmed` until a status query agrees, which is why `settled` cannot hold a failure.
  */
 export type GatewayReply =
-  | { readonly claim: FailedOutcome; readonly kind: 'unconfirmed' }
+  | { readonly claim: UnconfirmedClaim; readonly kind: 'unconfirmed' }
   | { readonly kind: 'pending'; readonly record: PaymentRecord }
   | { readonly kind: 'settled'; readonly outcome: SucceededOutcome }
 
@@ -154,12 +171,14 @@ export type Decision =
  */
 type DecisionContext =
   | { readonly ageMinutes: number; readonly transactionId: string }
-  | { readonly claim: FailedOutcome }
+  | { readonly claim: UnconfirmedClaim }
 
 /**
  * The one place that says what a status query answer means, for the callback, the return and the
- * cron. A final answer wins over any claim. Only the cron expires an attempt, and only one the
- * gateway has not heard of for longer than `EXPIRE_AFTER_MINUTES`.
+ * cron. A final answer wins over any claim. A cancelled claim settles failed, with the reply's
+ * record, when the gateway still reports the attempt pending with no transaction of its own: it
+ * answers that way forever for a page left before any bank step. Only the cron expires an
+ * attempt, and only one the gateway has not heard of for longer than `EXPIRE_AFTER_MINUTES`.
  */
 export function decide(outcome: PaymentOutcome, context: DecisionContext): Decision {
   switch (outcome.kind) {
@@ -168,7 +187,14 @@ export function decide(outcome: PaymentOutcome, context: DecisionContext): Decis
       return { do: 'record', settling: outcome }
     }
     case 'pending': {
-      return { do: 'wait', why: 'gateway_pending' }
+      const abandoned =
+        'claim' in context &&
+        context.claim.kind === 'cancelled' &&
+        outcome.answer === 'pending' &&
+        outcome.record.providerTxnId === ''
+      return abandoned
+        ? { do: 'record', settling: { kind: 'failed', record: context.claim.record } }
+        : { do: 'wait', why: 'gateway_pending' }
     }
     case 'notFound': {
       return 'ageMinutes' in context && context.ageMinutes > EXPIRE_AFTER_MINUTES
