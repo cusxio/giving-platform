@@ -30,8 +30,8 @@ interface ServerConfig {
 
 /**
  * Everything a workflow cannot build itself. Workflows take `Pick<Deps, ...>` of what they use.
- * `logger` is request-scoped (carries `user_id`), and so is `eghl`, which logs through it; the rest
- * are process singletons. The session user and the open transaction are deliberately absent: one
+ * `logger` is the request logger (`user_id` set once the session is known), and `eghl` logs through
+ * it, so `createDeps` is called with the child logger; the rest are process singletons. The session user and the open transaction are deliberately absent: one
  * is an argument, the other is explicit through `db.transaction`.
  */
 export interface Deps {

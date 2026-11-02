@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { Writable } from 'node:stream'
 
 import type { getGlobalStartContext } from '@tanstack/react-start'
@@ -56,6 +57,43 @@ const { logger: rootLogger } = await import('./logger.server')
 const { requestContext } = await import('./request-context.server')
 
 const COOKIE = `${'session'.padEnd(21, '0')}.${'token'.padEnd(21, '0')}`
+
+const sha256 = (parts: string[]) =>
+  createHash('sha256')
+    .update(['secret-password', ...parts].join(''))
+    .digest('hex')
+
+/** A failed return in the live shape, signed with the mocked eGHL password. */
+function signedReturn() {
+  const fields = {
+    Amount: '1.00',
+    CurrencyCode: 'MYR',
+    OrderNumber: 'liveReply00000000001',
+    Param6: '',
+    Param7: '',
+    PaymentID: 'liveReply00000000001',
+    PymtMethod: 'ANY',
+    ServiceID: 'service-123',
+    TransactionType: 'SALE',
+    TxnID: '',
+    TxnMessage: 'Buyer cancelled',
+    TxnStatus: '1',
+  }
+  const signed = [
+    fields.TxnID,
+    fields.ServiceID,
+    fields.PaymentID,
+    fields.TxnStatus,
+    fields.Amount,
+    fields.CurrencyCode,
+    '',
+  ]
+  return new URLSearchParams({
+    ...fields,
+    HashValue: sha256(signed),
+    HashValue2: sha256([...signed, fields.OrderNumber, fields.Param6, fields.Param7]),
+  }).toString()
+}
 const SIGNED_IN: AuthServer.SessionCheck = {
   session: { expiresAt: addDays(now(), 20), id: 'session'.padEnd(21, '0'), tokenHash: 'hash' },
   user: { id: 42, journey: 'start_fresh', role: 'user' },
@@ -137,6 +175,21 @@ describe('the request context middleware', () => {
     context.deps.logger.info({ event: 'probe' }, 'probe')
 
     expect(io.logs).toContainEqual(expect.objectContaining({ event: 'probe', user_id: 42 }))
+  })
+
+  it("scopes the gateway adapter's events to the signed-in user", async () => {
+    expect.hasAssertions()
+
+    io.check = SIGNED_IN
+    const { context } = await handle(COOKIE)
+    io.logs = []
+    await context.deps.eghl.readReply(
+      new Request(`https://app.give.test/api/eghl/return?${signedReturn()}`),
+    )
+
+    expect(io.logs).toContainEqual(
+      expect.objectContaining({ event: 'eghl.reply.verified', user_id: 42 }),
+    )
   })
 
   it('builds deps from the composition root', async () => {
