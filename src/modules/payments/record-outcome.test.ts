@@ -92,7 +92,7 @@ describe('recording a payment outcome', () => {
     ])
     expect(db.calls).toStrictEqual([
       { args: ['txn_abc123'], name: 'payments.lockTransaction' },
-      { args: [MOVE], name: 'payments.moveTransaction' },
+      { args: [expect.objectContaining(MOVE)], name: 'payments.moveTransaction' },
       { args: [payment()], name: 'payments.insertPayment' },
     ])
   })
@@ -105,7 +105,7 @@ describe('recording a payment outcome', () => {
 
     expect(okValue(result)).toStrictEqual({ from: 'pending', kind: 'moved', to: 'failed' })
     expect(db.calls[1]).toStrictEqual({
-      args: [{ ...MOVE, to: 'failed' }],
+      args: [expect.objectContaining({ ...MOVE, to: 'failed' })],
       name: 'payments.moveTransaction',
     })
   })

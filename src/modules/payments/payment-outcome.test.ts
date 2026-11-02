@@ -3,13 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { TransactionStatus } from '#/core/transaction-status'
 import { TRANSACTION_STATUSES } from '#/core/transaction-status'
 
-import type {
-  PaymentRecord,
-  Plan,
-  Settling,
-  StoredTransaction,
-  Transition,
-} from './payment-outcome'
+import type { PaymentRecord, Plan, Settling, StoredTransaction } from './payment-outcome'
 import { planTransition } from './payment-outcome'
 
 const record: PaymentRecord = {
@@ -35,17 +29,30 @@ const stored = (status: TransactionStatus): StoredTransaction => ({
   userId: 7,
 })
 
-const move = (from: TransactionStatus, to: 'failed' | 'success'): Plan => ({
+const move = (from: TransactionStatus, to: 'failed' | 'success') => ({
   kind: 'move',
-  transition: { from, to, transactionId: 'txn_abc123' } as Transition,
+  transition: { from, to, transactionId: 'txn_abc123' },
 })
+
+/** A planned transition is a class instance, so the table compares its fields. */
+const fieldsOf = (plan: Plan) =>
+  plan.kind === 'move'
+    ? {
+        kind: plan.kind,
+        transition: {
+          from: plan.transition.from,
+          to: plan.transition.to,
+          transactionId: plan.transition.transactionId,
+        },
+      }
+    : plan
 const absorb = (at: TransactionStatus, why: 'contradiction' | 'replay'): Plan => ({
   at,
   kind: 'absorb',
   why,
 })
 
-const PLAN_TABLE: [TransactionStatus, Settling['kind'], Plan][] = [
+const PLAN_TABLE: [TransactionStatus, Settling['kind'], Plan | ReturnType<typeof move>][] = [
   ['pending', 'succeeded', move('pending', 'success')],
   ['pending', 'failed', move('pending', 'failed')],
   ['success', 'succeeded', absorb('success', 'replay')],
@@ -98,27 +105,7 @@ describe('planning a transition', () => {
   it.each(PLAN_TABLE)('plans %s + %s', (status, kind, plan) => {
     expect.hasAssertions()
 
-    expect(planTransition(stored(status), OUTCOMES[kind])).toStrictEqual(plan)
-  })
-
-  it('carries no runtime brand, so a transition is a plain record', () => {
-    expect.hasAssertions()
-
-    const plan = planTransition(stored('pending'), OUTCOMES.succeeded)
-
-    expect(plan).toStrictEqual({
-      kind: 'move',
-      transition: { from: 'pending', to: 'success', transactionId: 'txn_abc123' },
-    })
-  })
-
-  it('lets only the planner make a transition', () => {
-    expect.hasAssertions()
-
-    // @ts-expect-error only planTransition constructs a Transition
-    const forged: Transition = { from: 'pending', to: 'success', transactionId: 'txn_abc123' }
-
-    expect(forged.to).toBe('success')
+    expect(fieldsOf(planTransition(stored(status), OUTCOMES[kind]))).toStrictEqual(plan)
   })
 })
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { sourcesOf } from '#/core/transaction-status'
 import { createDriverDb } from '#/server/testing/driver-db'
 
 import type { PaymentRecord, Transition } from './payment-outcome'
@@ -70,3 +71,35 @@ describe('the settlement statements', () => {
     },
   )
 })
+
+// oxlint-disable typescript/no-misused-spread -- each spread is a forgery tsc must refuse
+describe('the transition moveTransaction takes', () => {
+  it('can be made only by planTransition', () => {
+    expect.hasAssertions()
+
+    const real = planned('success')
+    const forgeries = [
+      // @ts-expect-error an object literal is not a planned transition
+      () => moveTransaction({ from: 'pending', to: 'success', transactionId: TRANSACTION_ID }),
+      () => {
+        // @ts-expect-error a typed literal is not a planned transition
+        const typed: Transition = { from: 'success', to: 'failed', transactionId: TRANSACTION_ID }
+        return moveTransaction(typed)
+      },
+      () => {
+        // @ts-expect-error a spread copies the fields but not the planner's mark
+        const respread: Transition = { ...real, from: 'success' }
+        return moveTransaction(respread)
+      },
+      // @ts-expect-error nothing moves a row back to pending
+      () => moveTransaction({ ...real, to: 'pending' }),
+      // @ts-expect-error a spread cannot retarget another transaction
+      () => moveTransaction({ ...real, transactionId: 'someone-else' }),
+      // @ts-expect-error pending has no sources
+      () => sourcesOf('pending'),
+    ]
+
+    expect(forgeries).toHaveLength(6)
+  })
+})
+// oxlint-enable typescript/no-misused-spread

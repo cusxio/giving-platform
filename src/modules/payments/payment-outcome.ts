@@ -64,18 +64,24 @@ export interface StoredTransaction {
   readonly userId: number
 }
 
-declare const transitionBrand: unique symbol
-
 /**
- * A status change the table allows. Only `planTransition` makes one, so `moveTransaction` can
- * only ever write a pair `TRANSITIONS` lists.
+ * A status change the table allows. Only `planTransition` makes one: the class is exported as a
+ * type alone, and its private field keeps an object literal or a spread of a real transition
+ * from passing as one, so `moveTransaction` can only ever write a pair `TRANSITIONS` lists.
  */
-export interface Transition {
-  readonly [transitionBrand]: true
+class Transition {
+  declare private readonly planned: true
   readonly from: TransactionStatus
   readonly to: Reachable
   readonly transactionId: string
+
+  constructor(from: TransactionStatus, to: Reachable, transactionId: string) {
+    this.from = from
+    this.to = to
+    this.transactionId = transactionId
+  }
 }
+export type { Transition }
 
 export type Plan =
   | {
@@ -93,12 +99,10 @@ export function planTransition(stored: StoredTransaction, outcome: Settling): Pl
   if (!canMove(stored.status, to)) {
     return { at: stored.status, kind: 'absorb', why: 'contradiction' }
   }
-  const transition = {
-    from: stored.status,
-    to,
-    transactionId: outcome.record.transactionId,
-  } as Transition
-  return { kind: 'move', transition }
+  return {
+    kind: 'move',
+    transition: new Transition(stored.status, to, outcome.record.transactionId),
+  }
 }
 
 /**
