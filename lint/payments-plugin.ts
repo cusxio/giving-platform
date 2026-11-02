@@ -25,21 +25,31 @@ const isVerified = ({ qualifier, type, typeName }: TypeNode) =>
   (type === 'TSTypeReference' && lastName(typeName) === 'Verified') ||
   (type === 'TSImportType' && lastName(qualifier) === 'Verified')
 
-const noVerifiedCast = {
+const isNeverOrAny = ({ type }: TypeNode) => type === 'TSNeverKeyword' || type === 'TSAnyKeyword'
+
+const castRule = (banned: (type: TypeNode) => boolean, message: string) => ({
   create(context: RuleContext) {
     const check = (node: Assertion) => {
-      if (isVerified(node.typeAnnotation)) {
-        context.report({
-          message:
-            'Only payments/eghl.gateway.server.ts marks a gateway reply Verified, after its signature check. Take the Verified value the gateway returns.',
-          node,
-        })
+      if (banned(node.typeAnnotation)) {
+        context.report({ message, node })
       }
     }
     return { TSAsExpression: check, TSTypeAssertion: check }
   },
-}
+})
 
-const plugin = { meta: { name: 'payments' }, rules: { 'no-verified-cast': noVerifiedCast } }
+const plugin = {
+  meta: { name: 'payments' },
+  rules: {
+    'no-never-or-any-cast': castRule(
+      isNeverOrAny,
+      'A value cast to never or any passes as Verified. Cast to the type you mean, and take a Verified value only from payments/eghl.gateway.server.ts.',
+    ),
+    'no-verified-cast': castRule(
+      isVerified,
+      'Only payments/eghl.gateway.server.ts marks a gateway reply Verified, after its signature check. Take the Verified value the gateway returns.',
+    ),
+  },
+}
 
 export default plugin

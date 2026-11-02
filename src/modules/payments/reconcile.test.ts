@@ -2,6 +2,7 @@ import { SpanStatusCode } from '@opentelemetry/api'
 import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { Deps } from '#/server/deps.server'
 import { infra } from '#/server/infra-error'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
@@ -174,7 +175,7 @@ const runCron = async ({
         config: { ...base.config, cronSecret: settings.CRON_SECRET },
         db,
         eghl: { ...base.eghl, queryStatus: queryTransactionStatus },
-        logger: logger as never,
+        logger: logger as unknown as Deps['logger'],
       },
       new Request('https://app.give.test/api/eghl/cron', { headers }),
     )

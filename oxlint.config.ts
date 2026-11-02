@@ -350,13 +350,14 @@ export default defineConfig({
       files: ['src/modules/payments/record-outcome.server.ts'],
       rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
     },
+    { files: ['src/modules/payments/**'], rules: { 'payments/no-never-or-any-cast': 'error' } },
     {
       files: [
         'src/modules/payments/eghl.gateway.server.ts',
         'src/modules/payments/eghl.live-replies.test.ts',
         'src/modules/payments/eghl.outcome.test.ts',
       ],
-      rules: { 'payments/no-verified-cast': 'off' },
+      rules: { 'payments/no-never-or-any-cast': 'off', 'payments/no-verified-cast': 'off' },
     },
   ],
 })

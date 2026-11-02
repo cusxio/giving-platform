@@ -12,7 +12,10 @@ const pollEvery = (status: string) => {
   if (typeof refetchInterval !== 'function') {
     throw new TypeError('receiptQuery decides its refetch interval per answer')
   }
-  return refetchInterval({ state: { data: { transaction: { status } } } } as never)
+  type ReceiptQuery = Parameters<typeof refetchInterval>[0]
+  return refetchInterval({
+    state: { data: { transaction: { status } } },
+  } as unknown as ReceiptQuery)
 }
 
 describe('the receipt query', () => {

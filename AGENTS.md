@@ -91,7 +91,7 @@ Every channel settles through `payments/settlement.server.ts`: the callback and 
 ## Lint bans
 
 - `redirect` and `notFound` from `@tanstack/react-router` are banned in `src/modules/**/*.server.ts` and `src/server/**`. Only the runner, `eghl.http.server.ts`, `session.server.ts` (logout) and `maintenance.server.ts` throw them, all outside any workflow.
-- A cast to `Verified<...>` is banned everywhere except `payments/eghl.gateway.server.ts` and the two mapper tests named under Payment gateway.
+- A cast to `Verified<...>` is banned everywhere except `payments/eghl.gateway.server.ts` and the two mapper tests named under Payment gateway. In `src/modules/payments/**`, outside those three files, so is a cast to `never` or `any` (`payments/no-never-or-any-cast`), since either passes as `Verified`. Cast to the type you mean instead.
 - `Panic` and `panic` from `better-result` are banned everywhere except the runner (`src/server/procedure.server.ts`), tests in `src/modules/**` (`*.test.ts`, `*.test.tsx`) and tests in `src/server/**` (`*.test.ts`). Tests elsewhere, such as in `src/core/**` or `src/routes/**`, may not import them.
 
 ## Tests
