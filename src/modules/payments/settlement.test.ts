@@ -49,6 +49,8 @@ const depsAnswering = (answer: PaymentOutcome) => {
   return { db, deps: { ...base, eghl: { ...base.eghl, queryStatus } }, events }
 }
 
+const HELD_WRITES = ['payments.lockTransaction', 'payments.moveTransaction']
+
 const MISMATCHES = [
   ['another amount', paid({ amountInCents: 9900 }), 'amount_mismatch'],
   ['another currency', paid({ currency: 'USD' }), 'currency_mismatch'],
@@ -70,7 +72,8 @@ describe('a success whose money does not match the row, on every channel', () =>
     )
 
     expect(okValue(settled)).toStrictEqual({ kind: 'held', why })
-    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(HELD_WRITES)
+    expect(db.calls[1]?.args).toStrictEqual([expect.objectContaining({ to: 'held' })])
     expect(events.map(({ event }) => event)).toStrictEqual([`payment.finalize.${why}`])
   })
 
@@ -92,7 +95,7 @@ describe('a success whose money does not match the row, on every channel', () =>
       expect(okValue(settled)).toStrictEqual({ kind: 'held', why })
       expect(db.calls.map(({ name }) => name)).toStrictEqual([
         'payments.findPendingAmountInCents',
-        'payments.lockTransaction',
+        ...HELD_WRITES,
       ])
     },
   )
@@ -110,7 +113,37 @@ describe('a success whose money does not match the row, on every channel', () =>
       })
 
       expect(okValue(settled)).toStrictEqual({ kind: 'held', why })
-      expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+      expect(db.calls.map(({ name }) => name)).toStrictEqual(HELD_WRITES)
     },
   )
+})
+
+describe('a held row', () => {
+  it('stays held when the cron reads it as expired, should the cron ever select it', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb()
+      .on(lockTransaction, () => ({
+        amountInCents: STORED_CENTS,
+        createdAs: 'guest',
+        status: 'held',
+        userId: 7,
+      }))
+      .on(moveTransaction, ({ to }) => ({ status: to }))
+    const base = testDeps({ db })
+    const queryStatus = vi.fn<PaymentGateway['queryStatus']>(() =>
+      Promise.resolve(Result.ok({ kind: 'notFound' })),
+    )
+    const settled = await settlePolled(
+      { ...base, eghl: { ...base.eghl, queryStatus } },
+      {
+        amountInCents: STORED_CENTS,
+        createdAt: new Date(Date.now() - 40 * 60_000),
+        transactionId: 'txn_abc123',
+      },
+    )
+
+    expect(okValue(settled)).toStrictEqual({ at: 'held', kind: 'absorbed', why: 'contradiction' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
+  })
 })

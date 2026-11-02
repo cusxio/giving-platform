@@ -1,10 +1,15 @@
-export const TRANSACTION_STATUSES = ['pending', 'success', 'failed'] as const
+export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'held'] as const
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number]
 
-/** `success` and `failed` absorb: a replay or a contradicting later reply cannot move them. */
+/**
+ * `success`, `failed` and `held` absorb: a replay or a contradicting later reply cannot move them.
+ * `held` is a success for other money than the row's, left for an operator to resolve with the
+ * gateway.
+ */
 export const TRANSITIONS = {
   failed: [],
-  pending: ['success', 'failed'],
+  held: [],
+  pending: ['success', 'failed', 'held'],
   success: [],
 } as const satisfies Record<TransactionStatus, readonly TransactionStatus[]>
 
@@ -28,10 +33,12 @@ export const sourcesOf = (to: Reachable): TransactionStatus[] =>
 
 export const COUNTED_STATUS = 'success' as const satisfies TransactionStatus
 
-const LISTED_IN_HISTORY = { failed: true, pending: false, success: true } as const satisfies Record<
-  TransactionStatus,
-  boolean
->
+const LISTED_IN_HISTORY = {
+  failed: true,
+  held: false,
+  pending: false,
+  success: true,
+} as const satisfies Record<TransactionStatus, boolean>
 
 export const LISTED_STATUSES: TransactionStatus[] = TRANSACTION_STATUSES.filter(
   (status) => LISTED_IN_HISTORY[status],

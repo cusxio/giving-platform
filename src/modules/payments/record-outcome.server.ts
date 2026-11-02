@@ -77,6 +77,10 @@ export function recordOutcome(
         const absorbed: Recorded = { at: plan.at, kind: 'absorbed', why: plan.why }
         return Result.ok(absorbed)
       }
+
+      const moved = yield* Result.await(tx.run(moveTransaction(plan.transition)))
+      yield* required(moved, moveTransaction.queryName)
+
       if (plan.kind === 'hold') {
         logAlert(
           deps.logger,
@@ -87,14 +91,11 @@ export function recordOutcome(
             stored_amount_in_cents: stored.amountInCents,
             ...logFields,
           },
-          'Gateway reports a success for other money than the transaction, leaving it pending',
+          'Gateway reports a success for other money than the transaction, holding it',
         )
         const held: Recorded = { kind: 'held', why: plan.why }
         return Result.ok(held)
       }
-
-      const moved = yield* Result.await(tx.run(moveTransaction(plan.transition)))
-      yield* required(moved, moveTransaction.queryName)
 
       const recorded: Recorded = {
         from: plan.transition.from,

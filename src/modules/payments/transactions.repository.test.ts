@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
+import type { Reachable } from '#/core/transaction-status'
 import { sourcesOf } from '#/core/transaction-status'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { errValue, okValue } from '#/server/testing/result'
 
-import type { PaymentRecord, Transition } from './payment-outcome'
+import type { PaymentRecord, Settling, Transition } from './payment-outcome'
 import { planTransition } from './payment-outcome'
 import { lockTransaction, moveTransaction } from './transactions.repository.server'
 
@@ -35,13 +36,19 @@ const lockedAs = (status: string) =>
     lockTransaction(TRANSACTION_ID),
   )
 
-const planned = (to: 'failed' | 'success'): Transition => {
+const OUTCOME_INTO = {
+  failed: { kind: 'failed', record },
+  held: { card: null, kind: 'succeeded', record: { ...record, amountInCents: 9900 } },
+  success: { card: null, kind: 'succeeded', record },
+} as const satisfies Record<Reachable, Settling>
+
+const planned = (to: Reachable): Transition => {
   const plan = planTransition(
     { amountInCents: record.amountInCents, createdAs: 'guest', status: 'pending', userId: 1 },
-    to === 'success' ? { card: null, kind: 'succeeded', record } : { kind: 'failed', record },
+    OUTCOME_INTO[to],
   )
-  if (plan.kind !== 'move') {
-    throw new Error('expected a move')
+  if (plan.kind === 'absorb') {
+    throw new Error('expected a transition')
   }
   return plan.transition
 }
@@ -84,12 +91,12 @@ describe('the settlement statements', () => {
       reason: 'failed',
     })
     expect(failure.cause).toMatchObject({
-      message: 'transaction status "refunded" is not one of pending, success, failed',
+      message: 'transaction status "refunded" is not one of pending, success, failed, held',
       name: 'UnknownStatusError',
     })
   })
 
-  it.each(['success', 'failed'] as const)(
+  it.each(['success', 'failed', 'held'] as const)(
     'moves into %s only from the statuses the table lists',
     async (to) => {
       expect.hasAssertions()

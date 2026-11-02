@@ -10,7 +10,7 @@ import {
   sourcesOf,
 } from './transaction-status'
 
-const REACHABLE = new Set<TransactionStatus>(['success', 'failed'])
+const REACHABLE = new Set<TransactionStatus>(['success', 'failed', 'held'])
 
 const isReachable = (status: TransactionStatus): status is Reachable => REACHABLE.has(status)
 
@@ -36,8 +36,15 @@ describe('the transaction status machine', () => {
 
     expect(sourcesOf('success')).toStrictEqual(['pending'])
     expect(sourcesOf('failed')).toStrictEqual(['pending'])
+    expect(sourcesOf('held')).toStrictEqual(['pending'])
     expect(TRANSACTION_STATUSES.filter((from) => canMove(from, 'pending'))).toStrictEqual([])
-    expectTypeOf<Reachable>().toEqualTypeOf<'failed' | 'success'>()
+    expectTypeOf<Reachable>().toEqualTypeOf<'failed' | 'held' | 'success'>()
+  })
+
+  it.each(['success', 'failed', 'held'] as const)('moves nothing out of %s', (from) => {
+    expect.hasAssertions()
+
+    expect(TRANSACTION_STATUSES.filter((to) => canMove(from, to))).toStrictEqual([])
   })
 
   it('refuses pending as a target at compile time', () => {
@@ -47,7 +54,7 @@ describe('the transaction status machine', () => {
     expect(sourcesOf('pending')).toStrictEqual([])
   })
 
-  it('lists success and failed in history and counts only success', () => {
+  it('lists success and failed in history, not pending or held, and counts only success', () => {
     expect.hasAssertions()
 
     expect(LISTED_STATUSES).toStrictEqual(['success', 'failed'])

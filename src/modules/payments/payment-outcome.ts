@@ -106,31 +106,50 @@ export type Plan =
       readonly kind: 'absorb'
       readonly why: 'contradiction' | 'replay'
     }
-  | { readonly kind: 'hold'; readonly received: PaymentRecord; readonly why: HoldReason }
+  | {
+      readonly kind: 'hold'
+      readonly received: PaymentRecord
+      readonly transition: Transition
+      readonly why: HoldReason
+    }
   | { readonly kind: 'move'; readonly transition: Transition }
 
-function moneyMismatchOf(stored: StoredTransaction, paid: PaymentRecord): HoldReason | null {
-  if (paid.currency !== PAYMENT_CURRENCY) {
-    return 'currency_mismatch'
-  }
-  return paid.amountInCents === stored.amountInCents ? null : 'amount_mismatch'
+interface MoneyMismatch {
+  readonly received: PaymentRecord
+  readonly why: HoldReason
 }
 
+function moneyMismatchOf(stored: StoredTransaction, outcome: Settling): MoneyMismatch | null {
+  if (outcome.kind !== 'succeeded') {
+    return null
+  }
+  const { record } = outcome
+  if (record.currency !== PAYMENT_CURRENCY) {
+    return { received: record, why: 'currency_mismatch' }
+  }
+  return record.amountInCents === stored.amountInCents
+    ? null
+    : { received: record, why: 'amount_mismatch' }
+}
+
+/**
+ * A success for other money than the row's goes to `held` instead of `success`. A success onto a
+ * `success` row is a replay whatever its money, and so is a success for other money onto `held`.
+ */
 export function planTransition(stored: StoredTransaction, outcome: Settling): Plan {
-  const to = targetOf(outcome)
-  if (stored.status === to) {
+  const reported = targetOf(outcome)
+  const mismatch = moneyMismatchOf(stored, outcome)
+  const to = mismatch === null ? reported : 'held'
+  if (stored.status === reported || stored.status === to) {
     return { at: stored.status, kind: 'absorb', why: 'replay' }
   }
   if (!canMove(stored.status, to)) {
     return { at: stored.status, kind: 'absorb', why: 'contradiction' }
   }
-  if (outcome.kind === 'succeeded') {
-    const mismatch = moneyMismatchOf(stored, outcome.record)
-    if (mismatch !== null) {
-      return { kind: 'hold', received: outcome.record, why: mismatch }
-    }
-  }
-  return { kind: 'move', transition: new Transition(stored.status, to, transactionIdOf(outcome)) }
+  const transition = new Transition(stored.status, to, transactionIdOf(outcome))
+  return mismatch === null
+    ? { kind: 'move', transition }
+    : { kind: 'hold', ...mismatch, transition }
 }
 
 /** `cancelled` is a page left before any bank step, by a cancel or a timeout. */

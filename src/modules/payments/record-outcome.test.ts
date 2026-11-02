@@ -335,15 +335,55 @@ describe('a success whose money does not match the row', () => {
   it.each([
     ['amount', paidRecord({ amountInCents: 9900 }), 'amount_mismatch'],
     ['currency', paidRecord({ currency: 'USD' }), 'currency_mismatch'],
-  ] as const)('holds the row on another %s and writes nothing', async (_money, paid, why) => {
+  ] as const)(
+    'moves the row to held on another %s, with no payment or card',
+    async (_money, paid, why) => {
+      expect.hasAssertions()
+
+      const db = storedAs('user')
+      const result = await record(db, succeeded(newCard, paid))
+
+      expect(okValue(result)).toStrictEqual({ kind: 'held', why })
+      expect(db.calls).toStrictEqual([
+        { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+        {
+          args: [expect.objectContaining({ ...MOVE, to: 'held' })],
+          name: 'payments.moveTransaction',
+        },
+      ])
+      expect(db.transactions).toStrictEqual(['commit'])
+    },
+  )
+
+  it('fails the hold, without the alert, when the compare-and-set finds no row', async () => {
     expect.hasAssertions()
 
-    const db = storedAs('user')
-    const result = await record(db, succeeded(newCard, paid))
+    const { events, logger } = recordingLogger()
+    const db = storedAs('guest').on(moveTransaction, () => null)
+    const result = await record(db, succeeded(null, paidRecord({ amountInCents: 9900 })), logger)
 
-    expect(okValue(result)).toStrictEqual({ kind: 'held', why })
+    expect(errValue(result)).toMatchObject({
+      _tag: 'InfraError',
+      op: 'payments.moveTransaction',
+      reason: 'no-row',
+    })
+    expect(db.transactions).toStrictEqual(['rollback'])
+    expect(events).toStrictEqual([])
+  })
+
+  it.each([
+    ['the same mismatched success', succeeded(null, paidRecord({ amountInCents: 9900 })), 'replay'],
+    ['a matching success', succeeded(), 'contradiction'],
+    ['a failure', failed(), 'contradiction'],
+    ['an expiry', { kind: 'expired', transactionId: 'txn_abc123' }, 'contradiction'],
+  ] as const)('leaves a held row as it is on %s', async (_case, outcome, why) => {
+    expect.hasAssertions()
+
+    const db = storedAs('guest', 'held')
+    const result = await record(db, outcome)
+
+    expect(okValue(result)).toStrictEqual({ at: 'held', kind: 'absorbed', why })
     expect(db.calls.map(({ name }) => name)).toStrictEqual(['payments.lockTransaction'])
-    expect(db.transactions).toStrictEqual(['commit'])
   })
 
   it.each([

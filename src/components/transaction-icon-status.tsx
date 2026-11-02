@@ -14,6 +14,7 @@ interface TransactionIconStatusProps {
 
 const transactionStatusIcon: Record<TransactionStatus, Icon> = {
   failed: WarningCircleIcon,
+  held: HourglassIcon,
   pending: HourglassIcon,
   success: CheckCircleIcon,
 }
