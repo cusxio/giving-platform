@@ -15,6 +15,9 @@ interface ImportPath {
 // Import boundaries. An override replaces the rule's whole pattern and path lists, so each zone
 // below composes these constants instead of repeating them.
 
+// An import may name the source file's extension, as in `./x.server.js`.
+const SOURCE_SUFFIX = String.raw`(\.[jt]s)?`
+
 // Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
 // entry allow the import past every other pattern too, and its regex has no lookahead.
 const MODULE_ENTRY_ONLY: ImportPattern = {
@@ -48,12 +51,12 @@ const SERVER_CODE_IN_CLIENT: ImportPattern = {
 }
 const NO_REPOSITORY_IN_FUNCTIONS: ImportPattern = {
   message: 'A server function calls a *.server.ts workflow, never a repository.',
-  regex: String.raw`\.repository\.server$`,
+  regex: String.raw`\.repository\.server${SOURCE_SUFFIX}$`,
 }
 const NO_REPOSITORY_IN_CLIENT: ImportPattern = {
   message:
     'Client-reachable module files never import a repository, even types. Put shared types in <name>.types.ts or a pure domain file.',
-  regex: String.raw`\.repository\.server$`,
+  regex: String.raw`\.repository\.server${SOURCE_SUFFIX}$`,
 }
 const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
   message:
@@ -64,14 +67,14 @@ const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
 const ONE_SETTLEMENT_PATH: ImportPattern = {
   message:
     'Only payments/settlement.server.ts calls recordOutcome. Settle through settleReply or settlePolled.',
-  regex: String.raw`(^|/)record-outcome\.server$`,
+  regex: String.raw`(^|/)record-outcome\.server${SOURCE_SUFFIX}$`,
 }
-const ONE_STATUS_WRITER: ImportPath = {
+const ONE_STATUS_WRITER: ImportPath[] = ['', '.js', '.ts'].map((suffix) => ({
   importNames: ['lockTransaction', 'moveTransaction'],
   message:
     'Only payments/record-outcome.server.ts locks or moves a transaction. Settle through settlement.server.ts.',
-  name: './transactions.repository.server',
-}
+  name: `./transactions.repository.server${suffix}`,
+}))
 
 // Lessons of the Result migration. Inside Result.gen a throw becomes a Panic, so a thrown
 // redirect or notFound reaches the browser as a 500; and a Panic is a defect, never an Err.
@@ -97,8 +100,8 @@ const restrict =
 const restrictImports = restrict(NO_PANIC)
 /** Server code that may run inside a workflow. */
 const restrictServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW)
-const restrictModuleImports = restrict(NO_PANIC, ONE_STATUS_WRITER)
-const restrictModuleServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW, ONE_STATUS_WRITER)
+const restrictModuleImports = restrict(NO_PANIC, ...ONE_STATUS_WRITER)
+const restrictModuleServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW, ...ONE_STATUS_WRITER)
 /** The runner, and tests, which build Panics to prove the runner. */
 const restrictImportsAllowingPanic = restrict()
 const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
