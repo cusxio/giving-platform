@@ -56,14 +56,16 @@ export function refundedCentsOf({ TotalRefundAmount }: EghlQueryResponse): numbe
 export const isUnreadableRefundTotal = ({ TotalRefundAmount }: EghlQueryResponse) =>
   TotalRefundAmount !== undefined && TotalRefundAmount !== '' && !AMOUNT.test(TotalRefundAmount)
 
-/** Neither eGHL hash covers TotalRefundAmount, so it may only hold a row back, never settle one. */
-export function refundDiffersFromSale(wire: EghlQueryResponse): boolean {
+/**
+ * Neither eGHL hash covers TotalRefundAmount, so it may only hold a row back, never settle one. An
+ * unreadable total holds it back too: the refunded receipt promises the full amount.
+ */
+export function refundNotWholeSale(wire: EghlQueryResponse): boolean {
+  if (wire.TxnStatus !== EghlQueryTxnStatus.Refunded) {
+    return false
+  }
   const refunded = refundedCentsOf(wire)
-  return (
-    wire.TxnStatus === EghlQueryTxnStatus.Refunded &&
-    refunded !== null &&
-    refunded !== centsOf(wire.Amount)
-  )
+  return isUnreadableRefundTotal(wire) || (refunded !== null && refunded !== centsOf(wire.Amount))
 }
 
 /** The gateway sends Malaysia time with no zone. */
@@ -175,7 +177,7 @@ function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): Pa
     }
     case EghlQueryTxnStatus.Refunded:
     case EghlQueryTxnStatus.Reversed: {
-      return refundDiffersFromSale(wire)
+      return refundNotWholeSale(wire)
         ? { answer: 'inconclusive', kind: 'pending', record }
         : { kind: 'refunded', record, refundedAmountInCents: refundedCentsOf(wire) }
     }

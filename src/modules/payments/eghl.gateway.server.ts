@@ -24,7 +24,7 @@ import {
   isUnexpectedForSale,
   isUnreadableRefundTotal,
   outcomeOf,
-  refundDiffersFromSale,
+  refundNotWholeSale,
   refundedCentsOf,
   replyOf,
 } from './eghl.outcome'
@@ -86,14 +86,14 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
   }
   if (isUnexpectedForSale(answer)) {
     logger.error(fields, 'Gateway reports a status a sale cannot reach, leaving it pending')
-  } else if (refundDiffersFromSale(answer)) {
+  } else if (refundNotWholeSale(answer)) {
     logger.error(
       {
         ...fields,
         amount_in_cents: centsOf(answer.Amount),
         refunded_amount_in_cents: refundedCentsOf(answer),
       },
-      'Gateway reports a refund that is not the whole sale, leaving it pending',
+      'Gateway reports a refund it does not show to be the whole sale, leaving it pending',
     )
   } else {
     logger.info(fields, 'Gateway answered the status query')
@@ -105,7 +105,7 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
         total_refund_amount: answer.TotalRefundAmount,
         transaction_id: answer.PaymentID,
       },
-      'Gateway refunded total is not ringgit with two decimals, reading it as absent',
+      'Gateway refunded total is not ringgit with two decimals',
     )
   }
 }

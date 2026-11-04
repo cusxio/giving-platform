@@ -491,7 +491,7 @@ describe('the eGHL client reading replies', () => {
       },
     )
 
-    it('reads an unreadable refunded total as absent, and logs it', async () => {
+    it('leaves a status 10 answer with an unreadable refunded total pending, and logs it', async () => {
       expect.hasAssertions()
       const { events, logger } = recordingLogger()
 
@@ -503,9 +503,14 @@ describe('the eGHL client reading replies', () => {
         logger,
       )
 
-      expect(okValue(result)).toMatchObject({ kind: 'refunded', refundedAmountInCents: null })
+      expect(okValue(result)).toMatchObject({ answer: 'inconclusive', kind: 'pending' })
       expect(events).toMatchObject([
-        { event: 'eghl.query.answered', level: 30 },
+        {
+          amount_in_cents: 5000,
+          event: 'eghl.query.answered',
+          level: 50,
+          refunded_amount_in_cents: null,
+        },
         {
           event: 'eghl.query.refund_total_unreadable',
           level: 40,
