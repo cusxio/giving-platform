@@ -504,4 +504,10 @@ describe('the eGHL page time limit', () => {
     expect(PAGE_TIMEOUT_MINUTES).toBeLessThan(RECONCILE_MIN_AGE_MINUTES)
     expect(PAGE_TIMEOUT_MINUTES).toBeLessThan(EXPIRE_AFTER_MINUTES)
   })
+
+  it('fits in seconds in the four digits eGHL reads from PageTimeout', () => {
+    expect.hasAssertions()
+
+    expect(PAGE_TIMEOUT_MINUTES * 60).toBeLessThanOrEqual(9999)
+  })
 })
