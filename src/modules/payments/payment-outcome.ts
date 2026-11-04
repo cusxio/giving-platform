@@ -45,7 +45,7 @@ export type PaymentOutcome =
   | {
       readonly kind: 'refunded'
       readonly record: PaymentRecord
-      /** The gateway's refunded total, or null when it did not say (it reports one for cards only). */
+      /** eGHL reports a refunded total for card payments only (spec 2.4). */
       readonly refundedAmountInCents: number | null
     }
 

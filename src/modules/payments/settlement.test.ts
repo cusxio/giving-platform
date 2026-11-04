@@ -347,8 +347,7 @@ describe('a row the donor left unpaid, by a cancel or a page timeout', () => {
 
 const REFUND = paid({ message: 'Transaction refunded' })
 
-/** What the real eGHL client reads from a signed status 10 answer for the row, and its logs. */
-async function queryRefunded(TotalRefundAmount: string) {
+async function realClientReadingSignedRefund(TotalRefundAmount: string) {
   const { events, logger } = recordingLogger()
   const { config, eghl } = testDeps({ logger })
   const fields = {
@@ -450,7 +449,7 @@ describe('a pending row the gateway answers refunded or reversed', () => {
     expect.hasAssertions()
 
     const row = statefulRow()
-    const { answer } = await queryRefunded('27.00')
+    const { answer } = await realClientReadingSignedRefund('27.00')
     row.queryStatus.mockResolvedValue(answer)
     await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
 
@@ -466,7 +465,7 @@ describe('a pending row the gateway answers refunded or reversed', () => {
       expect.hasAssertions()
 
       const row = statefulRow()
-      const { answer, events } = await queryRefunded(total)
+      const { answer, events } = await realClientReadingSignedRefund(total)
       row.queryStatus.mockResolvedValue(answer)
       const settled = await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
 

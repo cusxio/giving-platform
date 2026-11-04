@@ -47,7 +47,6 @@ export function centsOf(amount: string): number {
   return Number(parts.ringgit) * 100 + Number(parts.cents)
 }
 
-/** The total refunded so far (spec 2.4), or null when the answer leaves it out or garbles it. */
 export function refundedCentsOf({ TotalRefundAmount }: EghlQueryResponse): number | null {
   return TotalRefundAmount !== undefined && AMOUNT.test(TotalRefundAmount)
     ? centsOf(TotalRefundAmount)
@@ -57,10 +56,7 @@ export function refundedCentsOf({ TotalRefundAmount }: EghlQueryResponse): numbe
 export const isUnreadableRefundTotal = ({ TotalRefundAmount }: EghlQueryResponse) =>
   TotalRefundAmount !== undefined && TotalRefundAmount !== '' && !AMOUNT.test(TotalRefundAmount)
 
-/**
- * A refund whose total is not the sale's amount: a partial refund, or a total the sale cannot
- * explain. The total is not signed, so it can only keep a row pending, never settle one.
- */
+/** Neither eGHL hash covers TotalRefundAmount, so it may only hold a row back, never settle one. */
 export function refundDiffersFromSale(wire: EghlQueryResponse): boolean {
   const refunded = refundedCentsOf(wire)
   return (
