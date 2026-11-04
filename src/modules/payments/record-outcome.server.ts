@@ -7,7 +7,7 @@ import type { InfraError } from '#/server/infra-error'
 import { required } from '#/server/infra-error'
 import { logAlert } from '#/server/procedure.server'
 
-import type { HoldReason, Plan, Settling } from './payment-outcome'
+import type { HoldReason, Plan, Settling, StoredTransaction } from './payment-outcome'
 import { planTransition, targetOf, transactionIdOf } from './payment-outcome'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
 import {
@@ -60,8 +60,10 @@ const LATE_SUCCESS: Record<LateCause, { readonly alert: boolean; readonly messag
   },
 }
 
-/** Only the cron's not-found expiry fails a row without a payments row. */
-function lateCauseOf(from: TransactionStatus, providerTxnIds: readonly unknown[]): LateCause {
+function lateCauseOf(
+  from: TransactionStatus,
+  providerTxnIds: StoredTransaction['providerTxnIds'],
+): LateCause {
   if (from === 'cancelled') {
     return 'cancel'
   }

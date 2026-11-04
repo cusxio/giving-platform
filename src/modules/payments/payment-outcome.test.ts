@@ -209,7 +209,6 @@ const cellsOf = (table: typeof PLAN_TABLE) =>
 const PLAN_CELLS = cellsOf(PLAN_TABLE)
 const RECORDED_PLAN_CELLS = cellsOf(RECORDED_PLAN_TABLE)
 
-/** A cancel and a page timeout return the same signed reply, with no TxnID. */
 const cancelRecord = { ...record, message: 'Buyer cancelled', providerTxnId: '' }
 
 const STEPS = {

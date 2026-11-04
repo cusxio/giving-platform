@@ -195,7 +195,6 @@ const rowTheGatewayFailed = async (providerTxnId: string) => {
   return row
 }
 
-/** A cancel and a page timeout return the same signed reply, with no TxnID. */
 const rowTheDonorLeftUnpaid = async () => {
   const row = statefulRow()
   const cancel = paid({ message: 'Buyer cancelled', providerTxnId: '' })
