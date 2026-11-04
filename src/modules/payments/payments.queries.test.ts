@@ -23,6 +23,7 @@ describe('the receipt query', () => {
     expect.hasAssertions()
 
     expect(Object.fromEntries(TRANSACTION_STATUSES.map((s) => [s, pollEvery(s)]))).toStrictEqual({
+      cancelled: false,
       failed: false,
       held: false,
       pending: 2000,

@@ -1,10 +1,11 @@
-export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'held'] as const
+export const TRANSACTION_STATUSES = ['pending', 'success', 'failed', 'held', 'cancelled'] as const
 export type TransactionStatus = (typeof TRANSACTION_STATUSES)[number]
 
 export const TRANSITIONS = {
+  cancelled: ['success', 'held'],
   failed: ['success', 'held'],
   held: [],
-  pending: ['success', 'failed', 'held'],
+  pending: ['success', 'failed', 'held', 'cancelled'],
   success: [],
 } as const satisfies Record<TransactionStatus, readonly TransactionStatus[]>
 
@@ -29,6 +30,7 @@ export const sourcesOf = (to: Reachable): TransactionStatus[] =>
 export const COUNTED_STATUS = 'success' as const satisfies TransactionStatus
 
 const LISTED_IN_HISTORY = {
+  cancelled: true,
   failed: true,
   held: false,
   pending: false,

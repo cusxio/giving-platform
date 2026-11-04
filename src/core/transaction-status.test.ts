@@ -10,7 +10,7 @@ import {
   sourcesOf,
 } from './transaction-status'
 
-const REACHABLE = new Set<TransactionStatus>(['success', 'failed', 'held'])
+const REACHABLE = new Set<TransactionStatus>(['success', 'failed', 'held', 'cancelled'])
 
 const isReachable = (status: TransactionStatus): status is Reachable => REACHABLE.has(status)
 
@@ -31,15 +31,28 @@ describe('the transaction status machine', () => {
     expect(inverseLists(from, to)).toBe(listed)
   })
 
-  it('moves out of pending, lets a success correct failed, and never returns to pending', () => {
+  it('moves out of pending, lets a success correct failed or cancelled, and never returns to pending', () => {
     expect.hasAssertions()
 
-    expect(sourcesOf('success')).toStrictEqual(['pending', 'failed'])
+    expect(sourcesOf('success')).toStrictEqual(['pending', 'failed', 'cancelled'])
     expect(sourcesOf('failed')).toStrictEqual(['pending'])
-    expect(sourcesOf('held')).toStrictEqual(['pending', 'failed'])
+    expect(sourcesOf('cancelled')).toStrictEqual(['pending'])
+    expect(sourcesOf('held')).toStrictEqual(['pending', 'failed', 'cancelled'])
     expect(TRANSACTION_STATUSES.filter((from) => canMove(from, 'pending'))).toStrictEqual([])
-    expectTypeOf<Reachable>().toEqualTypeOf<'failed' | 'held' | 'success'>()
+    expectTypeOf<Reachable>().toEqualTypeOf<'cancelled' | 'failed' | 'held' | 'success'>()
   })
+
+  it.each(['failed', 'cancelled'] as const)(
+    'moves %s only to success or held, never to the other unpaid status',
+    (from) => {
+      expect.hasAssertions()
+
+      expect(TRANSACTION_STATUSES.filter((to) => canMove(from, to))).toStrictEqual([
+        'success',
+        'held',
+      ])
+    },
+  )
 
   it.each(['success', 'held'] as const)('moves nothing out of %s', (from) => {
     expect.hasAssertions()
@@ -54,10 +67,10 @@ describe('the transaction status machine', () => {
     expect(sourcesOf('pending')).toStrictEqual([])
   })
 
-  it('lists success and failed in history, not pending or held, and counts only success', () => {
+  it('lists success, failed and cancelled in history, not pending or held, and counts only success', () => {
     expect.hasAssertions()
 
-    expect(LISTED_STATUSES).toStrictEqual(['success', 'failed'])
+    expect(LISTED_STATUSES).toStrictEqual(['success', 'failed', 'cancelled'])
     expect(COUNTED_STATUS).toBe('success')
   })
 })

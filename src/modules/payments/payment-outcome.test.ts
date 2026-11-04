@@ -45,7 +45,8 @@ const outcomeOf = (kind: Settling['kind'], money: Money = 'same money'): Settlin
     case 'succeeded': {
       return { card: null, kind, record: MONEY[money] }
     }
-    case 'failed': {
+    case 'failed':
+    case 'cancelled': {
       return { kind, record: MONEY[money] }
     }
     case 'expired': {
@@ -56,7 +57,12 @@ const outcomeOf = (kind: Settling['kind'], money: Money = 'same money'): Settlin
     }
   }
 }
-const OUTCOME_KINDS = ['succeeded', 'failed', 'expired'] as const satisfies Settling['kind'][]
+const OUTCOME_KINDS = [
+  'succeeded',
+  'failed',
+  'expired',
+  'cancelled',
+] as const satisfies Settling['kind'][]
 
 const stored = (
   status: TransactionStatus,
@@ -74,7 +80,7 @@ const transition = (to: Reachable, from: TransactionStatus) => ({
   to,
   transactionId: 'txn_abc123',
 })
-const move = (to: 'failed' | 'success', from: TransactionStatus = 'pending') => ({
+const move = (to: 'cancelled' | 'failed' | 'success', from: TransactionStatus = 'pending') => ({
   kind: 'move',
   transition: transition(to, from),
 })
@@ -130,9 +136,11 @@ const PLAN_TABLE: [TransactionStatus, Settling['kind'], Record<Money, Expected>]
   ],
   ['pending', 'failed', each(move('failed'))],
   ['pending', 'expired', each(move('failed'))],
+  ['pending', 'cancelled', each(move('cancelled'))],
   ['success', 'succeeded', each(absorb('success', 'replay'))],
   ['success', 'failed', each(absorb('success', 'contradiction'))],
   ['success', 'expired', each(absorb('success', 'contradiction'))],
+  ['success', 'cancelled', each(absorb('success', 'contradiction'))],
   [
     'failed',
     'succeeded',
@@ -149,6 +157,24 @@ const PLAN_TABLE: [TransactionStatus, Settling['kind'], Record<Money, Expected>]
   ],
   ['failed', 'failed', each(absorb('failed', 'replay'))],
   ['failed', 'expired', each(absorb('failed', 'replay'))],
+  ['failed', 'cancelled', each(absorb('failed', 'contradiction'))],
+  [
+    'cancelled',
+    'succeeded',
+    {
+      'another amount': hold('amount_mismatch', 'another amount', 'cancelled'),
+      'another amount and currency': hold(
+        'currency_mismatch',
+        'another amount and currency',
+        'cancelled',
+      ),
+      'another currency': hold('currency_mismatch', 'another currency', 'cancelled'),
+      'same money': move('success', 'cancelled'),
+    },
+  ],
+  ['cancelled', 'failed', each(absorb('cancelled', 'contradiction'))],
+  ['cancelled', 'expired', each(absorb('cancelled', 'contradiction'))],
+  ['cancelled', 'cancelled', each(absorb('cancelled', 'replay'))],
   [
     'held',
     'succeeded',
@@ -161,6 +187,7 @@ const PLAN_TABLE: [TransactionStatus, Settling['kind'], Record<Money, Expected>]
   ],
   ['held', 'failed', each(absorb('held', 'contradiction'))],
   ['held', 'expired', each(absorb('held', 'contradiction'))],
+  ['held', 'cancelled', each(absorb('held', 'contradiction'))],
 ]
 
 /** eGHL gives a PaymentID's failure and its success the same TxnID. */
@@ -170,6 +197,7 @@ const RECORDED_PLAN_TABLE: typeof PLAN_TABLE = [
   ['pending', 'succeeded', holdEach('conflict')],
   ['success', 'succeeded', each(absorb('success', 'replay'))],
   ['failed', 'succeeded', holdEach('conflict', 'failed')],
+  ['cancelled', 'succeeded', holdEach('conflict', 'cancelled')],
   ['held', 'succeeded', each(absorb('held', 'replay'))],
   ...PLAN_TABLE.filter(([, kind]) => kind !== 'succeeded'),
 ]
@@ -181,7 +209,11 @@ const cellsOf = (table: typeof PLAN_TABLE) =>
 const PLAN_CELLS = cellsOf(PLAN_TABLE)
 const RECORDED_PLAN_CELLS = cellsOf(RECORDED_PLAN_TABLE)
 
+/** A cancel and a page timeout return the same signed reply, with no TxnID. */
+const cancelRecord = { ...record, message: 'Buyer cancelled', providerTxnId: '' }
+
 const STEPS = {
+  cancelled: { kind: 'cancelled', record: cancelRecord },
   expired: outcomeOf('expired'),
   failed: outcomeOf('failed'),
   mismatched: outcomeOf('succeeded', 'another amount'),
@@ -191,7 +223,13 @@ const STEPS = {
 type Step = keyof typeof STEPS
 const STEP_KINDS = Object.keys(STEPS) as Step[]
 
-const RANK: Record<TransactionStatus, number> = { failed: 1, held: 2, pending: 0, success: 2 }
+const RANK: Record<TransactionStatus, number> = {
+  cancelled: 1,
+  failed: 1,
+  held: 2,
+  pending: 0,
+  success: 2,
+}
 
 interface Row {
   readonly status: TransactionStatus
@@ -199,6 +237,7 @@ interface Row {
 }
 
 const STARTS = {
+  'cancelled by a cancel or timeout': { status: 'cancelled', txnIds: [''] },
   'failed by a gateway failure': { status: 'failed', txnIds: RECORDED },
   'failed by the cron': { status: 'failed', txnIds: [] },
   held: { status: 'held', txnIds: [] },
@@ -257,6 +296,7 @@ const movesInto = (to: TransactionStatus) =>
   )
 
 const PAYING_STEPS = new Set<Step>(['mismatched', 'otherTxnId', 'succeeded'])
+const UNPAID = new Set<TransactionStatus>(['cancelled', 'failed'])
 const paid = (sequence: readonly Step[]) => sequence.some((step) => PAYING_STEPS.has(step))
 
 const neverDecreases = (trail: readonly TransactionStatus[]) =>
@@ -360,7 +400,7 @@ describe('any sequence of outcomes', () => {
   it('enumerates every sequence of length 1 to 4', () => {
     expect.hasAssertions()
 
-    expect(all).toHaveLength(5 + 25 + 125 + 625)
+    expect(all).toHaveLength(6 + 36 + 216 + 1296)
   })
 
   it.each(START_NAMES)('from %s never lowers the status rank', (start) => {
@@ -391,6 +431,7 @@ describe('any sequence of outcomes', () => {
 
     expect(leftHeld).toStrictEqual([])
     expect(movesInto('held')).toStrictEqual([
+      ['cancelled by a cancel or timeout', 'mismatched'],
       ['failed by a gateway failure', 'mismatched'],
       ['failed by a gateway failure', 'succeeded'],
       ['failed by the cron', 'mismatched'],
@@ -407,6 +448,8 @@ describe('any sequence of outcomes', () => {
 
     expect(leftSuccess).toStrictEqual([])
     expect(movesInto('success')).toStrictEqual([
+      ['cancelled by a cancel or timeout', 'otherTxnId'],
+      ['cancelled by a cancel or timeout', 'succeeded'],
       ['failed by a gateway failure', 'otherTxnId'],
       ['failed by the cron', 'otherTxnId'],
       ['failed by the cron', 'succeeded'],
@@ -415,14 +458,27 @@ describe('any sequence of outcomes', () => {
     ])
   })
 
-  it.each(START_NAMES)('from %s never ends failed once a success arrived', (start) => {
+  it('reaches cancelled only from pending through a cancel, and leaves it only when paid', () => {
     expect.hasAssertions()
 
-    const failedAfterPaying = all
-      .filter((sequence) => paid(sequence))
-      .filter((sequence) => statusesOf(start, sequence).at(-1) === 'failed')
+    const leftUnpaid = all
+      .filter((sequence) => !paid(sequence))
+      .filter((sequence) =>
+        statusesOf('cancelled by a cancel or timeout', sequence).some((s) => s !== 'cancelled'),
+      )
 
-    expect(failedAfterPaying).toStrictEqual([])
+    expect(leftUnpaid).toStrictEqual([])
+    expect(movesInto('cancelled')).toStrictEqual([['pending', 'cancelled']])
+  })
+
+  it.each(START_NAMES)('from %s never ends failed or cancelled once a success arrived', (start) => {
+    expect.hasAssertions()
+
+    const unpaidAfterPaying = all
+      .filter((sequence) => paid(sequence))
+      .filter((sequence) => UNPAID.has(statusesOf(start, sequence).at(-1)!))
+
+    expect(unpaidAfterPaying).toStrictEqual([])
   })
 
   it.each(START_NAMES)('from %s ends where its replay ends', (start) => {

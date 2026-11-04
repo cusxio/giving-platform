@@ -1,5 +1,10 @@
 import type { Icon } from '@phosphor-icons/react'
-import { CheckCircleIcon, HourglassIcon, WarningCircleIcon } from '@phosphor-icons/react/dist/ssr'
+import {
+  CheckCircleIcon,
+  HourglassIcon,
+  WarningCircleIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
 import type { TransactionStatus } from '#/modules/payments'
@@ -13,6 +18,7 @@ interface TransactionIconStatusProps {
 }
 
 const transactionStatusIcon: Record<TransactionStatus, Icon> = {
+  cancelled: XCircleIcon,
   failed: WarningCircleIcon,
   held: HourglassIcon,
   pending: HourglassIcon,

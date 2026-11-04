@@ -130,7 +130,7 @@ const SIGNED_SUCCESS = {
 } as const
 
 const statefulRow = () => {
-  let status: 'failed' | 'held' | 'pending' | 'success' = 'pending'
+  let status: 'cancelled' | 'failed' | 'held' | 'pending' | 'success' = 'pending'
   const providerTxnIds: (string | null)[] = []
   const db = createFakeDb()
     .on(findPendingAmountInCents, () => (status === 'pending' ? STORED_CENTS : undefined))

@@ -42,6 +42,10 @@ const lockedAs = (status: string) =>
   )
 
 const OUTCOME_INTO = {
+  cancelled: {
+    kind: 'cancelled',
+    record: { ...record, message: 'Buyer cancelled', providerTxnId: '' },
+  },
   failed: { kind: 'failed', record },
   held: { card: null, kind: 'succeeded', record: { ...record, amountInCents: 9900 } },
   success: { card: null, kind: 'succeeded', record },
@@ -117,15 +121,17 @@ describe('the settlement statements', () => {
       reason: 'failed',
     })
     expect(failure.cause).toMatchObject({
-      message: 'transaction status "refunded" is not one of pending, success, failed, held',
+      message:
+        'transaction status "refunded" is not one of pending, success, failed, held, cancelled',
       name: 'UnknownStatusError',
     })
   })
 
   it.each([
-    ['success', 'in ($4, $5)', ['pending', 'failed']],
+    ['success', 'in ($4, $5, $6)', ['pending', 'failed', 'cancelled']],
     ['failed', 'in ($4)', ['pending']],
-    ['held', 'in ($4, $5)', ['pending', 'failed']],
+    ['held', 'in ($4, $5, $6)', ['pending', 'failed', 'cancelled']],
+    ['cancelled', 'in ($4)', ['pending']],
   ] as const)(
     'moves into %s only from the statuses the table lists',
     async (to, sources, params) => {
