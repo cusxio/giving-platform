@@ -179,7 +179,6 @@ export const pendingTransactionsToReconcile = defineQuery(
   rows,
 )
 
-/** How many pending transactions are too old for `pendingTransactionsToReconcile` to select. */
 export const countStalePending = defineQuery(
   'payments.countStalePending',
   (db) =>

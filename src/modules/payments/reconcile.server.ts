@@ -56,7 +56,6 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
   if (stale.isErr()) {
     logInfraFailure(logger, 'eghl.cron', stale.error)
   }
-  const stalePending = stale.isOk() ? stale.value : undefined
 
   const summary = {
     event: 'eghl.cron.complete',
@@ -65,10 +64,10 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
       finalized: finalizedCount,
       found: pendingTransactions.length,
       marked_failed: failCount,
-      ...(stalePending !== undefined && { stale_pending: stalePending }),
+      ...(stale.isOk() && { stale_pending: stale.value }),
     },
   }
-  if (stalePending !== undefined && stalePending > 0) {
+  if (stale.isOk() && stale.value > 0) {
     logger.warn(
       summary,
       'eGHL cron job complete; pending transactions past its window need an operator',

@@ -70,11 +70,6 @@ const kindOf = (sql: string): StatementKind => {
   return sql.startsWith('select') ? 'select' : 'update'
 }
 
-/**
- * A neon-http Db whose driver records each statement. The pending select answers with
- * `pendingRows`, the stale count with `stalePending`, and updates report `updatedRows` affected
- * rows. `failOn` makes a statement kind throw.
- */
 const fakeDb = (
   pendingRows: PendingRow[],
   {
