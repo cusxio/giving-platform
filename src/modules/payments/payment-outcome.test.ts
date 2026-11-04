@@ -13,7 +13,13 @@ import type {
   Settling,
   StoredTransaction,
 } from './payment-outcome'
-import { decide, planTransition } from './payment-outcome'
+import {
+  decide,
+  EXPIRE_AFTER_MINUTES,
+  PAGE_TIMEOUT_MINUTES,
+  planTransition,
+  RECONCILE_MIN_AGE_MINUTES,
+} from './payment-outcome'
 
 const record: PaymentRecord = {
   amountInCents: 5000,
@@ -488,5 +494,14 @@ describe('deciding what a status query answer means', () => {
       do: 'record',
       settling: { kind: 'failed', record: cancelRecord },
     })
+  })
+})
+
+describe('the eGHL page time limit', () => {
+  it('closes the page before the cron first queries the row or expires it as not found', () => {
+    expect.hasAssertions()
+
+    expect(PAGE_TIMEOUT_MINUTES).toBeLessThan(RECONCILE_MIN_AGE_MINUTES)
+    expect(PAGE_TIMEOUT_MINUTES).toBeLessThan(EXPIRE_AFTER_MINUTES)
   })
 })

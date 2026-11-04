@@ -24,23 +24,24 @@ const hashValue = (value: string) => createHash('sha256').update(value).digest('
 const expectedReturnURL = `${config.baseUrl}/api/eghl/return`
 const expectedCallbackURL = `${config.baseUrl}/api/eghl/callback`
 
+/** The payment request's hash key, in the documented order. */
 const signedFields = (token: string) =>
-  [
-    config.password,
-    config.serviceId,
-    'txn_001',
-    expectedReturnURL,
-    '',
-    '',
-    expectedCallbackURL,
-    '99.50',
-    'MYR',
-    '',
-    '',
-    '',
-    token,
-    '',
-  ].join('')
+  Object.values({
+    Password: config.password,
+    ServiceID: config.serviceId,
+    PaymentID: 'txn_001',
+    MerchantReturnURL: expectedReturnURL,
+    MerchantApprovalURL: '',
+    MerchantUnApprovalURL: '',
+    MerchantCallBackURL: expectedCallbackURL,
+    Amount: '99.50',
+    CurrencyCode: 'MYR',
+    CustIP: '',
+    PageTimeout: '600',
+    CardNo: '',
+    Token: token,
+    RecurringCriteria: '',
+  }).join('')
 
 const request = {
   amountInCents: 9950,
@@ -68,6 +69,7 @@ describe('the eGHL client', () => {
       MerchantCallBackURL: expectedCallbackURL,
       MerchantReturnURL: expectedReturnURL,
       OrderNumber: 'txn_001',
+      PageTimeout: '600',
       PaymentID: 'txn_001',
       ServiceID: config.serviceId,
     })

@@ -23,7 +23,7 @@ import { isUnexpectedForSale, outcomeOf, replyOf } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
-import { PAYMENT_CURRENCY } from './payment-outcome'
+import { PAGE_TIMEOUT_MINUTES, PAYMENT_CURRENCY } from './payment-outcome'
 
 export interface EghlConfig {
   /** Origin the gateway calls back and returns the donor to. */
@@ -146,6 +146,7 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
         MerchantCallBackURL: `${config.baseUrl}/api/eghl/callback`,
         MerchantReturnURL: `${config.baseUrl}/api/eghl/return`,
         OrderNumber: transactionId,
+        PageTimeout: String(PAGE_TIMEOUT_MINUTES * 60),
         PaymentDesc: description,
         PaymentID: transactionId,
         PymtMethod: 'ANY',
@@ -165,7 +166,7 @@ export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGat
         requestParams.Amount,
         requestParams.CurrencyCode,
         '', // CustIP
-        '', // PageTimeout
+        requestParams.PageTimeout,
         '', // CardNo
         token ?? '',
         '', // RecurringCriteria
