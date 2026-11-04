@@ -24,13 +24,13 @@ export const Route = createFileRoute('/transaction/receipt/$transactionId')({
 })
 
 function ReceiptView(props: Receipt) {
-  const { transaction, user, payment } = props
+  const { transaction, user } = props
   switch (transaction.status) {
     case 'success': {
       return <Success transaction={transaction} user={user} />
     }
     case 'failed': {
-      return <Failed payment={payment ?? undefined} transaction={transaction} />
+      return <Failed transaction={transaction} />
     }
     case 'cancelled': {
       return <Cancelled transaction={transaction} />
