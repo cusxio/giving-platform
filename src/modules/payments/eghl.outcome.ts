@@ -154,13 +154,15 @@ function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): Pa
     case EghlTxnStatus.Pending: {
       return { answer: 'gateway_pending', kind: 'pending', record }
     }
+    case EghlQueryTxnStatus.Refunded:
+    case EghlQueryTxnStatus.Reversed: {
+      return { kind: 'refunded', record }
+    }
     case EghlQueryTxnStatus.Authorized:
     case EghlQueryTxnStatus.Captured:
     case EghlQueryTxnStatus.InternalError:
     case EghlQueryTxnStatus.NotFound:
-    case EghlQueryTxnStatus.Refunded:
-    case EghlQueryTxnStatus.ReversalPending:
-    case EghlQueryTxnStatus.Reversed: {
+    case EghlQueryTxnStatus.ReversalPending: {
       return { answer: 'inconclusive', kind: 'pending', record }
     }
     default: {

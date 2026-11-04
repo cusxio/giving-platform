@@ -42,9 +42,11 @@ export type PaymentOutcome =
       readonly kind: 'pending'
       readonly record: PaymentRecord
     }
+  | { readonly kind: 'refunded'; readonly record: PaymentRecord }
 
 type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
+type RefundedOutcome = Extract<PaymentOutcome, { kind: 'refunded' }>
 
 interface ExpiredOutcome {
   readonly kind: 'expired'
@@ -53,11 +55,6 @@ interface ExpiredOutcome {
 
 interface CancelledOutcome {
   readonly kind: 'cancelled'
-  readonly record: PaymentRecord
-}
-
-interface RefundedOutcome {
-  readonly kind: 'refunded'
   readonly record: PaymentRecord
 }
 
@@ -235,7 +232,8 @@ type DecisionContext =
 export function decide(outcome: PaymentOutcome, context: DecisionContext): Decision {
   switch (outcome.kind) {
     case 'succeeded':
-    case 'failed': {
+    case 'failed':
+    case 'refunded': {
       return { do: 'record', settling: outcome }
     }
     case 'pending': {

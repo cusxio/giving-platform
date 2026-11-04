@@ -80,4 +80,19 @@ describe('the payment gateway port', () => {
 
     expect(settledFailure.kind).toBe('settled')
   })
+
+  it('never reads a refund from a reply, only from a status query answer', () => {
+    expect.hasAssertions()
+
+    // @ts-expect-error: a reply never settles a refund
+    const settledRefund: GatewayReply = { kind: 'settled', outcome: { kind: 'refunded', record } }
+    const unconfirmedRefund: GatewayReply = {
+      // @ts-expect-error: a reply never claims a refund
+      claim: { kind: 'refunded', record },
+      kind: 'unconfirmed',
+    }
+
+    expect([settledRefund.kind, unconfirmedRefund.kind]).toStrictEqual(['settled', 'unconfirmed'])
+    expectTypeOf<Extract<PaymentOutcome, { kind: 'refunded' }>>().not.toBeNever()
+  })
 })

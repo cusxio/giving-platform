@@ -40,7 +40,13 @@ const finalStatusOf = (answer: Pick<EghlQueryResponse, 'TxnExists' | 'TxnMessage
   } as Verified<EghlQueryResponse>).match({
     err: () => null,
     ok: (outcome) =>
-      ({ failed: 'failed', notFound: null, pending: null, succeeded: 'success' })[outcome.kind],
+      ({
+        failed: 'failed',
+        notFound: null,
+        pending: null,
+        refunded: 'refunded',
+        succeeded: 'success',
+      })[outcome.kind],
   })
 
 describe('eGHL inbound reply action', () => {
@@ -137,16 +143,23 @@ describe('eGHL query reply finality', () => {
     },
   )
 
-  it.each([
-    EghlQueryTxnStatus.NotFound,
-    EghlQueryTxnStatus.InternalError,
-    EghlQueryTxnStatus.Refunded,
-    EghlQueryTxnStatus.Reversed,
-  ])('leaves query status %s unsettled', (TxnStatus) => {
-    expect.hasAssertions()
+  it.each([EghlQueryTxnStatus.NotFound, EghlQueryTxnStatus.InternalError])(
+    'leaves query status %s unsettled',
+    (TxnStatus) => {
+      expect.hasAssertions()
 
-    expect(finalStatusOf({ ...exists, TxnMessage: '', TxnStatus })).toBeNull()
-  })
+      expect(finalStatusOf({ ...exists, TxnMessage: '', TxnStatus })).toBeNull()
+    },
+  )
+
+  it.each([EghlQueryTxnStatus.Refunded, EghlQueryTxnStatus.Reversed])(
+    'settles query status %s as refunded',
+    (TxnStatus) => {
+      expect.hasAssertions()
+
+      expect(finalStatusOf({ ...exists, TxnMessage: '', TxnStatus })).toBe('refunded')
+    },
+  )
 })
 
 const newCard = {
@@ -261,20 +274,30 @@ const answered = (overrides: Partial<EghlQueryResponse>) =>
     ...overrides,
   }) as Verified<EghlQueryResponse>
 
+const EXISTING_ANSWERS = [
+  [EghlTxnStatus.Success, 'Transaction Successful', 'succeeded'],
+  [EghlTxnStatus.Failed, 'Transaction Failed', 'failed'],
+  [EghlTxnStatus.Failed, 'Duplicate Payment ID', 'pending'],
+  [EghlTxnStatus.Pending, '', 'pending'],
+  [EghlQueryTxnStatus.Authorized, '', 'pending'],
+  [EghlQueryTxnStatus.Captured, '', 'pending'],
+  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded'],
+  [EghlQueryTxnStatus.Reversed, 'Transaction reversed', 'refunded'],
+  [EghlQueryTxnStatus.ReversalPending, '', 'pending'],
+  [EghlQueryTxnStatus.NotFound, '', 'pending'],
+  [EghlQueryTxnStatus.InternalError, '', 'pending'],
+] as const
+
 describe('what a status query answer says', () => {
-  it.each([
-    [EghlTxnStatus.Success, 'Transaction Successful', 'succeeded'],
-    [EghlTxnStatus.Failed, 'Transaction Failed', 'failed'],
-    [EghlTxnStatus.Failed, 'Duplicate Payment ID', 'pending'],
-    [EghlTxnStatus.Pending, '', 'pending'],
-    [EghlQueryTxnStatus.Authorized, '', 'pending'],
-    [EghlQueryTxnStatus.Captured, '', 'pending'],
-    [EghlQueryTxnStatus.Refunded, '', 'pending'],
-    [EghlQueryTxnStatus.Reversed, '', 'pending'],
-    [EghlQueryTxnStatus.ReversalPending, '', 'pending'],
-    [EghlQueryTxnStatus.NotFound, '', 'pending'],
-    [EghlQueryTxnStatus.InternalError, '', 'pending'],
-  ])(
+  it('pins every status code a query answer can carry', () => {
+    expect.hasAssertions()
+
+    expect(new Set(EXISTING_ANSWERS.map(([status]) => status))).toStrictEqual(
+      new Set([...Object.values(EghlTxnStatus), ...Object.values(EghlQueryTxnStatus)]),
+    )
+  })
+
+  it.each(EXISTING_ANSWERS)(
     'reads an existing payment with status %s and message %j as %s',
     (TxnStatus, TxnMessage, kind) => {
       expect.hasAssertions()
@@ -306,6 +329,28 @@ describe('what a status query answer says', () => {
 
     expect(errValue(busy)).toMatchObject({ _tag: 'EghlGatewayBusyError', queryDesc: 'System busy' })
   })
+
+  it.each([EghlQueryTxnStatus.Refunded, EghlQueryTxnStatus.Reversed])(
+    'carries the record of the payment a status %s answer returned',
+    (TxnStatus) => {
+      expect.hasAssertions()
+
+      expect(
+        outcomeOf(answered({ ...newCard, TxnMessage: 'Transaction refunded', TxnStatus })).unwrap(),
+      ).toStrictEqual({
+        kind: 'refunded',
+        record: {
+          amountInCents: 5000,
+          currency: 'MYR',
+          message: 'Transaction refunded',
+          method: 'CC',
+          paidAt: new TZDate('2026-10-31T11:30:00+08:00'),
+          providerTxnId: 'CIVtxn_abc123',
+          transactionId: 'txn_abc123',
+        },
+      })
+    },
+  )
 
   it('carries the card a successful answer reports', () => {
     expect.hasAssertions()
@@ -544,9 +589,7 @@ describe("a pending answer's kind of pending", () => {
     ['captured', EghlQueryTxnStatus.Captured, ''],
     ['an internal error code', EghlQueryTxnStatus.InternalError, ''],
     ['a not-found code', EghlQueryTxnStatus.NotFound, ''],
-    ['refunded', EghlQueryTxnStatus.Refunded, ''],
     ['reversal pending', EghlQueryTxnStatus.ReversalPending, ''],
-    ['reversed', EghlQueryTxnStatus.Reversed, ''],
   ] as const)('is not final for %s', (_case, status, message) => {
     expect.hasAssertions()
 

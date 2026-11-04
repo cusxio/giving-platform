@@ -341,6 +341,108 @@ describe('a row the donor left unpaid, by a cancel or a page timeout', () => {
   })
 })
 
+const REFUND = paid({ message: 'Transaction refunded' })
+
+const REFUND_WARNING = {
+  amount_in_cents: STORED_CENTS,
+  event: 'payment.finalize.refunded',
+  level: 40,
+  provider_txn_id: 'CIVtxn_abc123',
+  stored_amount_in_cents: STORED_CENTS,
+}
+
+const PENDING_ROW_AGED_40_MINUTES = {
+  amountInCents: STORED_CENTS,
+  createdAt: new Date(Date.now() - 40 * 60_000),
+  transactionId: 'txn_abc123',
+}
+
+const rowTheGatewayRefunded = async () => {
+  const row = statefulRow()
+  row.queryStatus.mockResolvedValue(Result.ok({ kind: 'refunded', record: REFUND }))
+  await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
+  row.mark()
+  return row
+}
+
+describe('a pending row the gateway answers refunded or reversed', () => {
+  it("is refunded by the cron, with the answer's payments row and a warning naming the money", async () => {
+    expect.hasAssertions()
+
+    const row = statefulRow()
+    row.queryStatus.mockResolvedValue(Result.ok({ kind: 'refunded', record: REFUND }))
+    const settled = await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
+
+    expect(okValue(settled)).toStrictEqual({
+      from: 'pending',
+      kind: 'moved',
+      to: 'refunded',
+      via: 'refunded',
+    })
+    expect([row.status(), row.paymentRows()]).toStrictEqual(['refunded', 1])
+    expect(row.callsSince()).toStrictEqual(LATE_WRITES)
+    expect(row.eventsSince()).toStrictEqual([
+      expect.objectContaining({ event: 'eghl.cron.syncing_status' }),
+      expect.objectContaining({ ...REFUND_WARNING, source: 'cron' }),
+    ])
+  })
+
+  it.each(
+    (['callback', 'return'] as const).flatMap((source) =>
+      (['failed', 'cancelled'] as const).map((claim) => [source, claim] as const),
+    ),
+  )(
+    'is refunded when the query confirming a %s reply that claims %s answers a refund',
+    async (source, claim) => {
+      expect.hasAssertions()
+
+      const row = statefulRow()
+      row.queryStatus.mockResolvedValue(Result.ok({ kind: 'refunded', record: REFUND }))
+      const settled = await settleReply(
+        row.deps,
+        { claim: { kind: claim, record: paid({ message: 'Card declined' }) }, kind: 'unconfirmed' },
+        source,
+      )
+
+      expect(okValue(settled)).toStrictEqual({
+        from: 'pending',
+        kind: 'moved',
+        to: 'refunded',
+        via: 'refunded',
+      })
+      expect([row.status(), row.paymentRows()]).toStrictEqual(['refunded', 1])
+      expect(row.callsSince()).toStrictEqual(['payments.findPendingAmountInCents', ...LATE_WRITES])
+      expect(row.eventsSince()).toStrictEqual([
+        expect.objectContaining({ ...REFUND_WARNING, source }),
+      ])
+    },
+  )
+
+  it.each(['callback', 'return'] as const)(
+    'stays refunded on a signed %s success replayed later, writing nothing',
+    async (source) => {
+      expect.hasAssertions()
+
+      const { callsSince, deps, eventsSince, paymentRows, status } = await rowTheGatewayRefunded()
+      const settled = await settleReply(deps, SIGNED_SUCCESS, source)
+
+      expect(okValue(settled)).toStrictEqual({
+        at: 'refunded',
+        kind: 'absorbed',
+        why: 'contradiction',
+      })
+      expect([status(), paymentRows()]).toStrictEqual(['refunded', 1])
+      expect(callsSince()).toStrictEqual([
+        'payments.lockTransaction',
+        'payments.findProviderTxnIds',
+      ])
+      expect(eventsSince()).toStrictEqual([
+        expect.objectContaining({ event: 'payment.finalize.contradiction', status: 'refunded' }),
+      ])
+    },
+  )
+})
+
 const CONFLICT_ALERT = {
   amount_in_cents: STORED_CENTS,
   event: 'payment.finalize.conflict',

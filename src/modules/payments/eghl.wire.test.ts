@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   EghlPaymentResponseSchema,
   EghlQueryResponseSchema,
+  EghlQueryTxnStatus,
   EghlTxnExists,
   EghlTxnStatus,
 } from './eghl.wire'
@@ -87,10 +88,10 @@ describe('eghlQueryResponseSchema', () => {
 })
 
 describe('eghlPaymentResponseSchema', () => {
-  it('rejects a query-only status', () => {
+  it.each(Object.values(EghlQueryTxnStatus))('rejects the query-only status %s', (TxnStatus) => {
     expect.hasAssertions()
 
-    expect(EghlPaymentResponseSchema.Check({ ...paymentFields, TxnStatus: '-1' })).toBe(false)
+    expect(EghlPaymentResponseSchema.Check({ ...paymentFields, TxnStatus })).toBe(false)
   })
 
   it('rejects a reply without HashValue2', () => {

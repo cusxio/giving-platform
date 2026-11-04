@@ -530,6 +530,7 @@ describe('deciding what a status query answer means', () => {
     failed: { kind: 'failed', record },
     notFound: { kind: 'notFound' },
     pending: { answer: 'gateway_pending', kind: 'pending', record },
+    refunded: { kind: 'refunded', record },
     succeeded: { card: null, kind: 'succeeded', record },
   } as const satisfies Record<PaymentOutcome['kind'], PaymentOutcome>
   const openedPage = { answer: 'gateway_pending', kind: 'pending', record: noReference } as const
@@ -545,6 +546,10 @@ describe('deciding what a status query answer means', () => {
     ['a success, for the cron', answers.succeeded, polledAt(45), answers.succeeded],
     ['a failure, for the cron', answers.failed, polledAt(45), answers.failed],
     ['a success, against a cancelled claim', answers.succeeded, cancelled, answers.succeeded],
+    ['a refund, against a claim', answers.refunded, { claim }, answers.refunded],
+    ['a refund, against a cancelled claim', answers.refunded, cancelled, answers.refunded],
+    ['a refund, for the cron', answers.refunded, polledAt(45), answers.refunded],
+    ['a refund, for the cron at any age', answers.refunded, polledAt(2000), answers.refunded],
   ] as const)('records %s as the gateway gave it', (_case, outcome, context, settling) => {
     expect.hasAssertions()
 

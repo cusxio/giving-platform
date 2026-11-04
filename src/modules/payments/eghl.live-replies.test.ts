@@ -28,7 +28,13 @@ const finalStatusOf = (answer: EghlQueryResponse) =>
   outcomeOf(answer as Verified<EghlQueryResponse>).match({
     err: () => null,
     ok: (outcome) =>
-      ({ failed: 'failed', notFound: null, pending: null, succeeded: 'success' })[outcome.kind],
+      ({
+        failed: 'failed',
+        notFound: null,
+        pending: null,
+        refunded: 'refunded',
+        succeeded: 'success',
+      })[outcome.kind],
   })
 
 const PAYMENT_ID = 'liveReply00000000001'

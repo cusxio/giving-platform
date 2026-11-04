@@ -437,6 +437,27 @@ describe('the eGHL client reading replies', () => {
       },
     )
 
+    it.each([EghlQueryTxnStatus.Refunded, EghlQueryTxnStatus.Reversed])(
+      'reads a signed answer with status %s as refunded, and logs its status code',
+      async (TxnStatus) => {
+        expect.hasAssertions()
+        const { events, logger } = recordingLogger()
+
+        const result = await queryAgainstGatewayReply(
+          existingTransactionReply({ TxnStatus } as unknown as Partial<EghlPaymentResponse>),
+          logger,
+        )
+
+        expect(okValue(result)).toMatchObject({
+          kind: 'refunded',
+          record: { amountInCents: 5000, transactionId: 'txn_abc123' },
+        })
+        expect(events).toMatchObject([
+          { event: 'eghl.query.answered', level: 30, status: TxnStatus },
+        ])
+      },
+    )
+
     it('rejects a verified reply for another payment', async () => {
       expect.hasAssertions()
 
