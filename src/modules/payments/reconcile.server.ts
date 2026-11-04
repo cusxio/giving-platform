@@ -2,7 +2,7 @@ import type { Deps } from '#/server/deps.server'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import { settlePolled } from './settlement.server'
-import { pendingTransactionsToReconcile } from './transactions.repository.server'
+import { countStalePending, pendingTransactionsToReconcile } from './transactions.repository.server'
 
 type ReconcileDeps = Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>
 
@@ -52,18 +52,30 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
     }
   }
 
-  logger.info(
-    {
-      event: 'eghl.cron.complete',
-      stats: {
-        errors: errorCount,
-        finalized: finalizedCount,
-        found: pendingTransactions.length,
-        marked_failed: failCount,
-      },
+  const stale = await db.run(countStalePending())
+  if (stale.isErr()) {
+    logInfraFailure(logger, 'eghl.cron', stale.error)
+  }
+  const stalePending = stale.isOk() ? stale.value : undefined
+
+  const summary = {
+    event: 'eghl.cron.complete',
+    stats: {
+      errors: errorCount,
+      finalized: finalizedCount,
+      found: pendingTransactions.length,
+      marked_failed: failCount,
+      ...(stalePending !== undefined && { stale_pending: stalePending }),
     },
-    'eGHL cron job complete',
-  )
+  }
+  if (stalePending !== undefined && stalePending > 0) {
+    logger.warn(
+      summary,
+      'eGHL cron job complete; pending transactions past its window need an operator',
+    )
+  } else {
+    logger.info(summary, 'eGHL cron job complete')
+  }
 
   return new Response('ok', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
 }

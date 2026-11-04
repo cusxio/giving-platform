@@ -1,5 +1,5 @@
 import type { InferInsertModel } from 'drizzle-orm'
-import { and, asc, desc, eq, gt, inArray, lt } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, lt, lte } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
 import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
@@ -177,4 +177,20 @@ export const pendingTransactionsToReconcile = defineQuery(
       .orderBy(asc(transactions.createdAt))
       .limit(25),
   rows,
+)
+
+/** How many pending transactions are too old for `pendingTransactionsToReconcile` to select. */
+export const countStalePending = defineQuery(
+  'payments.countStalePending',
+  (db) =>
+    db
+      .select({ value: count() })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.status, 'pending'),
+          lte(transactions.createdAt, addDays(now(), -RECONCILE_WINDOW_DAYS)),
+        ),
+      ),
+  (found) => found[0]?.value ?? 0,
 )
