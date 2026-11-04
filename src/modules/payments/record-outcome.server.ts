@@ -40,7 +40,7 @@ const HOLD_MESSAGES: Record<HoldReason, string> = {
   currency_mismatch: 'Gateway reports a success for other money than the transaction, holding it',
 }
 
-type LateCause = 'cancel' | 'expiry' | 'gateway_failure'
+type LateCause = 'cancel' | 'gateway_failure' | 'no_gateway_txn'
 
 const LATE_SUCCESS: Record<LateCause, { readonly alert: boolean; readonly message: string }> = {
   cancel: {
@@ -48,15 +48,15 @@ const LATE_SUCCESS: Record<LateCause, { readonly alert: boolean; readonly messag
     message:
       'Gateway reports a success for a transaction whose page was cancelled or timed out, recording the success',
   },
-  expiry: {
-    alert: false,
-    message:
-      'Gateway reports a success for a transaction expired as not found, recording the success',
-  },
   gateway_failure: {
     alert: true,
     message:
       'Gateway reports a success for a transaction it reported failed, recording the success',
+  },
+  no_gateway_txn: {
+    alert: false,
+    message:
+      'Gateway reports a success for a failed transaction with no gateway TxnID, recording the success',
   },
 }
 
@@ -67,7 +67,9 @@ function lateCauseOf(
   if (from === 'cancelled') {
     return 'cancel'
   }
-  return providerTxnIds.length === 0 ? 'expiry' : 'gateway_failure'
+  return providerTxnIds.some((id) => id !== null && id !== '')
+    ? 'gateway_failure'
+    : 'no_gateway_txn'
 }
 
 function logAbsorbed(

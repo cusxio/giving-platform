@@ -553,26 +553,34 @@ describe('a success onto a failed row', () => {
     expect(span.attributes['error.type']).toBe('payment.finalize.late_success')
   })
 
-  it('logs a late success onto a row with no payments row, as the cron expires it, as a warning', async () => {
-    expect.hasAssertions()
+  it.each([
+    ['no payments row (the cron expired it)', []],
+    ['the empty TxnID of a cancel recorded before the cancelled status', ['']],
+    ['payments rows with no TxnID', [null, '']],
+  ] as const)(
+    'logs a late success onto a failed row with %s as a warning, not a gateway failure',
+    async (_case, providerTxnIds) => {
+      expect.hasAssertions()
 
-    const { events, logger } = recordingLogger()
-    const { span } = await inRequestSpan(() =>
-      record(storedAs('guest', 'failed'), succeeded(), logger),
-    )
+      const { events, logger } = recordingLogger()
+      const { span } = await inRequestSpan(() =>
+        record(storedAs('guest', 'failed', [...providerTxnIds]), succeeded(), logger),
+      )
 
-    expect(events).toStrictEqual([
-      expect.objectContaining({
-        event: 'payment.finalize.late_success',
-        from: 'failed',
-        level: 40,
-        provider_txn_id: 'CIVtxn_abc123',
-        source: 'callback',
-        transaction_id: 'txn_abc123',
-      }),
-    ])
-    expect(span.status.code).toBe(SpanStatusCode.UNSET)
-  })
+      expect(events).toStrictEqual([
+        expect.objectContaining({
+          event: 'payment.finalize.late_success',
+          from: 'failed',
+          level: 40,
+          msg: 'Gateway reports a success for a failed transaction with no gateway TxnID, recording the success',
+          provider_txn_id: 'CIVtxn_abc123',
+          source: 'callback',
+          transaction_id: 'txn_abc123',
+        }),
+      ])
+      expect(span.status.code).toBe(SpanStatusCode.UNSET)
+    },
+  )
 
   it.each([
     ['the same money', paidRecord()],
