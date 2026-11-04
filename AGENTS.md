@@ -87,7 +87,7 @@ A hand-failed success row that a donor replays reaches an operator as a conflict
 
 Every channel settles through `payments/settlement.server.ts`: the callback and both returns call `settleReply(deps, reply, source)`, and the cron calls `settlePolled(deps, row)` once per pending row. Each asks the gateway when it must, lets the pure `decide(outcome, context)` in `payment-outcome.ts` say what the answer means for the row, and then records through `recordOutcome` or waits. Change what an answer means in `decide`, never in a handler or the cron. `oxlint.config.ts` enforces the path: only `settlement.server.ts` imports `record-outcome.server`, and only `record-outcome.server.ts` imports `lockTransaction` and `moveTransaction`.
 
-The cron's summary, `eghl.cron.complete`, carries `stale_pending`: the count of `pending` rows older than its window (`countStalePending`), which it no longer queries. The summary is a warning when the count is not zero. An operator resolves those rows at eGHL.
+The cron's summary, `eghl.cron.complete`, carries `stale_pending`: the count of `pending` rows older than its window (`countStalePending`), which it no longer queries. The summary is a warning when the count is not zero. A failed count is logged as `eghl.cron.failed` and leaves the field out. An operator resolves those rows at eGHL.
 
 ## Logs and traces
 
