@@ -232,7 +232,7 @@ export function decide(outcome: PaymentOutcome, context: DecisionContext): Decis
         outcome.answer === 'gateway_pending' &&
         outcome.record.providerTxnId === ''
       return abandoned
-        ? { do: 'record', settling: { kind: 'failed', record: context.claim.record } }
+        ? { do: 'record', settling: { kind: 'cancelled', record: context.claim.record } }
         : { do: 'wait', why: 'gateway_pending' }
     }
     case 'notFound': {

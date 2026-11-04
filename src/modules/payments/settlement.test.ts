@@ -195,6 +195,26 @@ const rowTheGatewayFailed = async (providerTxnId: string) => {
   return row
 }
 
+/** A cancel and a page timeout return the same signed reply, with no TxnID. */
+const rowTheDonorLeftUnpaid = async () => {
+  const row = statefulRow()
+  const cancel = paid({ message: 'Buyer cancelled', providerTxnId: '' })
+  row.queryStatus.mockResolvedValue(
+    Result.ok({
+      answer: 'gateway_pending',
+      kind: 'pending',
+      record: paid({ message: '', providerTxnId: '' }),
+    }),
+  )
+  await settleReply(
+    row.deps,
+    { claim: { kind: 'cancelled', record: cancel }, kind: 'unconfirmed' },
+    'return',
+  )
+  row.mark()
+  return row
+}
+
 const rowFailedByHandAfterItsSuccess = async () => {
   const row = statefulRow()
   await settleReply(row.deps, SIGNED_SUCCESS, 'return')
@@ -256,6 +276,66 @@ describe('a row the cron expired', () => {
 
     expect(okValue(settled)).toStrictEqual({ kind: 'waiting', why: 'not_pending' })
     expect([expired, status()]).toStrictEqual(['failed', 'failed'])
+    expect(queryStatus).not.toHaveBeenCalled()
+    expect(callsSince()).toStrictEqual(['payments.findPendingAmountInCents'])
+  })
+})
+
+describe('a row the donor left unpaid, by a cancel or a page timeout', () => {
+  it("is cancelled with the reply's payments row once the gateway reports the page still open", async () => {
+    expect.hasAssertions()
+
+    const { paymentRows, status } = await rowTheDonorLeftUnpaid()
+
+    expect([status(), paymentRows()]).toStrictEqual(['cancelled', 1])
+  })
+
+  it.each(['callback', 'return'] as const)(
+    "becomes success on a signed %s success, beside the cancel's payments row, with a warning",
+    async (source) => {
+      expect.hasAssertions()
+
+      const { callsSince, deps, eventsSince, paymentRows, status } = await rowTheDonorLeftUnpaid()
+      const settled = await settleReply(deps, SIGNED_SUCCESS, source)
+
+      expect(okValue(settled)).toStrictEqual({
+        from: 'cancelled',
+        kind: 'moved',
+        to: 'success',
+        via: 'succeeded',
+      })
+      expect([status(), paymentRows()]).toStrictEqual(['success', 2])
+      expect(callsSince()).toStrictEqual(LATE_WRITES)
+      expect(eventsSince()).toStrictEqual([
+        expect.objectContaining({
+          event: 'payment.finalize.late_success',
+          from: 'cancelled',
+          level: 40,
+          provider_txn_id: 'CIVtxn_abc123',
+          source,
+        }),
+      ])
+    },
+  )
+
+  it('stays cancelled on another cancel, without asking the gateway', async () => {
+    expect.hasAssertions()
+
+    const { callsSince, deps, queryStatus, status } = await rowTheDonorLeftUnpaid()
+    const settled = await settleReply(
+      deps,
+      {
+        claim: {
+          kind: 'cancelled',
+          record: paid({ message: 'Buyer cancelled', providerTxnId: '' }),
+        },
+        kind: 'unconfirmed',
+      },
+      'return',
+    )
+
+    expect(okValue(settled)).toStrictEqual({ kind: 'waiting', why: 'not_pending' })
+    expect(status()).toBe('cancelled')
     expect(queryStatus).not.toHaveBeenCalled()
     expect(callsSince()).toStrictEqual(['payments.findPendingAmountInCents'])
   })

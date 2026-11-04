@@ -42,6 +42,11 @@ const succeeded = (card: CardUse | null = null, record = paidRecord()): Settling
 
 const failed = (): Settling => ({ kind: 'failed', record: paidRecord() })
 
+const cancelled = (): Settling => ({
+  kind: 'cancelled',
+  record: paidRecord({ message: 'Buyer cancelled', paidAt: null, providerTxnId: '' }),
+})
+
 const newCard: CardUse = {
   card: {
     exp: '209912',
@@ -132,6 +137,36 @@ describe('recording a payment outcome', () => {
       args: [expect.objectContaining({ ...MOVE, to: 'failed' })],
       name: 'payments.moveTransaction',
     })
+  })
+
+  it("moves a pending row to cancelled and records the reply's payment, with no card step", async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = storedAs('user')
+    const result = await record(db, cancelled(), logger)
+
+    expect(okValue(result)).toStrictEqual({
+      from: 'pending',
+      kind: 'moved',
+      to: 'cancelled',
+      via: 'cancelled',
+    })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+      'payments.moveTransaction',
+      'payments.insertPayment',
+    ])
+    expect(db.calls[2]).toStrictEqual({
+      args: [expect.objectContaining({ ...MOVE, to: 'cancelled' })],
+      name: 'payments.moveTransaction',
+    })
+    expect(db.calls[3]).toMatchObject({
+      args: [payment({ message: 'Buyer cancelled', paidAt: NOW, providerTransactionId: '' })],
+      name: 'payments.insertPayment',
+    })
+    expect(events).toStrictEqual([])
   })
 
   it('fails an expired row without recording a payment', async () => {
@@ -636,6 +671,70 @@ describe('a success onto a failed row', () => {
     const result = await record(db, outcome)
 
     expect(okValue(result)).toStrictEqual({ at: 'failed', kind: 'absorbed', why: 'replay' })
+    expect(db.calls.map(({ name }) => name)).toStrictEqual([
+      'payments.lockTransaction',
+      'payments.findProviderTxnIds',
+    ])
+  })
+})
+
+describe('a success onto a cancelled row', () => {
+  it("moves the row to success and records the success beside the cancel's payment", async () => {
+    expect.hasAssertions()
+
+    const db = storedAs('guest', 'cancelled', [''])
+    const result = await record(db, succeeded())
+
+    expect(okValue(result)).toStrictEqual({
+      from: 'cancelled',
+      kind: 'moved',
+      to: 'success',
+      via: 'succeeded',
+    })
+    expect(db.calls).toStrictEqual([
+      { args: ['txn_abc123'], name: 'payments.lockTransaction' },
+      { args: ['txn_abc123'], name: 'payments.findProviderTxnIds' },
+      {
+        args: [expect.objectContaining({ ...MOVE, from: 'cancelled' })],
+        name: 'payments.moveTransaction',
+      },
+      { args: [payment()], name: 'payments.insertPayment' },
+    ])
+  })
+
+  it('logs the late success as a warning that names the cancel, and leaves the request span as it is', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const { span } = await inRequestSpan(() =>
+      record(storedAs('guest', 'cancelled', ['']), succeeded(), logger),
+    )
+
+    expect(events).toStrictEqual([
+      expect.objectContaining({
+        event: 'payment.finalize.late_success',
+        from: 'cancelled',
+        level: 40,
+        msg: 'Gateway reports a success for a transaction whose page was cancelled or timed out, recording the success',
+        provider_txn_id: 'CIVtxn_abc123',
+        source: 'callback',
+        transaction_id: 'txn_abc123',
+      }),
+    ])
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
+  })
+
+  it.each([
+    ['a failure', failed(), 'contradiction'],
+    ['an expiry', { kind: 'expired', transactionId: 'txn_abc123' }, 'contradiction'],
+    ['another cancel', cancelled(), 'replay'],
+  ] as const)('leaves a cancelled row as it is on %s', async (_case, outcome, why) => {
+    expect.hasAssertions()
+
+    const db = storedAs('guest', 'cancelled', [''])
+    const result = await record(db, outcome)
+
+    expect(okValue(result)).toStrictEqual({ at: 'cancelled', kind: 'absorbed', why })
     expect(db.calls.map(({ name }) => name)).toStrictEqual([
       'payments.lockTransaction',
       'payments.findProviderTxnIds',

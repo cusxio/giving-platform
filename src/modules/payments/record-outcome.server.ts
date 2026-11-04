@@ -40,6 +40,34 @@ const HOLD_MESSAGES: Record<HoldReason, string> = {
   currency_mismatch: 'Gateway reports a success for other money than the transaction, holding it',
 }
 
+type LateCause = 'cancel' | 'expiry' | 'gateway_failure'
+
+const LATE_SUCCESS: Record<LateCause, { readonly alert: boolean; readonly message: string }> = {
+  cancel: {
+    alert: false,
+    message:
+      'Gateway reports a success for a transaction whose page was cancelled or timed out, recording the success',
+  },
+  expiry: {
+    alert: false,
+    message:
+      'Gateway reports a success for a transaction expired as not found, recording the success',
+  },
+  gateway_failure: {
+    alert: true,
+    message:
+      'Gateway reports a success for a transaction it reported failed, recording the success',
+  },
+}
+
+/** Only the cron's not-found expiry fails a row without a payments row. */
+function lateCauseOf(from: TransactionStatus, providerTxnIds: readonly unknown[]): LateCause {
+  if (from === 'cancelled') {
+    return 'cancel'
+  }
+  return providerTxnIds.length === 0 ? 'expiry' : 'gateway_failure'
+}
+
 function logAbsorbed(
   logger: Deps['logger'],
   fields: { readonly source: Source; readonly transaction_id: string },
@@ -162,17 +190,11 @@ export function recordOutcome(
           provider_txn_id: record.providerTxnId,
           ...logFields,
         }
-        if (providerTxnIds.length === 0) {
-          deps.logger.warn(
-            late,
-            'Gateway reports a success for a transaction expired as not found, recording the success',
-          )
+        const { alert, message } = LATE_SUCCESS[lateCauseOf(plan.transition.from, providerTxnIds)]
+        if (alert) {
+          logAlert(deps.logger, late, message)
         } else {
-          logAlert(
-            deps.logger,
-            late,
-            'Gateway reports a success for a transaction it reported failed, recording the success',
-          )
+          deps.logger.warn(late, message)
         }
       }
 

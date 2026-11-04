@@ -498,7 +498,6 @@ const wait = (why: 'gateway_pending' | 'not_found'): Decision => ({ do: 'wait', 
 
 describe('deciding what a status query answer means', () => {
   const claim = { kind: 'failed', record: { ...record, message: 'Card declined' } } as const
-  const cancelRecord = { ...record, message: 'Buyer cancelled', providerTxnId: '' }
   const cancelled = { claim: { kind: 'cancelled', record: cancelRecord } } as const
   const noReference = { ...record, message: '', providerTxnId: '' }
   const answers = {
@@ -543,12 +542,12 @@ describe('deciding what a status query answer means', () => {
     expect(decide(outcome, context)).toStrictEqual(decision)
   })
 
-  it("settles a cancel the gateway still reports pending with no reference as failed, with the reply's record", () => {
+  it("settles a cancel the gateway still reports pending with no reference as cancelled, with the reply's record", () => {
     expect.hasAssertions()
 
     expect(decide(openedPage, cancelled)).toStrictEqual({
       do: 'record',
-      settling: { kind: 'failed', record: cancelRecord },
+      settling: { kind: 'cancelled', record: cancelRecord },
     })
   })
 })
