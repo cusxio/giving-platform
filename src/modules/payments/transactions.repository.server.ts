@@ -10,6 +10,7 @@ import type { SameLength } from '#/server/sql.server'
 
 import type { TEXT_COLUMN_LENGTHS } from './eghl.outcome'
 import type { Transition } from './payment-outcome'
+import { RECONCILE_MIN_AGE_MINUTES, RECONCILE_WINDOW_DAYS } from './payment-outcome'
 
 export type TransactionId = Transaction['id']
 
@@ -169,8 +170,8 @@ export const pendingTransactionsToReconcile = defineQuery(
       .where(
         and(
           eq(transactions.status, 'pending'),
-          lt(transactions.createdAt, addMinutes(now(), -15)),
-          gt(transactions.createdAt, addDays(now(), -2)),
+          lt(transactions.createdAt, addMinutes(now(), -RECONCILE_MIN_AGE_MINUTES)),
+          gt(transactions.createdAt, addDays(now(), -RECONCILE_WINDOW_DAYS)),
         ),
       )
       .orderBy(asc(transactions.createdAt))

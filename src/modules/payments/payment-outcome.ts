@@ -194,7 +194,11 @@ export function replyRecord(reply: GatewayReply): PaymentRecord {
   }
 }
 
-const EXPIRE_AFTER_MINUTES = 30
+/** The cron leaves a pending row this long, so it never queries a donor still on the eGHL page. */
+export const RECONCILE_MIN_AGE_MINUTES = 15
+/** The cron stops querying a pending row this old. */
+export const RECONCILE_WINDOW_DAYS = 2
+export const EXPIRE_AFTER_MINUTES = 30
 
 export type Decision =
   | { readonly do: 'record'; readonly settling: Settling }
