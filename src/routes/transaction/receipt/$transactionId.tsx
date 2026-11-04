@@ -11,6 +11,7 @@ import { Cancelled } from './-components/cancelled'
 import { Failed } from './-components/failed'
 import { Held } from './-components/held'
 import { Pending } from './-components/pending'
+import { Refunded } from './-components/refunded'
 import { Success } from './-components/success'
 
 export const Route = createFileRoute('/transaction/receipt/$transactionId')({
@@ -40,6 +41,9 @@ function ReceiptView(props: Receipt) {
     }
     case 'held': {
       return <Held transaction={transaction} />
+    }
+    case 'refunded': {
+      return <Refunded transaction={transaction} />
     }
     default: {
       return assertExhaustive(transaction.status)

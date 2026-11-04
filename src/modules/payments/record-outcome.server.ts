@@ -187,6 +187,21 @@ export function recordOutcome(
         )
       }
 
+      if (outcome.kind === 'refunded') {
+        deps.logger.warn(
+          {
+            amount_in_cents: record.amountInCents,
+            currency: record.currency,
+            event: 'payment.finalize.refunded',
+            method: record.method,
+            provider_txn_id: record.providerTxnId,
+            stored_amount_in_cents: stored.amountInCents,
+            ...logFields,
+          },
+          'Gateway reports the payment was refunded or reversed, recording it refunded',
+        )
+      }
+
       if (plan.transition.from !== 'pending') {
         const late = {
           event: 'payment.finalize.late_success',

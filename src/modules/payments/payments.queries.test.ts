@@ -27,6 +27,7 @@ describe('the receipt query', () => {
       failed: false,
       held: false,
       pending: 2000,
+      refunded: false,
       success: false,
     })
   })

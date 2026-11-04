@@ -48,6 +48,7 @@ const OUTCOME_INTO = {
   },
   failed: { kind: 'failed', record },
   held: { card: null, kind: 'succeeded', record: { ...record, amountInCents: 9900 } },
+  refunded: { kind: 'refunded', record: { ...record, message: 'Transaction refunded' } },
   success: { card: null, kind: 'succeeded', record },
 } as const satisfies Record<Reachable, Settling>
 
@@ -113,7 +114,7 @@ describe('the settlement statements', () => {
   it('fails the lock, naming the value, when the status is not one the table knows', async () => {
     expect.hasAssertions()
 
-    const failure = errValue(await lockedAs('refunded'))
+    const failure = errValue(await lockedAs('voided'))
 
     expect(failure).toMatchObject({
       _tag: 'InfraError',
@@ -122,7 +123,7 @@ describe('the settlement statements', () => {
     })
     expect(failure.cause).toMatchObject({
       message:
-        'transaction status "refunded" is not one of pending, success, failed, held, cancelled',
+        'transaction status "voided" is not one of pending, success, failed, held, cancelled, refunded',
       name: 'UnknownStatusError',
     })
   })
@@ -132,6 +133,7 @@ describe('the settlement statements', () => {
     ['failed', 'in ($4)', ['pending']],
     ['held', 'in ($4, $5, $6)', ['pending', 'failed', 'cancelled']],
     ['cancelled', 'in ($4)', ['pending']],
+    ['refunded', 'in ($4)', ['pending']],
   ] as const)(
     'moves into %s only from the statuses the table lists',
     async (to, sources, params) => {

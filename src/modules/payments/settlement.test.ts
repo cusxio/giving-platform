@@ -1,6 +1,7 @@
 import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
+import type { TransactionStatus } from '#/core/transaction-status'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { okValue } from '#/server/testing/result'
@@ -130,7 +131,7 @@ const SIGNED_SUCCESS = {
 } as const
 
 const statefulRow = () => {
-  let status: 'cancelled' | 'failed' | 'held' | 'pending' | 'success' = 'pending'
+  let status: TransactionStatus = 'pending'
   const providerTxnIds: (string | null)[] = []
   const db = createFakeDb()
     .on(findPendingAmountInCents, () => (status === 'pending' ? STORED_CENTS : undefined))

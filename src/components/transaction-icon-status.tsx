@@ -1,5 +1,6 @@
 import type { Icon } from '@phosphor-icons/react'
 import {
+  ArrowCounterClockwiseIcon,
   CheckCircleIcon,
   HourglassIcon,
   WarningCircleIcon,
@@ -22,6 +23,7 @@ const transactionStatusIcon: Record<TransactionStatus, Icon> = {
   failed: WarningCircleIcon,
   held: HourglassIcon,
   pending: HourglassIcon,
+  refunded: ArrowCounterClockwiseIcon,
   success: CheckCircleIcon,
 }
 

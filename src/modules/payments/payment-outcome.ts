@@ -56,7 +56,17 @@ interface CancelledOutcome {
   readonly record: PaymentRecord
 }
 
-export type Settling = CancelledOutcome | ExpiredOutcome | FailedOutcome | SucceededOutcome
+interface RefundedOutcome {
+  readonly kind: 'refunded'
+  readonly record: PaymentRecord
+}
+
+export type Settling =
+  | CancelledOutcome
+  | ExpiredOutcome
+  | FailedOutcome
+  | RefundedOutcome
+  | SucceededOutcome
 
 export const transactionIdOf = (outcome: Settling): string =>
   outcome.kind === 'expired' ? outcome.transactionId : outcome.record.transactionId
@@ -72,6 +82,9 @@ export function targetOf(outcome: Settling): Reachable {
     }
     case 'cancelled': {
       return 'cancelled'
+    }
+    case 'refunded': {
+      return 'refunded'
     }
     default: {
       return assertExhaustive(outcome)

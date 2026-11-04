@@ -80,7 +80,7 @@ interface Row {
   amount: number
   createdAt: Date
   id: string
-  status: 'cancelled' | 'failed' | 'held' | 'pending' | 'success'
+  status: 'cancelled' | 'failed' | 'held' | 'pending' | 'refunded' | 'success'
 }
 
 describe('a transaction detail', () => {

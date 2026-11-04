@@ -112,7 +112,7 @@ describe('query types', () => {
     expectTypeOf<QueryResult<typeof fundNames>>().toEqualTypeOf<{ id: string; name: string }[]>()
     expectTypeOf<QueryResult<typeof insertPending>>().toEqualTypeOf<{
       id: string
-      status: 'cancelled' | 'failed' | 'held' | 'pending' | 'success'
+      status: 'cancelled' | 'failed' | 'held' | 'pending' | 'refunded' | 'success'
     }>()
     expectTypeOf<QueryResult<typeof activateUser>>().toEqualTypeOf<undefined>()
 
@@ -145,7 +145,7 @@ describe('query types', () => {
     expectTypeOf(user).toEqualTypeOf<QueryResult<typeof findUserByEmail>>()
     expectTypeOf(names).toEqualTypeOf<{ id: string; name: string }[]>()
     expectTypeOf(created.status).toEqualTypeOf<
-      'cancelled' | 'failed' | 'held' | 'pending' | 'success'
+      'cancelled' | 'failed' | 'held' | 'pending' | 'refunded' | 'success'
     >()
     // @ts-expect-error the user may be null
     expect(user.email).toBe('donor@give.test')

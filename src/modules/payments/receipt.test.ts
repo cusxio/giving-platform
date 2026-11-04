@@ -127,7 +127,7 @@ describe('reading a receipt', () => {
     expect.hasAssertions()
 
     expectTypeOf<Awaited<ReturnType<typeof getReceipt>>>().toEqualTypeOf<
-      TransactionReceipt<'cancelled' | 'failed' | 'held' | 'pending' | 'success'>
+      TransactionReceipt<'cancelled' | 'failed' | 'held' | 'pending' | 'refunded' | 'success'>
     >()
     const db = createFakeDb().on(findReceipt, () => ({ payment: null, transaction, user: guest }))
     const expected = {
