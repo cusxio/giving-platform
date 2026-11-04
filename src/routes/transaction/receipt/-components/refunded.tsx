@@ -16,7 +16,7 @@ export function Refunded(props: RefundedProps) {
   return (
     <TransactionStatusLayout
       h1="Donation Refunded"
-      p="This donation was refunded. No money was kept."
+      p="This donation was refunded. The full amount goes back to the card or account you paid with, which can take a few days."
       status={status}
     >
       <Button className={cx('h-8', buttonVariants.subtle)} render={<Link replace to="/" />}>
