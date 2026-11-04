@@ -39,12 +39,35 @@ function textOf(wire: Wire, field: TextField, clipped: ClippedField[]): string {
 
 const AMOUNT = /^(?<ringgit>\d+)\.(?<cents>\d{2})$/u
 
-function centsOf(amount: string): number {
+export function centsOf(amount: string): number {
   const parts = AMOUNT.exec(amount)?.groups
   if (parts === undefined) {
     throw new Error(`eGHL amount "${amount}" is not ringgit with two decimals`)
   }
   return Number(parts.ringgit) * 100 + Number(parts.cents)
+}
+
+/** The total refunded so far (spec 2.4), or null when the answer leaves it out or garbles it. */
+export function refundedCentsOf({ TotalRefundAmount }: EghlQueryResponse): number | null {
+  return TotalRefundAmount !== undefined && AMOUNT.test(TotalRefundAmount)
+    ? centsOf(TotalRefundAmount)
+    : null
+}
+
+export const isUnreadableRefundTotal = ({ TotalRefundAmount }: EghlQueryResponse) =>
+  TotalRefundAmount !== undefined && TotalRefundAmount !== '' && !AMOUNT.test(TotalRefundAmount)
+
+/**
+ * A refund whose total is not the sale's amount: a partial refund, or a total the sale cannot
+ * explain. The total is not signed, so it can only keep a row pending, never settle one.
+ */
+export function refundDiffersFromSale(wire: EghlQueryResponse): boolean {
+  const refunded = refundedCentsOf(wire)
+  return (
+    wire.TxnStatus === EghlQueryTxnStatus.Refunded &&
+    refunded !== null &&
+    refunded !== centsOf(wire.Amount)
+  )
 }
 
 /** The gateway sends Malaysia time with no zone. */
@@ -156,7 +179,9 @@ function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): Pa
     }
     case EghlQueryTxnStatus.Refunded:
     case EghlQueryTxnStatus.Reversed: {
-      return { kind: 'refunded', record }
+      return refundDiffersFromSale(wire)
+        ? { answer: 'inconclusive', kind: 'pending', record }
+        : { kind: 'refunded', record, refundedAmountInCents: refundedCentsOf(wire) }
     }
     case EghlQueryTxnStatus.Authorized:
     case EghlQueryTxnStatus.Captured:

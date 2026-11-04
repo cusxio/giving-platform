@@ -195,6 +195,7 @@ export function recordOutcome(
             event: 'payment.finalize.refunded',
             method: record.method,
             provider_txn_id: record.providerTxnId,
+            refunded_amount_in_cents: outcome.refundedAmountInCents,
             stored_amount_in_cents: stored.amountInCents,
             ...logFields,
           },

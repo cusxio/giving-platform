@@ -50,6 +50,7 @@ const cancelled = (): Settling => ({
 const refunded = (): Settling => ({
   kind: 'refunded',
   record: paidRecord({ message: 'Transaction refunded' }),
+  refundedAmountInCents: 5000,
 })
 
 const newCard: CardUse = {
@@ -203,6 +204,7 @@ describe('recording a payment outcome', () => {
         level: 40,
         method: 'CC',
         provider_txn_id: 'CIVtxn_abc123',
+        refunded_amount_in_cents: 5000,
         source: 'callback',
         stored_amount_in_cents: 5000,
         transaction_id: 'txn_abc123',

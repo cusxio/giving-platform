@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -19,6 +21,8 @@ import {
 } from './transactions.repository.server'
 
 const STORED_CENTS = 2700
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 const paid = (overrides: Partial<PaymentRecord>): PaymentRecord => ({
   amountInCents: STORED_CENTS,
@@ -343,11 +347,62 @@ describe('a row the donor left unpaid, by a cancel or a page timeout', () => {
 
 const REFUND = paid({ message: 'Transaction refunded' })
 
+/** What the real eGHL client reads from a signed status 10 answer for the row, and its logs. */
+async function queryRefunded(TotalRefundAmount: string) {
+  const { events, logger } = recordingLogger()
+  const { config, eghl } = testDeps({ logger })
+  const fields = {
+    Amount: '27.00',
+    AuthCode: '',
+    CurrencyCode: 'MYR',
+    OrderNumber: 'txn_abc123',
+    PaymentID: 'txn_abc123',
+    PymtMethod: 'CC',
+    QueryDesc: 'Exists',
+    ServiceID: config.eghl.serviceId,
+    TotalRefundAmount,
+    TransactionType: 'QUERY',
+    TxnExists: '0',
+    TxnID: 'CIVtxn_abc123',
+    TxnMessage: 'Transaction refunded',
+    TxnStatus: '10',
+  }
+  const hashKey = [
+    config.eghl.password,
+    fields.TxnID,
+    fields.ServiceID,
+    fields.PaymentID,
+    fields.TxnStatus,
+    fields.Amount,
+    fields.CurrencyCode,
+    fields.AuthCode,
+  ].join('')
+  const body = new URLSearchParams({
+    ...fields,
+    HashValue: sha256(hashKey),
+    HashValue2: sha256(hashKey + fields.OrderNumber),
+  }).toString()
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(() => Promise.resolve(new Response(body, { status: 200 }))),
+  )
+  try {
+    const answer = await eghl.queryStatus({
+      amountInCents: STORED_CENTS,
+      transactionId: 'txn_abc123',
+    })
+    return { answer, events }
+  } finally {
+    vi.unstubAllGlobals()
+  }
+}
+
 const REFUND_WARNING = {
   amount_in_cents: STORED_CENTS,
   event: 'payment.finalize.refunded',
   level: 40,
   provider_txn_id: 'CIVtxn_abc123',
+  refunded_amount_in_cents: null,
   stored_amount_in_cents: STORED_CENTS,
 }
 
@@ -359,7 +414,9 @@ const PENDING_ROW_AGED_40_MINUTES = {
 
 const rowTheGatewayRefunded = async () => {
   const row = statefulRow()
-  row.queryStatus.mockResolvedValue(Result.ok({ kind: 'refunded', record: REFUND }))
+  row.queryStatus.mockResolvedValue(
+    Result.ok({ kind: 'refunded', record: REFUND, refundedAmountInCents: null }),
+  )
   await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
   row.mark()
   return row
@@ -370,7 +427,9 @@ describe('a pending row the gateway answers refunded or reversed', () => {
     expect.hasAssertions()
 
     const row = statefulRow()
-    row.queryStatus.mockResolvedValue(Result.ok({ kind: 'refunded', record: REFUND }))
+    row.queryStatus.mockResolvedValue(
+      Result.ok({ kind: 'refunded', record: REFUND, refundedAmountInCents: null }),
+    )
     const settled = await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
 
     expect(okValue(settled)).toStrictEqual({
@@ -387,6 +446,37 @@ describe('a pending row the gateway answers refunded or reversed', () => {
     ])
   })
 
+  it('is refunded by the cron when the refunded total is the whole sale, and logs it', async () => {
+    expect.hasAssertions()
+
+    const row = statefulRow()
+    const { answer } = await queryRefunded('27.00')
+    row.queryStatus.mockResolvedValue(answer)
+    await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
+
+    expect(row.status()).toBe('refunded')
+    expect(row.eventsSince()).toContainEqual(
+      expect.objectContaining({ ...REFUND_WARNING, refunded_amount_in_cents: STORED_CENTS }),
+    )
+  })
+
+  it.each(['13.50', '27.01'])(
+    'stays pending on the cron when the gateway refunded %s of a 27.00 sale',
+    async (total) => {
+      expect.hasAssertions()
+
+      const row = statefulRow()
+      const { answer, events } = await queryRefunded(total)
+      row.queryStatus.mockResolvedValue(answer)
+      const settled = await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
+
+      expect(okValue(settled)).toStrictEqual({ kind: 'waiting', why: 'gateway_pending' })
+      expect([row.status(), row.paymentRows()]).toStrictEqual(['pending', 0])
+      expect(row.callsSince()).toStrictEqual([])
+      expect(events).toMatchObject([{ event: 'eghl.query.answered', level: 50 }])
+    },
+  )
+
   it.each(
     (['callback', 'return'] as const).flatMap((source) =>
       (['failed', 'cancelled'] as const).map((claim) => [source, claim] as const),
@@ -397,7 +487,9 @@ describe('a pending row the gateway answers refunded or reversed', () => {
       expect.hasAssertions()
 
       const row = statefulRow()
-      row.queryStatus.mockResolvedValue(Result.ok({ kind: 'refunded', record: REFUND }))
+      row.queryStatus.mockResolvedValue(
+        Result.ok({ kind: 'refunded', record: REFUND, refundedAmountInCents: null }),
+      )
       const settled = await settleReply(
         row.deps,
         { claim: { kind: claim, record: paid({ message: 'Card declined' }) }, kind: 'unconfirmed' },

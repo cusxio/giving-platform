@@ -42,7 +42,12 @@ export type PaymentOutcome =
       readonly kind: 'pending'
       readonly record: PaymentRecord
     }
-  | { readonly kind: 'refunded'; readonly record: PaymentRecord }
+  | {
+      readonly kind: 'refunded'
+      readonly record: PaymentRecord
+      /** The gateway's refunded total, or null when it did not say (it reports one for cards only). */
+      readonly refundedAmountInCents: number | null
+    }
 
 type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>

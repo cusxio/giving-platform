@@ -46,9 +46,11 @@ const outcomeOf = (kind: Settling['kind'], money: Money = 'same money'): Settlin
       return { card: null, kind, record: MONEY[money] }
     }
     case 'failed':
-    case 'cancelled':
-    case 'refunded': {
+    case 'cancelled': {
       return { kind, record: MONEY[money] }
+    }
+    case 'refunded': {
+      return { kind, record: MONEY[money], refundedAmountInCents: null }
     }
     case 'expired': {
       return { kind, transactionId: 'txn_abc123' }
@@ -230,7 +232,11 @@ const STEPS = {
   failed: outcomeOf('failed'),
   mismatched: outcomeOf('succeeded', 'another amount'),
   otherTxnId: { card: null, kind: 'succeeded', record: { ...record, providerTxnId: 'CIVother' } },
-  refunded: { kind: 'refunded', record: { ...record, message: 'Transaction refunded' } },
+  refunded: {
+    kind: 'refunded',
+    record: { ...record, message: 'Transaction refunded' },
+    refundedAmountInCents: null,
+  },
   succeeded: outcomeOf('succeeded'),
 } as const satisfies Record<string, Settling>
 type Step = keyof typeof STEPS
@@ -530,7 +536,7 @@ describe('deciding what a status query answer means', () => {
     failed: { kind: 'failed', record },
     notFound: { kind: 'notFound' },
     pending: { answer: 'gateway_pending', kind: 'pending', record },
-    refunded: { kind: 'refunded', record },
+    refunded: { kind: 'refunded', record, refundedAmountInCents: null },
     succeeded: { card: null, kind: 'succeeded', record },
   } as const satisfies Record<PaymentOutcome['kind'], PaymentOutcome>
   const openedPage = { answer: 'gateway_pending', kind: 'pending', record: noReference } as const

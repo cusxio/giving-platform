@@ -438,13 +438,16 @@ describe('the eGHL client reading replies', () => {
     )
 
     it.each([EghlQueryTxnStatus.Refunded, EghlQueryTxnStatus.Reversed])(
-      'reads a signed answer with status %s as refunded, and logs its status code',
+      'reads a signed answer with status %s and an empty refunded total as refunded, and logs its status code',
       async (TxnStatus) => {
         expect.hasAssertions()
         const { events, logger } = recordingLogger()
 
         const result = await queryAgainstGatewayReply(
-          existingTransactionReply({ TxnStatus } as unknown as Partial<EghlPaymentResponse>),
+          existingTransactionReply({
+            TotalRefundAmount: '',
+            TxnStatus,
+          } as unknown as Partial<EghlPaymentResponse>),
           logger,
         )
 
@@ -457,6 +460,60 @@ describe('the eGHL client reading replies', () => {
         ])
       },
     )
+
+    it.each([
+      ['25.00', 2500],
+      ['50.01', 5001],
+    ])(
+      'leaves a status 10 answer refunding %s of a 50.00 sale pending, and logs it as an error',
+      async (TotalRefundAmount, refundedCents) => {
+        expect.hasAssertions()
+        const { events, logger } = recordingLogger()
+
+        const result = await queryAgainstGatewayReply(
+          existingTransactionReply({
+            TotalRefundAmount,
+            TxnStatus: EghlQueryTxnStatus.Refunded,
+          } as unknown as Partial<EghlPaymentResponse>),
+          logger,
+        )
+
+        expect(okValue(result)).toMatchObject({ answer: 'inconclusive', kind: 'pending' })
+        expect(events).toMatchObject([
+          {
+            amount_in_cents: 5000,
+            event: 'eghl.query.answered',
+            level: 50,
+            refunded_amount_in_cents: refundedCents,
+            status: EghlQueryTxnStatus.Refunded,
+          },
+        ])
+      },
+    )
+
+    it('reads an unreadable refunded total as absent, and logs it', async () => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      const result = await queryAgainstGatewayReply(
+        existingTransactionReply({
+          TotalRefundAmount: '25',
+          TxnStatus: EghlQueryTxnStatus.Refunded,
+        } as unknown as Partial<EghlPaymentResponse>),
+        logger,
+      )
+
+      expect(okValue(result)).toMatchObject({ kind: 'refunded', refundedAmountInCents: null })
+      expect(events).toMatchObject([
+        { event: 'eghl.query.answered', level: 30 },
+        {
+          event: 'eghl.query.refund_total_unreadable',
+          level: 40,
+          total_refund_amount: '25',
+          transaction_id: 'txn_abc123',
+        },
+      ])
+    })
 
     it('rejects a verified reply for another payment', async () => {
       expect.hasAssertions()

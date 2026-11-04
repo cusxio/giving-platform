@@ -19,7 +19,15 @@ import {
   ParseError,
 } from './eghl.errors'
 import type { ClippedField } from './eghl.outcome'
-import { isUnexpectedForSale, outcomeOf, replyOf } from './eghl.outcome'
+import {
+  centsOf,
+  isUnexpectedForSale,
+  isUnreadableRefundTotal,
+  outcomeOf,
+  refundDiffersFromSale,
+  refundedCentsOf,
+  replyOf,
+} from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
 import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
@@ -78,8 +86,27 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
   }
   if (isUnexpectedForSale(answer)) {
     logger.error(fields, 'Gateway reports a status a sale cannot reach, leaving it pending')
+  } else if (refundDiffersFromSale(answer)) {
+    logger.error(
+      {
+        ...fields,
+        amount_in_cents: centsOf(answer.Amount),
+        refunded_amount_in_cents: refundedCentsOf(answer),
+      },
+      'Gateway reports a refund that is not the whole sale, leaving it pending',
+    )
   } else {
     logger.info(fields, 'Gateway answered the status query')
+  }
+  if (isUnreadableRefundTotal(answer)) {
+    logger.warn(
+      {
+        event: 'eghl.query.refund_total_unreadable',
+        total_refund_amount: answer.TotalRefundAmount,
+        transaction_id: answer.PaymentID,
+      },
+      'Gateway refunded total is not ringgit with two decimals, reading it as absent',
+    )
   }
 }
 
