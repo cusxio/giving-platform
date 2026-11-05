@@ -6,7 +6,7 @@ import { NotFound } from './components/not-found'
 import { routeTree } from './route-tree.gen'
 
 export function getRouter() {
-  const queryClient = new QueryClient()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } })
 
   const router = createTanStackRouter({
     context: { queryClient },
