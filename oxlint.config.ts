@@ -6,8 +6,14 @@ interface ImportPattern {
   readonly regex?: string
 }
 
-// Import boundaries. An override replaces the rule's whole pattern list, so each zone below
-// composes these constants instead of repeating them.
+interface ImportPath {
+  readonly importNames: string[]
+  readonly message: string
+  readonly name: string
+}
+
+// Import boundaries. An override replaces the rule's whole pattern and path lists, so each zone
+// below composes these constants instead of repeating them.
 
 // Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
 // entry allow the import past every other pattern too, and its regex has no lookahead.
@@ -55,11 +61,32 @@ const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
   regex: String.raw`^\./server/`,
 }
 
-const restrictImports = (
-  ...patterns: ImportPattern[]
-): { 'eslint/no-restricted-imports': ['error', { patterns: ImportPattern[] }] } => ({
-  'eslint/no-restricted-imports': ['error', { patterns }],
-})
+// Lessons of the Result migration. Inside Result.gen a throw becomes a Panic, so a thrown
+// redirect or notFound reaches the browser as a 500; and a Panic is a defect, never an Err.
+const NO_PANIC: ImportPath = {
+  importNames: ['Panic', 'panic'],
+  message:
+    'Only the runner, src/server/procedure.server.ts, handles a Panic: a defect stays a throw and is never turned into an Err.',
+  name: 'better-result',
+}
+const NO_THROWN_CONTROL_FLOW: ImportPath = {
+  importNames: ['notFound', 'redirect'],
+  message:
+    'Inside Result.gen a throw becomes a Panic and reaches the browser as a 500. Return a domain error and answer it with a wire row (toNotFound) or a policy (redirects to login).',
+  name: '@tanstack/react-router',
+}
+
+type RestrictImports = (...patterns: ImportPattern[]) => {
+  'eslint/no-restricted-imports': ['error', { paths: ImportPath[]; patterns: ImportPattern[] }]
+}
+const restrict =
+  (...paths: ImportPath[]): RestrictImports =>
+  (...patterns) => ({ 'eslint/no-restricted-imports': ['error', { paths, patterns }] })
+const restrictImports = restrict(NO_PANIC)
+/** Server code that may run inside a workflow. */
+const restrictServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW)
+/** The runner, and tests, which build Panics to prove the runner. */
+const restrictImportsAllowingPanic = restrict()
 const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
 const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS]
 
@@ -106,7 +133,8 @@ export default defineConfig({
     'eslint/capitalized-comments': 'off',
     'eslint/id-length': 'off',
     'eslint/new-cap': 'off',
-    'eslint/no-underscore-dangle': ['error', { allow: ['__error'] }],
+    // `_tag` is the discriminant of better-result's tagged errors.
+    'eslint/no-underscore-dangle': ['error', { allow: ['__error', '_tag'] }],
 
     // JavaScript/ESLint correctness tweaks.
     'eslint/init-declarations': 'off',
@@ -219,7 +247,18 @@ export default defineConfig({
         ],
       },
     },
-    { files: ['src/server/**'], rules: restrictImports(...EVERYWHERE) },
+    {
+      // `class X extends TaggedError('X')` calls a class factory, which the rule reads as `Error()`.
+      files: [
+        'src/modules/**/*.errors.ts',
+        'src/server/authorize.server.ts',
+        'src/server/infra-error.ts',
+        'src/server/input.server.ts',
+        '**/*.test.ts',
+      ],
+      rules: { 'unicorn/throw-new-error': 'off' },
+    },
+    { files: ['src/server/**'], rules: restrictServerImports(...EVERYWHERE) },
     {
       files: ['src/routes/**', 'src/components/**', 'src/hooks/**', 'src/core/**'],
       rules: restrictImports(...OUTSIDE_PLATFORM, SERVER_CODE_IN_CLIENT),
@@ -242,20 +281,32 @@ export default defineConfig({
       rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_CLIENT),
     },
     {
-      files: [
-        'src/modules/**/*.server.ts',
-        'src/modules/*/server.ts',
-        'src/modules/**/*.test.{ts,tsx}',
-      ],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+      files: ['src/modules/**/*.server.ts', 'src/modules/*/server.ts'],
+      rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
+    {
+      files: ['src/modules/**/*.test.{ts,tsx}'],
+      rules: restrictImportsAllowingPanic(...OUTSIDE_PLATFORM, FLAT_MODULES),
     },
     {
       files: ['src/modules/**/*.repository.server.ts'],
-      rules: restrictImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
+      rules: restrictServerImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
     },
     {
       files: ['src/modules/**/*.functions.ts'],
       rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_FUNCTIONS),
+    },
+    // These throw a redirect or notFound outside any workflow: the runner answers policies and
+    // rows with them, the eGHL routes redirect the browser, logout ends with one, and the
+    // maintenance middleware sends every page home.
+    {
+      files: ['src/server/procedure.server.ts', 'src/server/**/*.test.ts'],
+      rules: restrictImportsAllowingPanic(...EVERYWHERE),
+    },
+    { files: ['src/server/maintenance.server.ts'], rules: restrictImports(...EVERYWHERE) },
+    {
+      files: ['src/modules/payments/eghl.http.server.ts', 'src/modules/auth/session.server.ts'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
     },
   ],
 })

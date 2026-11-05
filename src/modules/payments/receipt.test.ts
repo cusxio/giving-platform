@@ -1,13 +1,24 @@
 import { isNotFound } from '@tanstack/react-router'
-import { pino } from 'pino'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { createFakeDb } from '#/server/testing/fake-db'
-import { testDeps } from '#/server/testing/test-deps'
+import { recordingLogger } from '#/server/testing/recording-logger'
+import { errValue, okValue } from '#/server/testing/result'
+import { MEMBER, testContext } from '#/server/testing/test-context'
 
+import { ReceiptNotFound } from './payments.errors'
+import type { getReceipt } from './payments.functions'
+import type { TransactionReceipt } from './receipt'
 import { toTransactionReceipt } from './receipt'
-import { getReceiptProcedure, loadReceipt } from './receipt.server'
+import { getReceiptAction, loadReceipt } from './receipt.server'
 import { findReceipt } from './transactions.repository.server'
+
+const WARN = 40
+const ERROR = 50
+
+function fail(): never {
+  throw new Error('connection terminated')
+}
 
 const transaction = {
   amount: 5000,
@@ -94,7 +105,7 @@ describe('reading a receipt', () => {
 
     const db = createFakeDb().on(findReceipt, () => ({ payment, transaction, user: guest }))
 
-    await expect(loadReceipt({ db }, 'txn_abc123')).resolves.toStrictEqual({
+    expect(okValue(await loadReceipt({ db }, 'txn_abc123'))).toStrictEqual({
       payment: { message: 'Buyer cancelled' },
       transaction: { id: 'txn_abc123', status: 'success' },
       user: { email: 'guest@example.com', firstName: 'Ada', status: 'guest' },
@@ -102,25 +113,88 @@ describe('reading a receipt', () => {
     expect(db.calls).toStrictEqual([{ args: ['txn_abc123'], name: 'payments.findReceipt' }])
   })
 
+  it('is ReceiptNotFound when no transaction has the id', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb().on(findReceipt, () => null)
+
+    const error = errValue(await loadReceipt({ db }, 'txn_gone'))
+    expect(error).toBeInstanceOf(ReceiptNotFound)
+    expect(error).toMatchObject({ transactionId: 'txn_gone' })
+  })
+
+  it('answers the receipt to anyone holding the id, signed in or not', async () => {
+    expect.hasAssertions()
+
+    expectTypeOf<Awaited<ReturnType<typeof getReceipt>>>().toEqualTypeOf<
+      TransactionReceipt<'failed' | 'pending' | 'success'>
+    >()
+    const db = createFakeDb().on(findReceipt, () => ({ payment: null, transaction, user: guest }))
+    const expected = {
+      payment: null,
+      transaction: { id: 'txn_abc123', status: 'success' },
+      user: { email: 'guest@example.com', firstName: 'Ada', status: 'guest' },
+    }
+
+    for (const viewer of [null, MEMBER]) {
+      // oxlint-disable-next-line no-await-in-loop -- one call per viewer
+      const receipt = await getReceiptAction({
+        context: testContext(viewer, { db }),
+        data: { transactionId: 'txn_abc123' },
+      })
+      expect(receipt).toStrictEqual(expected)
+    }
+  })
+
   it('is not found when no transaction has the id, and says so in the log', async () => {
     expect.hasAssertions()
 
     const db = createFakeDb().on(findReceipt, () => null)
-    const events: unknown[] = []
-    const logger = pino(
-      { level: 'debug' },
-      {
-        write: (line: string) => {
-          events.push(JSON.parse(line))
-        },
-      },
-    )
+    const { events, logger } = recordingLogger()
 
     await expect(
-      getReceiptProcedure({ deps: testDeps({ db, logger }) }, { transactionId: 'txn_gone' }),
+      getReceiptAction({
+        context: testContext(null, { db, logger }),
+        data: { transactionId: 'txn_gone' },
+      }),
     ).rejects.toSatisfy(isNotFound)
     expect(events).toMatchObject([
-      { event: 'transaction.receipt.not_found', level: 40, transaction_id: 'txn_gone' },
+      {
+        event: 'transaction.receipt.not_found',
+        level: WARN,
+        msg: 'Receipt not found',
+        transaction_id: 'txn_gone',
+      },
+    ])
+  })
+
+  it('throws a generic error for an id that is not a string, without a query', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb()
+    const { events, logger } = recordingLogger()
+
+    await expect(
+      getReceiptAction({ context: testContext(null, { db, logger }), data: { transactionId: 7 } }),
+    ).rejects.toThrow(new Error('Invalid input'))
+    expect(db.calls).toStrictEqual([])
+    expect(events).toMatchObject([{ event: 'transaction.receipt.validation_failed', level: WARN }])
+  })
+
+  it('logs a failed read once and throws a generic error', async () => {
+    expect.hasAssertions()
+
+    const db = createFakeDb().on(findReceipt, fail)
+    const { events, logger } = recordingLogger()
+
+    await expect(
+      getReceiptAction({
+        context: testContext(null, { db, logger }),
+        data: { transactionId: 'txn_abc123' },
+      }),
+    ).rejects.toThrow(new Error('Internal Server Error'))
+    expect(events).toMatchObject([
+      { event: 'transaction.receipt.failed', level: ERROR, op: findReceipt.queryName },
     ])
   })
 })

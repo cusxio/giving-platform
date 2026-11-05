@@ -1,22 +1,28 @@
-import { pino } from 'pino'
-import { describe, expect, it, vi } from 'vitest'
+import { SpanStatusCode } from '@opentelemetry/api'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { addDays, now } from '#/core/date'
-import type { QueryResult } from '#/server/db.server'
+import type { Db, QueryResult } from '#/server/db.server'
 import { createFakeDb } from '#/server/testing/fake-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
+import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
-import { clearSessionCookie } from './session-cookie.server'
-import { endSession, logoutProcedure, resolveSession, verifySessionCookie } from './session.server'
+import type { hasSession, logout } from './auth.functions'
+import { endSession, hasSessionAction, logoutAction, verifySessionCookie } from './session.server'
 import {
   deleteSessionById,
   extendSession,
   findSessionByIdWithUser,
 } from './sessions.repository.server'
 
-const io = vi.hoisted(() => ({ setCookies: [] as string[] }))
+const io = vi.hoisted(() => ({
+  request: new Request('https://app.give.test/'),
+  setCookies: [] as string[],
+}))
 
 vi.mock(import('@tanstack/react-start/server'), () => ({
+  getRequest: () => io.request,
   setResponseHeader: (name, value) => {
     if (name === 'Set-Cookie') {
       io.setCookies.push(...[value].flat())
@@ -28,25 +34,6 @@ const SESSION_ID = 'session'.padEnd(21, '0')
 const RAW_TOKEN = 'token'.padEnd(21, '0')
 const CLEARED =
   '__session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Secure; SameSite=Lax'
-
-interface LogLine {
-  readonly event?: string
-  readonly level: number
-  readonly reason?: string
-}
-
-function recordingLogger() {
-  const events: LogLine[] = []
-  const logger = pino(
-    { level: 'debug' },
-    {
-      write: (line: string) => {
-        events.push(JSON.parse(line) as LogLine)
-      },
-    },
-  )
-  return { events, logger }
-}
 
 function fail(): never {
   throw new Error('connection terminated')
@@ -83,6 +70,7 @@ function setup(status: FakeUser['status'], expiresInDays = 30) {
       return session ? { session: { ...session }, user: { ...user } } : null
     })
 
+  io.request = new Request('https://app.give.test/')
   io.setCookies = []
 
   return {
@@ -95,19 +83,44 @@ function setup(status: FakeUser['status'], expiresInDays = 30) {
   }
 }
 
-const backgroundWork = () =>
+const nextTask = () =>
   new Promise((resolve) => {
     setTimeout(resolve, 0)
   })
+
+/** A database whose session extension waits for `release`, like a slow write. */
+function slowExtension(db: Db) {
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const slow: Db = {
+    ...db,
+    run: (query) =>
+      query.name === extendSession.queryName ? held.then(() => db.run(query)) : db.run(query),
+  }
+  return { db: slow, release }
+}
+
+/** A database whose session extension rejects instead of answering a Result, like a bug. */
+const crashingExtension = (db: Db): Db => ({
+  ...db,
+  run: (query) =>
+    query.name === extendSession.queryName
+      ? Promise.reject(new Error('driver crashed'))
+      : db.run(query),
+})
 
 describe('verifying a session cookie', () => {
   it('accepts a valid cookie for an active user', async () => {
     expect.hasAssertions()
 
     const { cookieValue, deps } = setup('active')
-    const result = await resolveSession(deps, cookieValue)
 
-    expect(result).toMatchObject({ ok: true, value: { serializedCookie: null, user: { id: 1 } } })
+    await expect(verifySessionCookie(deps, cookieValue)).resolves.toMatchObject({
+      session: { id: SESSION_ID },
+      user: { id: 1 },
+    })
   })
 
   it.each(['guest', 'suspended', 'deleted'] as const)(
@@ -115,28 +128,29 @@ describe('verifying a session cookie', () => {
     async (status) => {
       expect.hasAssertions()
 
-      const { cookieValue, deps } = setup(status)
-      const result = await resolveSession(deps, cookieValue)
+      const { cookieValue, deps, events } = setup(status)
 
-      expect(result).toStrictEqual({
-        error: { serializedCookie: clearSessionCookie(), type: 'SessionUserInactiveError' },
-        ok: false,
+      await expect(verifySessionCookie(deps, cookieValue)).resolves.toStrictEqual({
+        session: null,
+        user: null,
       })
+      expect(io.setCookies).toStrictEqual([CLEARED])
+      expect(events).toMatchObject([{ reason: 'SessionUserInactiveError' }])
     },
   )
 
   it('does not revive a rejected session when the user is reactivated', async () => {
     expect.hasAssertions()
 
-    const { cookieValue, deps, user } = setup('suspended')
-    await resolveSession(deps, cookieValue)
+    const { cookieValue, deps, events, user } = setup('suspended')
+    await verifySessionCookie(deps, cookieValue)
     user.status = 'active'
-    const result = await resolveSession(deps, cookieValue)
 
-    expect(result).toStrictEqual({
-      error: { serializedCookie: clearSessionCookie(), type: 'SessionNotFoundError' },
-      ok: false,
+    await expect(verifySessionCookie(deps, cookieValue)).resolves.toStrictEqual({
+      session: null,
+      user: null,
     })
+    expect(events.at(-1)).toMatchObject({ reason: 'SessionNotFoundError' })
   })
 })
 
@@ -158,7 +172,6 @@ describe('the session cookie on the response', () => {
 
     const { cookieValue, deps, events, sessions } = setup('active', 3)
     const check = await verifySessionCookie(deps, cookieValue)
-    await backgroundWork()
 
     expect(io.setCookies).toHaveLength(1)
     expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
@@ -173,10 +186,84 @@ describe('the session cookie on the response', () => {
     const { cookieValue, db, deps, events } = setup('active', 3)
     db.on(extendSession, fail)
     await verifySessionCookie(deps, cookieValue)
-    await backgroundWork()
 
     expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
-    expect(events).toMatchObject([{ event: 'session.extend.background_failed', level: 40 }])
+    expect(events).toMatchObject([
+      { event: 'session.extend.background_failed', level: 40, op: 'auth.extendSession' },
+    ])
+  })
+
+  it('hands the extension to the platform, so the response does not wait for the write', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, deps, events, sessions } = setup('active', 3)
+    const before = sessions.get(SESSION_ID)?.expiresAt
+    const { db, release } = slowExtension(deps.db)
+    const kept: Promise<unknown>[] = []
+    io.request = Object.assign(new Request('https://app.give.test/'), {
+      waitUntil: (work: Promise<unknown>) => {
+        kept.push(work)
+      },
+    })
+    const check = await verifySessionCookie({ ...deps, db }, cookieValue)
+
+    expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
+    expect(kept).toHaveLength(1)
+    expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(before)
+
+    release()
+    await Promise.all(kept)
+
+    expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(check.session?.expiresAt)
+    expect(events.map((e) => e.event)).toStrictEqual(['session.extend.background_success'])
+  })
+
+  it('logs a crash of the handed-over extension, so the platform never sees a rejection', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, deps, events } = setup('active', 3)
+    const kept: Promise<unknown>[] = []
+    io.request = Object.assign(new Request('https://app.give.test/'), {
+      waitUntil: (work: Promise<unknown>) => {
+        kept.push(work)
+      },
+    })
+
+    const check = await verifySessionCookie(
+      { ...deps, db: crashingExtension(deps.db) },
+      cookieValue,
+    )
+
+    expect(check.user).toMatchObject({ id: 1 })
+    expect(io.setCookies[0]).toMatch(new RegExp(`^__session=${cookieValue};`, 'u'))
+    await expect(Promise.all(kept)).resolves.toStrictEqual([undefined])
+    expect(events).toMatchObject([
+      {
+        err: { message: 'driver crashed' },
+        event: 'session.extend.background_crash',
+        level: 50,
+        session_id: SESSION_ID,
+      },
+    ])
+  })
+
+  it('waits for the extension where the platform has no waitUntil', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, deps, sessions } = setup('active', 3)
+    const { db, release } = slowExtension(deps.db)
+    let answered = false
+    const pending = verifySessionCookie({ ...deps, db }, cookieValue).finally(() => {
+      answered = true
+    })
+    await nextTask()
+
+    expect(answered).toBe(false)
+
+    release()
+    const check = await pending
+
+    expect(sessions.get(SESSION_ID)?.expiresAt).toStrictEqual(check.session?.expiresAt)
   })
 
   it('rejects the session of a suspended user, deletes it and clears the cookie', async () => {
@@ -204,9 +291,9 @@ describe('the session cookie on the response', () => {
       user: null,
     })
     expect(io.setCookies).toStrictEqual([CLEARED])
-    expect(events.map((e) => [e.event, e.level])).toStrictEqual([
-      ['session.verify.inactive_delete_failed', 40],
-      ['session.verify.invalid', 30],
+    expect(events).toMatchObject([
+      { event: 'session.verify.inactive_delete_failed', level: 40, op: 'auth.deleteSessionById' },
+      { event: 'session.verify.invalid', level: 30 },
     ])
   })
 
@@ -228,9 +315,17 @@ describe('the session cookie on the response', () => {
   })
 
   it.each([
-    ['malformed', 'not-a-session', 'session.verify.validation_failed', 40],
-    ['unreadable from the db', `${SESSION_ID}.${RAW_TOKEN}`, 'session.verify.db_error', 50],
-  ] as const)('clears a cookie that is %s', async (_label, cookie, event, level) => {
+    [
+      'malformed',
+      'not-a-session',
+      { 'error.type': 'ParseError', event: 'session.verify.validation_failed', level: 40 },
+    ],
+    [
+      'unreadable from the db',
+      `${SESSION_ID}.${RAW_TOKEN}`,
+      { event: 'session.verify.db_error', level: 50, op: 'auth.findSessionByIdWithUser' },
+    ],
+  ] as const)('clears a cookie that is %s', async (_label, cookie, logged) => {
     expect.hasAssertions()
 
     const { db, deps, events } = setup('active', 20)
@@ -241,7 +336,29 @@ describe('the session cookie on the response', () => {
       user: null,
     })
     expect(io.setCookies).toStrictEqual([CLEARED])
-    expect(events).toMatchObject([{ event, level }])
+    expect(events).toMatchObject([logged])
+  })
+})
+
+describe('the request span', () => {
+  it('is marked failed when the session cannot be read', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, db, deps } = setup('active', 20)
+    db.on(findSessionByIdWithUser, fail)
+    const { span } = await inRequestSpan(() => verifySessionCookie(deps, cookieValue))
+
+    expect(span.status.code).toBe(SpanStatusCode.ERROR)
+  })
+
+  it('stays as it is when only the session extension fails', async () => {
+    expect.hasAssertions()
+
+    const { cookieValue, db, deps } = setup('active', 3)
+    db.on(extendSession, fail)
+    const { span } = await inRequestSpan(() => verifySessionCookie(deps, cookieValue))
+
+    expect(span.status.code).toBe(SpanStatusCode.UNSET)
   })
 })
 
@@ -255,7 +372,7 @@ describe('logging out', () => {
     const session = { expiresAt: addDays(now(), 20), id: SESSION_ID, tokenHash: 'hash' }
 
     await expect(
-      logoutProcedure({ deps: testDeps({ db, logger }), session }),
+      logoutAction({ context: { deps: testDeps({ db, logger }), session } }),
     ).rejects.toMatchObject({ options: { replace: true, to: '/auth/login' } })
     expect(db.calls).toStrictEqual([{ args: [SESSION_ID], name: 'auth.deleteSessionById' }])
     expect(events.map((e) => e.event)).toStrictEqual(['auth.logout.processing'])
@@ -271,7 +388,7 @@ describe('logging out', () => {
     const session = { expiresAt: addDays(now(), 20), id: SESSION_ID, tokenHash: 'hash' }
 
     await expect(
-      logoutProcedure({ deps: testDeps({ db, logger }), session }),
+      logoutAction({ context: { deps: testDeps({ db, logger }), session } }),
     ).rejects.toMatchObject({ options: { replace: true, to: '/auth/login' } })
     expect(events.at(-1)).toMatchObject({ event: 'auth.logout.failed', level: 50 })
     expect(io.setCookies).toStrictEqual([CLEARED])
@@ -288,6 +405,7 @@ describe('logging out', () => {
       ['auth.logout.processing', 30],
       ['auth.logout.failed', 50],
     ])
+    expect(events.at(-1)).toMatchObject({ 'error.type': 'Error', op: 'auth.deleteSessionById' })
   })
 
   it('clears the cookie of a caller without a session without touching the database', async () => {
@@ -298,10 +416,24 @@ describe('logging out', () => {
     const { events, logger } = recordingLogger()
 
     await expect(
-      logoutProcedure({ deps: testDeps({ db, logger }), session: null }),
+      logoutAction({ context: { deps: testDeps({ db, logger }), session: null } }),
     ).rejects.toMatchObject({ options: { replace: true, to: '/auth/login' } })
     expect(db.calls).toStrictEqual([])
     expect(events).toStrictEqual([])
     expect(io.setCookies).toStrictEqual([CLEARED])
+  })
+})
+
+describe('the session check for the login pages', () => {
+  it('answers only whether the request has a session', () => {
+    expect.hasAssertions()
+
+    expectTypeOf<Awaited<ReturnType<typeof hasSession>>>().toEqualTypeOf<boolean>()
+    expectTypeOf<Awaited<ReturnType<typeof logout>>>().toEqualTypeOf<never>()
+
+    const session = { expiresAt: addDays(now(), 20), id: SESSION_ID, tokenHash: 'hash' }
+
+    expect(hasSessionAction({ context: { deps: testDeps(), session } })).toBe(true)
+    expect(hasSessionAction({ context: { deps: testDeps(), session: null } })).toBe(false)
   })
 })

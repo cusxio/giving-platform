@@ -1,6 +1,8 @@
 import { addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import type { Deps } from '#/server/deps.server'
+import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
+import type { EghlQueryError } from './eghl.errors'
 import { finalStatusOf } from './eghl.outcome'
 import { EghlTxnExists } from './eghl.wire'
 import { recordOutcome } from './record-outcome.server'
@@ -10,9 +12,7 @@ import {
 } from './transactions.repository.server'
 
 const LOG_EVENTS = {
-  BATCH_UPDATE_FAILED: 'eghl.cron.batch_update_failed',
   COMPLETE: 'eghl.cron.complete',
-  FINALIZATION_FAILED: 'eghl.cron.finalization_failed',
   JOB_START: 'eghl.cron.job_start',
   NOT_EXISTS: 'eghl.cron.not_exists',
   QUERY_FAILED: 'eghl.cron.query_failed',
@@ -21,11 +21,20 @@ const LOG_EVENTS = {
   UNAUTHORIZED: 'eghl.cron.unauthorized',
 }
 
-/** The cron job: settles pending transactions from the gateway's own status. */
-export async function handleReconcile(
-  deps: Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>,
-  request: Request,
-) {
+/** How a failed status query is logged: its tag, and the error behind it when there is one. */
+const queryFailureFields = (error: EghlQueryError) =>
+  error.match<EghlQueryError, { 'error.type': string; err?: unknown }>({
+    EghlFetchError: ({ _tag, cause }) => ({ 'error.type': _tag, err: cause }),
+    EghlQueryMismatchError: ({ _tag }) => ({ 'error.type': _tag }),
+    EghlQueryResponseError: ({ _tag }) => ({ 'error.type': _tag }),
+    EghlServerError: ({ _tag }) => ({ 'error.type': _tag }),
+    EghlVerificationError: ({ _tag }) => ({ 'error.type': _tag }),
+    ParseError: ({ _tag, cause }) => ({ 'error.type': _tag, err: cause }),
+  })
+
+type ReconcileDeps = Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>
+
+async function reconcile(deps: ReconcileDeps, request: Request) {
   const { config, db, eghl, logger } = deps
   const authHeader = request.headers.get('authorization')
 
@@ -36,16 +45,12 @@ export async function handleReconcile(
 
   logger.info({ event: LOG_EVENTS.JOB_START }, 'Starting eGHL cron job')
 
-  let pendingTransactions
-  try {
-    pendingTransactions = await db.run(pendingTransactionsToReconcile())
-  } catch (error: unknown) {
-    logger.error(
-      { err: error, event: LOG_EVENTS.QUERY_FAILED },
-      'Failed to fetch pending transactions',
-    )
+  const pending = await db.run(pendingTransactionsToReconcile())
+  if (pending.isErr()) {
+    logInfraFailure(logger, 'eghl.cron', pending.error)
     return new Response('Internal Server Error', { status: 500 })
   }
+  const pendingTransactions = pending.value
 
   let finalizedCount = 0
   let failCount = 0
@@ -62,11 +67,10 @@ export async function handleReconcile(
       transactionId: pendingTransaction.transactionId,
     })
 
-    if (!result.ok) {
+    if (result.isErr()) {
       logger.error(
         {
-          err: 'error' in result.error ? result.error.error : undefined,
-          error_type: result.error.type,
+          ...queryFailureFields(result.error),
           event: LOG_EVENTS.QUERY_FAILED,
           transaction_id: pendingTransaction.transactionId,
         },
@@ -142,16 +146,10 @@ export async function handleReconcile(
     // oxlint-disable-next-line no-await-in-loop
     const finalizationResult = await recordOutcome(deps, eghlResponse, finalStatus)
 
-    if (!finalizationResult.ok) {
-      logger.error(
-        {
-          err: finalizationResult.error.error,
-          error_type: finalizationResult.error.type,
-          event: LOG_EVENTS.FINALIZATION_FAILED,
-          transaction_id: eghlResponse.PaymentID,
-        },
-        'Failed to record payment outcome in database',
-      )
+    if (finalizationResult.isErr()) {
+      logInfraFailure(logger, 'eghl.cron', finalizationResult.error, {
+        transaction_id: eghlResponse.PaymentID,
+      })
       errorCount++
       continue
     }
@@ -163,20 +161,15 @@ export async function handleReconcile(
 
   // Batch update all transactions that need to be marked as failed
   if (transactionsToMarkFailed.length > 0) {
-    try {
-      failCount = await db.run(markPendingTransactionsFailed(transactionsToMarkFailed))
-    } catch (error: unknown) {
-      logger.error(
-        {
-          count: transactionsToMarkFailed.length,
-          err: error,
-          event: LOG_EVENTS.BATCH_UPDATE_FAILED,
-          sampleIds: transactionsToMarkFailed.slice(0, 10),
-        },
-        'Failed to mark transactions as failed',
-      )
+    const marked = await db.run(markPendingTransactionsFailed(transactionsToMarkFailed))
+    if (marked.isErr()) {
+      logInfraFailure(logger, 'eghl.cron', marked.error, {
+        count: transactionsToMarkFailed.length,
+        sampleIds: transactionsToMarkFailed.slice(0, 10),
+      })
       errorCount += transactionsToMarkFailed.length
-      failCount = 0
+    } else {
+      failCount = marked.value
     }
   }
 
@@ -195,3 +188,7 @@ export async function handleReconcile(
 
   return new Response('ok', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
 }
+
+/** The cron job: settles pending transactions from the gateway's own status. */
+export const handleReconcile = (deps: ReconcileDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.cron', () => reconcile(deps, request))

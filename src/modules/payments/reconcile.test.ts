@@ -1,11 +1,14 @@
+import { SpanStatusCode } from '@opentelemetry/api'
+import { Result } from 'better-result'
 import { describe, expect, it, vi } from 'vitest'
 
-import { TransactionRollbackError } from '#/core/errors'
-import { err, ok } from '#/core/result'
+import { infra } from '#/server/infra-error'
 import { createDriverDb } from '#/server/testing/driver-db'
+import { recordingLogger } from '#/server/testing/recording-logger'
+import { inRequestSpan } from '#/server/testing/spans'
 import { testDeps } from '#/server/testing/test-deps'
 
-import type { EghlQueryError } from './eghl.errors'
+import { EghlServerError } from './eghl.errors'
 import type { EghlQueryResponse } from './eghl.wire'
 import { EghlQueryTxnStatus, EghlTxnExists, EghlTxnStatus } from './eghl.wire'
 import type { PaymentGateway } from './gateway'
@@ -50,6 +53,7 @@ interface PendingRow {
 }
 
 interface LogFields {
+  [field: string]: unknown
   event?: string
   stats?: unknown
 }
@@ -118,16 +122,16 @@ type QueryResult = Awaited<ReturnType<PaymentGateway['queryStatus']>>
 /** Stands in for eGHL's status query; a transaction without a reply gets a server error. */
 const gatewayAnswering = (replies: Record<string, QueryResult>) =>
   vi.fn<PaymentGateway['queryStatus']>(({ transactionId }) =>
-    Promise.resolve(replies[transactionId] ?? err<EghlQueryError>({ type: 'EghlServerError' })),
+    Promise.resolve(replies[transactionId] ?? Result.err(new EghlServerError())),
   )
 
 /** Finalizes every reply as a fresh settlement unless `outcomes` names its PaymentID. */
 const finalizeBy =
   (outcomes: Record<string, FinalizeResult> = {}) =>
   (response: EghlQueryResponse) =>
-    Promise.resolve(outcomes[response.PaymentID] ?? ok({ finalized: true }))
+    Promise.resolve(outcomes[response.PaymentID] ?? Result.ok({ finalized: true }))
 
-const notFound = (id: string) => ok(queryReply(id, NotFound, QueryNotFound))
+const notFound = (id: string) => Result.ok(queryReply(id, NotFound, QueryNotFound))
 
 const runCron = async ({
   authorization = `Bearer ${settings.CRON_SECRET}`,
@@ -176,6 +180,7 @@ const runCron = async ({
   const complete = logger.info.mock.calls.find(([fields]) => fields.event === 'eghl.cron.complete')
   return {
     body: await response.text(),
+    errors: logger.error.mock.calls.map(([fields]) => fields),
     finalizeCalls: finalizePaymentFromCallback.mock.calls,
     queried: queryTransactionStatus.mock.calls.map(([params]) => params),
     stats: complete?.[0].stats,
@@ -243,22 +248,30 @@ describe('eGHL cron', () => {
       txn_still_pending: queryReply('txn_still_pending', Exists, EghlTxnStatus.Pending),
       txn_success: queryReply('txn_success', Exists, EghlTxnStatus.Success),
     }
-    const replies = Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, ok(r)]))
+    const replies = Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, Result.ok(r)]))
     const { db, statements } = fakeDb(rows, { updatedRows: 1 })
 
     const run = await runCron({
       db,
       finalize: finalizeBy({
-        txn_already_final: ok({ finalized: false }),
-        txn_finalize_error: err({
-          error: new TransactionRollbackError('rolled back'),
-          type: 'TransactionRollbackError',
-        }),
+        txn_already_final: Result.ok({ finalized: false }),
+        txn_finalize_error: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
       }),
       replies,
     })
 
-    expect(run).toMatchObject({ body: 'ok', status: 200 })
+    expect(run).toMatchObject({
+      body: 'ok',
+      errors: [
+        { 'error.type': 'EghlServerError', event: 'eghl.cron.query_failed' },
+        {
+          event: 'eghl.cron.failed',
+          op: 'payments.insertPayment',
+          transaction_id: 'txn_finalize_error',
+        },
+      ],
+      status: 200,
+    })
     expect(run.queried).toStrictEqual(
       rows.map(({ amountInCents, transactionId }) => ({ amountInCents, transactionId })),
     )
@@ -304,6 +317,77 @@ describe('eGHL cron', () => {
       'pending',
     ])
     expect(run.stats).toStrictEqual({ errors: 2, finalized: 0, found: 2, marked_failed: 0 })
+    expect(run.errors).toMatchObject([
+      {
+        count: 2,
+        event: 'eghl.cron.failed',
+        op: 'payments.markPendingTransactionsFailed',
+        sampleIds: ['txn_a', 'txn_b'],
+      },
+    ])
+  })
+
+  it('answers 200 for a run where one settlement failed, and fails the request span', async () => {
+    expect.hasAssertions()
+
+    const { db } = fakeDb([pending('txn_a', 40), pending('txn_b', 40)])
+    const { settled, span } = await inRequestSpan(() =>
+      runCron({
+        db,
+        finalize: finalizeBy({
+          txn_a: Result.err(infra('payments.insertPayment', new Error('rolled back'))),
+        }),
+        replies: {
+          txn_a: Result.ok(queryReply('txn_a', Exists, EghlTxnStatus.Success)),
+          txn_b: Result.ok(queryReply('txn_b', Exists, EghlTxnStatus.Success)),
+        },
+      }),
+    )
+
+    expect(settled).toMatchObject({
+      status: 'fulfilled',
+      value: { stats: { errors: 1, finalized: 1, found: 2, marked_failed: 0 }, status: 200 },
+    })
+    expect(span.status).toStrictEqual({
+      code: SpanStatusCode.ERROR,
+      message: 'payments.insertPayment failed',
+    })
+  })
+
+  it('logs a thrown defect once as eghl.cron.defect, fails the span and rethrows it', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const { db } = fakeDb([pending('txn_a', 40)])
+    const bug = new TypeError('settlement bug')
+    settlement.finalize = () => Promise.reject(bug)
+    const base = testDeps()
+    const reply = Result.ok(queryReply('txn_a', Exists, EghlTxnStatus.Success))
+
+    const { settled, span } = await inRequestSpan(() =>
+      handleReconcile(
+        {
+          config: { ...base.config, cronSecret: settings.CRON_SECRET },
+          db,
+          eghl: { ...base.eghl, queryStatus: () => Promise.resolve(reply) },
+          logger,
+        },
+        new Request('https://app.give.test/api/eghl/cron', {
+          headers: { authorization: `Bearer ${settings.CRON_SECRET}` },
+        }),
+      ),
+    )
+
+    expect(settled).toStrictEqual({ reason: bug, status: 'rejected' })
+    expect(events.filter(({ level }) => level >= 50)).toMatchObject([
+      {
+        'error.type': 'TypeError',
+        err: { message: 'settlement bug', type: 'TypeError' },
+        event: 'eghl.cron.defect',
+        msg: 'Unhandled defect',
+      },
+    ])
+    expect(span.status.code).toBe(SpanStatusCode.ERROR)
   })
 
   it('answers 500 without querying eGHL when the pending select fails', async () => {
@@ -313,6 +397,9 @@ describe('eGHL cron', () => {
     const run = await runCron({ db })
 
     expect(run).toMatchObject({ body: 'Internal Server Error', queried: [], status: 500 })
+    expect(run.errors).toMatchObject([
+      { event: 'eghl.cron.failed', op: 'payments.pendingTransactionsToReconcile' },
+    ])
   })
 
   it.each([

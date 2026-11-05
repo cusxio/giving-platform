@@ -24,6 +24,9 @@ export const claimTokenIfUnused = defineQuery(
   (claimed) => claimed.length === 1,
 )
 
+/** How long a code can be used after it is issued. */
+export const CODE_LIFETIME_MINUTES = 5
+
 export const createToken = defineQuery(
   'auth.createToken',
   (
@@ -31,7 +34,10 @@ export const createToken = defineQuery(
     userId: TokenInsert['userId'],
     tokenHash: TokenInsert['tokenHash'],
     mode: TokenInsert['mode'],
-  ) => db.insert(tokens).values({ expiresAt: addMinutes(now(), 5), mode, tokenHash, userId }),
+  ) =>
+    db
+      .insert(tokens)
+      .values({ expiresAt: addMinutes(now(), CODE_LIFETIME_MINUTES), mode, tokenHash, userId }),
   nothing,
 )
 

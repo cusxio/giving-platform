@@ -6,6 +6,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { addDays, now } from '#/core/date'
 import type * as AuthServer from '#/modules/auth/server'
 import type * as Envvars from '#/server/env.server'
+import { testDeps } from '#/server/testing/test-deps'
 
 import { createTokenHasher } from './crypto.server'
 import type { Deps } from './deps.server'
@@ -90,6 +91,11 @@ async function handle(cookie?: string) {
   return { context, logs: io.logs, verified: io.verified }
 }
 
+type GlobalContext = NonNullable<ReturnType<typeof getGlobalStartContext>>
+// Each compiles only because the other half of the pair is narrowed by the null test.
+const sessionIdOf = (context: GlobalContext) => (context.user === null ? null : context.session.id)
+const userIdOf = (context: RequestContext) => (context.session === null ? null : context.user.id)
+
 describe('the request context middleware', () => {
   it('treats a request without a cookie as anonymous without verifying anything', async () => {
     expect.hasAssertions()
@@ -154,11 +160,21 @@ describe('the request context middleware', () => {
   it('types context.deps on every handler through Register', () => {
     expect.hasAssertions()
 
-    type GlobalContext = NonNullable<ReturnType<typeof getGlobalStartContext>>
     expectTypeOf<GlobalContext['deps']>().not.toBeAny()
     expectTypeOf<GlobalContext['deps']>().toEqualTypeOf<Deps>()
     expectTypeOf<GlobalContext['user']>().toEqualTypeOf<RequestContext['user']>()
 
     expect(requestContext.options.server).toBeTypeOf('function')
+  })
+
+  it('pairs the session with the user, so a null test on either narrows both', () => {
+    expect.hasAssertions()
+
+    expectTypeOf(sessionIdOf).returns.toEqualTypeOf<null | string>()
+    expectTypeOf(userIdOf).returns.toEqualTypeOf<null | number>()
+    // @ts-expect-error a session without a user is not a request context
+    const unpaired: RequestContext = { deps: testDeps(), session: SIGNED_IN.session, user: null }
+
+    expect(unpaired.user).toBeNull()
   })
 })

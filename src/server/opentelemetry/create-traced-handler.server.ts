@@ -9,10 +9,10 @@ import {
 } from '@opentelemetry/api'
 import type { createStartHandler } from '@tanstack/react-start/server'
 
-import type { Telemetry } from './sdk.server'
+import { isRecorded } from '#/server/opentelemetry/recorded-errors.server'
+import type { PlatformRequest } from '#/server/platform-request.server'
 
-// Nitro's Vercel runtime attaches the platform's `waitUntil` to the incoming request.
-type PlatformRequest = Request & { waitUntil?: (promise: Promise<unknown>) => void }
+import type { Telemetry } from './sdk.server'
 
 export function createTracedHandler<T extends ReturnType<typeof createStartHandler>>(
   handler: T,
@@ -47,23 +47,23 @@ export function createTracedHandler<T extends ReturnType<typeof createStartHandl
 
           span.setAttribute('http.response.status_code', response.status)
 
+          // Below 500 the status stays as the request left it: a server function that answered
+          // SERVER_ERROR with a 200 has already marked the span failed, and OK would overwrite it.
           if (response.status >= 500) {
             span.setStatus({ code: SpanStatusCode.ERROR, message: `HTTP ${response.status}` })
-          } else if (response.status >= 400) {
-            span.setStatus({ code: SpanStatusCode.UNSET, message: `HTTP ${response.status}` })
-          } else {
-            span.setStatus({ code: SpanStatusCode.OK })
           }
 
           return response
         } catch (error) {
           span.setAttribute('http.response.status_code', 500)
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: error instanceof Error ? error.message : String(error),
-          })
-
-          span.recordException(error as Error)
+          // A route's defect logger already recorded it, without the parameters a driver message holds.
+          if (!isRecorded(error)) {
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: error instanceof Error ? error.message : String(error),
+            })
+            span.recordException(error as Error)
+          }
 
           throw error
         } finally {

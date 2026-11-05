@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 
 import { describe, expect, it, vi } from 'vitest'
 
+import { errValue, okValue } from '#/server/testing/result'
+
 import { createEghlClient } from './eghl.gateway.server'
 import type { EghlPaymentResponse } from './eghl.wire'
 import { EghlTxnExists, EghlTxnStatus } from './eghl.wire'
@@ -201,24 +203,25 @@ describe('the eGHL client reading replies', () => {
       expect.hasAssertions()
       const response = buildResponse()
 
-      await expect(readReturn(response)).resolves.toMatchObject({ ok: true, value: response })
+      expect(okValue(await readReturn(response))).toMatchObject(response)
     })
 
     it('rejects the reply when the signature is missing', async () => {
       expect.hasAssertions()
       const response = buildResponse({ HashValue2: '' })
 
-      await expect(readReturn(response)).resolves.toMatchObject({ ok: false })
+      const result = await readReturn(response)
+
+      expect(result.isErr()).toBe(true)
     })
 
     it('rejects the reply when the signature does not match', async () => {
       expect.hasAssertions()
       const response = buildResponse({ HashValue2: 'not-valid' })
 
-      await expect(readReturn(response)).resolves.toStrictEqual({
-        error: { type: 'EghlVerificationError' },
-        ok: false,
-      })
+      const result = await readReturn(response)
+
+      expect(errValue(result)._tag).toBe('EghlVerificationError')
     })
 
     it('reads a signed reply from a form-encoded POST body', async () => {
@@ -232,7 +235,7 @@ describe('the eGHL client reading replies', () => {
         }),
       )
 
-      expect(result).toMatchObject({ ok: true, value: response })
+      expect(okValue(result)).toMatchObject(response)
     })
 
     it('rejects a reply that is not a GET or a POST', async () => {
@@ -242,7 +245,7 @@ describe('the eGHL client reading replies', () => {
         new Request(expectedCallbackURL, { method: 'PUT' }),
       )
 
-      expect(result).toStrictEqual({ error: { type: 'EghlInvalidMethodError' }, ok: false })
+      expect(errValue(result)._tag).toBe('EghlInvalidMethodError')
     })
 
     it('rejects a reply that fails the reply schema', async () => {
@@ -250,7 +253,7 @@ describe('the eGHL client reading replies', () => {
 
       const result = await readReturn(buildResponse({ PaymentID: '' }))
 
-      expect(result).toMatchObject({ error: { type: 'ParseError' }, ok: false })
+      expect(errValue(result)._tag).toBe('ParseError')
     })
   })
 
@@ -260,10 +263,7 @@ describe('the eGHL client reading replies', () => {
 
       const result = await queryAgainstGatewayReply(hashValueOnlyReply())
 
-      expect(result).toMatchObject({
-        ok: true,
-        value: { TxnExists: EghlTxnExists.NotFound, TxnStatus: '-1' },
-      })
+      expect(okValue(result)).toMatchObject({ TxnExists: EghlTxnExists.NotFound, TxnStatus: '-1' })
     })
 
     it('rejects a not-found reply whose HashValue does not match', async () => {
@@ -273,7 +273,7 @@ describe('the eGHL client reading replies', () => {
         hashValueOnlyReply({ signatureOverride: 'not-valid' }),
       )
 
-      expect(result).toStrictEqual({ error: { type: 'EghlVerificationError' }, ok: false })
+      expect(errValue(result)._tag).toBe('EghlVerificationError')
     })
 
     it('rejects an existing transaction reply that carries only HashValue', async () => {
@@ -283,7 +283,7 @@ describe('the eGHL client reading replies', () => {
         hashValueOnlyReply({ TxnExists: EghlTxnExists.Exists, TxnStatus: EghlTxnStatus.Failed }),
       )
 
-      expect(result.ok).toBe(false)
+      expect(result.isErr()).toBe(true)
     })
 
     it('rejects a reply signed with HashValue only that carries a final status', async () => {
@@ -293,7 +293,7 @@ describe('the eGHL client reading replies', () => {
         hashValueOnlyReply({ TxnStatus: EghlTxnStatus.Failed }),
       )
 
-      expect(result.ok).toBe(false)
+      expect(result.isErr()).toBe(true)
     })
 
     it('returns a verified reply for the queried payment and amount', async () => {
@@ -301,9 +301,10 @@ describe('the eGHL client reading replies', () => {
 
       const result = await queryAgainstGatewayReply(existingTransactionReply())
 
-      expect(result).toMatchObject({
-        ok: true,
-        value: { Amount: '50.00', PaymentID: 'txn_abc123', TxnStatus: EghlTxnStatus.Failed },
+      expect(okValue(result)).toMatchObject({
+        Amount: '50.00',
+        PaymentID: 'txn_abc123',
+        TxnStatus: EghlTxnStatus.Failed,
       })
     })
 
@@ -314,7 +315,7 @@ describe('the eGHL client reading replies', () => {
         existingTransactionReply({ OrderNumber: 'txn_other', PaymentID: 'txn_other' }),
       )
 
-      expect(result.ok).toBe(false)
+      expect(errValue(result)._tag).toBe('EghlQueryMismatchError')
     })
 
     it('rejects a verified reply for another amount', async () => {
@@ -322,7 +323,7 @@ describe('the eGHL client reading replies', () => {
 
       const result = await queryAgainstGatewayReply(existingTransactionReply({ Amount: '5.00' }))
 
-      expect(result.ok).toBe(false)
+      expect(errValue(result)._tag).toBe('EghlQueryMismatchError')
     })
   })
 })

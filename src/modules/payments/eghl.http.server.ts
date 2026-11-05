@@ -1,10 +1,12 @@
 import { redirect } from '@tanstack/react-router'
+import { Result } from 'better-result'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { createDBError } from '#/core/errors'
-import { ok, tryAsync } from '#/core/result'
 import type { Deps } from '#/server/deps.server'
+import type { InfraError } from '#/server/infra-error'
+import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
+import type { EghlReplyError } from './eghl.errors'
 import { finalStatusOf, inboundActionOf } from './eghl.outcome'
 import type { EghlPaymentResponse } from './eghl.wire'
 import { recordOutcome } from './record-outcome.server'
@@ -12,8 +14,45 @@ import { findPendingAmountInCents } from './transactions.repository.server'
 
 type SettlementDeps = Pick<Deps, 'db' | 'eghl' | 'logger'>
 
+/**
+ * Logs why `route` refused a reply. The status says whose fault it is: 400 for the reply, 500
+ * when its body could not be read, so the gateway sends it again.
+ */
+function refuseReply(
+  logger: Deps['logger'],
+  route: 'callback' | 'return',
+  error: EghlReplyError,
+): 400 | 500 {
+  return error.match<EghlReplyError, 400 | 500>({
+    EghlInvalidMethodError: () => {
+      logger.warn({ event: `eghl.${route}.method_invalid` }, 'Invalid HTTP method received')
+      return 400
+    },
+    EghlServerError: () => {
+      logger.error({ event: `eghl.${route}.read_failed` }, 'Failed to read request body')
+      return 500
+    },
+    EghlVerificationError: () => {
+      logger.error(
+        { event: `eghl.${route}.verification_failed` },
+        'Signature verification failed (Potential tampering)',
+      )
+      return 400
+    },
+    ParseError: ({ _tag, cause }) => {
+      logger.warn(
+        { 'error.type': _tag, err: cause, event: `eghl.${route}.validation_failed` },
+        `${route === 'callback' ? 'Callback' : 'Return'} payload validation failed`,
+      )
+      return 400
+    },
+  })
+}
+
+type Settlement = Promise<Result<{ finalized: boolean }, InfraError>>
+
 /** Settles a verified callback or return reply, leaving the transaction pending when unsure. */
-async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentResponse) {
+async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentResponse): Settlement {
   const { logger } = deps
   const action = inboundActionOf(reply)
 
@@ -29,7 +68,7 @@ async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentRespon
         { event: 'eghl.settlement.not_final', transaction_id: reply.PaymentID },
         'Reply does not settle the transaction, leaving it pending',
       )
-      return ok({ finalized: false })
+      return Result.ok({ finalized: false })
     }
     default: {
       return assertExhaustive(action)
@@ -40,30 +79,27 @@ async function settleInboundReply(deps: SettlementDeps, reply: EghlPaymentRespon
 async function confirmByQuery(
   deps: SettlementDeps,
   transactionId: EghlPaymentResponse['PaymentID'],
-) {
+): Settlement {
   const { eghl, logger } = deps
-  const amountResult = await tryAsync(
-    () => deps.db.run(findPendingAmountInCents(transactionId)),
-    createDBError,
-  )
-  if (!amountResult.ok) {
-    return amountResult
+  const amountResult = await deps.db.run(findPendingAmountInCents(transactionId))
+  if (amountResult.isErr()) {
+    return Result.err(amountResult.error)
   }
   if (amountResult.value === undefined) {
-    return ok({ finalized: false })
+    return Result.ok({ finalized: false })
   }
 
   const queryResult = await eghl.queryStatus({ amountInCents: amountResult.value, transactionId })
-  if (!queryResult.ok) {
+  if (queryResult.isErr()) {
     logger.warn(
       {
-        error_type: queryResult.error.type,
+        'error.type': queryResult.error._tag,
         event: 'eghl.settlement.query_failed',
         transaction_id: transactionId,
       },
       'Could not confirm the reply with the gateway, leaving it pending',
     )
-    return ok({ finalized: false })
+    return Result.ok({ finalized: false })
   }
 
   const finalStatus = finalStatusOf(queryResult.value)
@@ -76,13 +112,13 @@ async function confirmByQuery(
       },
       'Gateway status does not settle the transaction, leaving it pending',
     )
-    return ok({ finalized: false })
+    return Result.ok({ finalized: false })
   }
 
   return recordOutcome(deps, queryResult.value, finalStatus)
 }
 
-export async function handleEghlCallback(deps: SettlementDeps, request: Request) {
+async function callback(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
   const internalError = Response.json({ message: 'Internal Server Error' }, { status: 500 })
   const badRequest = Response.json({ message: 'Bad Request' }, { status: 400 })
@@ -91,39 +127,10 @@ export async function handleEghlCallback(deps: SettlementDeps, request: Request)
 
   const responseResult = await eghl.readReply(request)
 
-  if (!responseResult.ok) {
-    const { type } = responseResult.error
-    switch (type) {
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: responseResult.error.error,
-            error_type: responseResult.error.type,
-            event: 'eghl.callback.validation_failed',
-          },
-          'Callback payload validation failed',
-        )
-        return badRequest
-      }
-      case 'EghlVerificationError': {
-        logger.error(
-          { event: 'eghl.callback.verification_failed' },
-          'Signature verification failed (Potential tampering)',
-        )
-        return badRequest
-      }
-      case 'EghlInvalidMethodError': {
-        logger.warn({ event: 'eghl.callback.method_invalid' }, 'Invalid HTTP method received')
-        return badRequest
-      }
-      case 'EghlServerError': {
-        logger.error({ event: 'eghl.callback.read_failed' }, 'Failed to read request body')
-        return internalError
-      }
-      default: {
-        assertExhaustive(responseResult.error)
-      }
-    }
+  if (responseResult.isErr()) {
+    return refuseReply(logger, 'callback', responseResult.error) === 400
+      ? badRequest
+      : internalError
   }
 
   const eghlResponse = responseResult.value
@@ -141,16 +148,10 @@ export async function handleEghlCallback(deps: SettlementDeps, request: Request)
 
   const finalizationResult = await settleInboundReply(deps, eghlResponse)
 
-  if (!finalizationResult.ok) {
-    logger.error(
-      {
-        err: finalizationResult.error.error,
-        error_type: finalizationResult.error.type,
-        event: 'eghl.callback.finalization_failed',
-        transaction_id: eghlResponse.PaymentID,
-      },
-      'Failed to record payment outcome in database',
-    )
+  if (finalizationResult.isErr()) {
+    logInfraFailure(logger, 'eghl.callback', finalizationResult.error, {
+      transaction_id: eghlResponse.PaymentID,
+    })
     return internalError
   }
 
@@ -165,7 +166,7 @@ export async function handleEghlCallback(deps: SettlementDeps, request: Request)
 
 // The GET and POST returns differ in their processing log and in how a failed write redirects,
 // so they stay two functions.
-export async function handleEghlReturnGet(deps: SettlementDeps, request: Request) {
+async function returnGet(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
 
   logger.info({ event: 'eghl.return.received', method: 'GET' }, 'Received eGHL return redirect')
@@ -174,41 +175,8 @@ export async function handleEghlReturnGet(deps: SettlementDeps, request: Request
 
   const responseResult = await eghl.readReply(request)
 
-  if (!responseResult.ok) {
-    const { type } = responseResult.error
-
-    switch (type) {
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: responseResult.error.error,
-            error_type: responseResult.error.type,
-            event: 'eghl.return.validation_failed',
-          },
-          'Return payload validation failed',
-        )
-        break
-      }
-      case 'EghlVerificationError': {
-        logger.error(
-          { event: 'eghl.return.verification_failed' },
-          'Signature verification failed (Potential tampering)',
-        )
-        break
-      }
-      case 'EghlInvalidMethodError': {
-        logger.warn({ event: 'eghl.return.method_invalid' }, 'Invalid HTTP method received')
-        break
-      }
-      case 'EghlServerError': {
-        logger.error({ event: 'eghl.return.read_failed' }, 'Failed to read request body')
-        break
-      }
-      default: {
-        assertExhaustive(responseResult.error)
-      }
-    }
-
+  if (responseResult.isErr()) {
+    refuseReply(logger, 'return', responseResult.error)
     return errorRedirect
   }
 
@@ -225,16 +193,10 @@ export async function handleEghlReturnGet(deps: SettlementDeps, request: Request
 
   const finalizationResult = await settleInboundReply(deps, eghlResponse)
 
-  if (!finalizationResult.ok) {
-    logger.error(
-      {
-        err: finalizationResult.error.error,
-        error_type: finalizationResult.error.type,
-        event: 'eghl.return.finalization_failed',
-        transaction_id: eghlResponse.PaymentID,
-      },
-      'Failed to record payment outcome in database',
-    )
+  if (finalizationResult.isErr()) {
+    logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
+      transaction_id: eghlResponse.PaymentID,
+    })
     throw errorRedirect
   }
 
@@ -250,7 +212,7 @@ export async function handleEghlReturnGet(deps: SettlementDeps, request: Request
   })
 }
 
-export async function handleEghlReturnPost(deps: SettlementDeps, request: Request) {
+async function returnPost(deps: SettlementDeps, request: Request) {
   const { eghl, logger } = deps
 
   logger.info({ event: 'eghl.return.received', method: 'POST' }, 'Received eGHL return redirect')
@@ -259,41 +221,8 @@ export async function handleEghlReturnPost(deps: SettlementDeps, request: Reques
 
   const responseResult = await eghl.readReply(request)
 
-  if (!responseResult.ok) {
-    const { type } = responseResult.error
-
-    switch (type) {
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: responseResult.error.error,
-            error_type: responseResult.error.type,
-            event: 'eghl.return.validation_failed',
-          },
-          'Return payload validation failed',
-        )
-        break
-      }
-      case 'EghlVerificationError': {
-        logger.error(
-          { event: 'eghl.return.verification_failed' },
-          'Signature verification failed (Potential tampering)',
-        )
-        break
-      }
-      case 'EghlInvalidMethodError': {
-        logger.warn({ event: 'eghl.return.method_invalid' }, 'Invalid HTTP method received')
-        break
-      }
-      case 'EghlServerError': {
-        logger.error({ event: 'eghl.return.read_failed' }, 'Failed to read request body')
-        break
-      }
-      default: {
-        assertExhaustive(responseResult.error)
-      }
-    }
-
+  if (responseResult.isErr()) {
+    refuseReply(logger, 'return', responseResult.error)
     return errorRedirect
   }
 
@@ -312,16 +241,10 @@ export async function handleEghlReturnPost(deps: SettlementDeps, request: Reques
 
   const finalizationResult = await settleInboundReply(deps, eghlResponse)
 
-  if (!finalizationResult.ok) {
-    logger.error(
-      {
-        err: finalizationResult.error.error,
-        error_type: finalizationResult.error.type,
-        event: 'eghl.return.finalization_failed',
-        transaction_id: eghlResponse.PaymentID,
-      },
-      'Failed to record payment outcome in database',
-    )
+  if (finalizationResult.isErr()) {
+    logInfraFailure(logger, 'eghl.return', finalizationResult.error, {
+      transaction_id: eghlResponse.PaymentID,
+    })
     return errorRedirect
   }
 
@@ -336,3 +259,12 @@ export async function handleEghlReturnPost(deps: SettlementDeps, request: Reques
     to: '/transaction/receipt/$transactionId',
   })
 }
+
+export const handleEghlCallback = (deps: SettlementDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.callback', () => callback(deps, request))
+
+export const handleEghlReturnGet = (deps: SettlementDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.return', () => returnGet(deps, request))
+
+export const handleEghlReturnPost = (deps: SettlementDeps, request: Request) =>
+  logDefects(deps.logger, 'eghl.return', () => returnPost(deps, request))

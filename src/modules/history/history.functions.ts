@@ -1,30 +1,27 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import type {
-  AvailableYearsInput,
-  OverviewInput,
-  TransactionInput,
-  TransactionsInput,
-} from './history.server'
+import { wireInput } from '#/core/wire'
+
+import type { OverviewInput, TransactionInput, TransactionsInput } from './history.server'
 import {
-  getAvailableYearsProcedure,
-  getOverviewProcedure,
-  getTransactionProcedure,
-  getTransactionsProcedure,
+  getAvailableYearsAction,
+  getOverviewAction,
+  getTransactionAction,
+  getTransactionsAction,
 } from './history.server'
 
 export const getOverview = createServerFn()
-  .validator((input: OverviewInput) => input)
-  .handler(({ context, data }) => getOverviewProcedure(context, data))
+  .validator(wireInput<OverviewInput>())
+  .handler((ctx) => getOverviewAction(ctx))
 
 export const getAvailableYears = createServerFn()
-  .validator((input: AvailableYearsInput) => input)
-  .handler(({ context, data }) => getAvailableYearsProcedure(context, data))
+  .validator(wireInput<undefined>())
+  .handler((ctx) => getAvailableYearsAction(ctx))
 
 export const getTransactions = createServerFn()
-  .validator((input: TransactionsInput) => input)
-  .handler(({ context, data }) => getTransactionsProcedure(context, data))
+  .validator(wireInput<TransactionsInput>())
+  .handler((ctx) => getTransactionsAction(ctx))
 
 export const getTransaction = createServerFn()
-  .validator((input: TransactionInput) => input)
-  .handler(({ context, data }) => getTransactionProcedure(context, data))
+  .validator(wireInput<TransactionInput>())
+  .handler((ctx) => getTransactionAction(ctx))

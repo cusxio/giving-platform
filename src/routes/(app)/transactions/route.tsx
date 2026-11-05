@@ -12,7 +12,7 @@ import { cx } from '#/styles/cx'
 
 import { TransactionsTable } from '../-components/transactions-table'
 
-const searchSchema = v.object({ page: v.optional(v.number()) })
+const searchSchema = v.object({ page: v.optional(v.pipe(v.number(), v.safeInteger())) })
 
 export const Route = createFileRoute('/(app)/transactions')({
   validateSearch(search): v.InferOutput<typeof searchSchema> {
@@ -25,7 +25,7 @@ export const Route = createFileRoute('/(app)/transactions')({
     return { page: parseResult.output.page }
   },
   beforeLoad({ search }) {
-    return { page: search.page ?? 1 }
+    return { page: Math.max(1, search.page ?? 1) }
   },
 
   component: RouteComponent,

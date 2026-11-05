@@ -1,16 +1,24 @@
 import { redirect } from '@tanstack/react-router'
-import { setResponseHeader } from '@tanstack/react-start/server'
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
+import { Result } from 'better-result'
 
 import { addSeconds, differenceInDays, now } from '#/core/date'
-import { createDBError, createParseError } from '#/core/errors'
-import type { Result } from '#/core/result'
-import { err, ok, trySync, tryAsync } from '#/core/result'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { QueryResult } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
+import { InfraError } from '#/server/infra-error'
+import type { PlatformRequest } from '#/server/platform-request.server'
+import { logInfraEvent } from '#/server/procedure.server'
 import type { RequestContext } from '#/server/request-context.server'
 
-import type { VerificationError } from './auth.errors'
+import type { SessionRejection } from './auth.errors'
+import {
+  ParseError,
+  SessionExpiredError,
+  SessionInvalidError,
+  SessionNotFoundError,
+  SessionUserInactiveError,
+} from './auth.errors'
 import {
   clearSessionCookie,
   cookieValueSchema,
@@ -27,133 +35,131 @@ import {
 type SessionWithUser = NonNullable<QueryResult<typeof findSessionByIdWithUser>>
 
 interface ResolvedSession {
+  /** The cookie to send back: a refreshed one when the session was extended. */
   serializedCookie: null | string
   session: SessionWithUser['session']
   user: Pick<SessionWithUser['user'], 'id' | 'journey' | 'role'>
 }
 
-/** Who the request belongs to, or nulls for an anonymous one. */
-export interface SessionCheck {
-  readonly session: null | ResolvedSession['session']
-  readonly user: null | ResolvedSession['user']
-}
+/** Who the request belongs to. An anonymous request has neither, so a null test on one narrows both. */
+export type SessionCheck =
+  | { readonly session: null; readonly user: null }
+  | { readonly session: ResolvedSession['session']; readonly user: ResolvedSession['user'] }
 
 type SessionDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 
 /**
- * Checks a `<sessionId>.<rawToken>` cookie against the stored hash. Deletes the session of a
- * user who is no longer active, and extends one within a week of expiry in the background.
+ * Lets `work` finish after the response is sent. A serverless platform may freeze the function
+ * once it responds, so `work` goes to its `waitUntil`, and is awaited where there is none.
  */
-export async function resolveSession(
+async function afterResponse(work: Promise<void>): Promise<void> {
+  const request = getRequest() as PlatformRequest
+  if (request.waitUntil === undefined) {
+    await work
+    return
+  }
+  request.waitUntil(work)
+}
+
+/** Extends the session in the database. A failure is only logged: the cookie is refreshed anyway. */
+async function extendInBackground(
+  deps: SessionDeps,
+  { session, user }: Omit<ResolvedSession, 'serializedCookie'>,
+): Promise<void> {
+  const { logger } = deps
+  const extended = await deps.db.run(extendSession(session.id, session.expiresAt))
+  if (extended.isErr()) {
+    logInfraEvent(logger, extended.error, {
+      event: 'session.extend.background_failed',
+      fields: { session_id: session.id },
+      level: 'warn',
+      msg: 'Database rejected session extension',
+    })
+    return
+  }
+  logger.info(
+    { event: 'session.extend.background_success', session_id: session.id, user_id: user.id },
+    'Session extended successfully in background',
+  )
+}
+
+/**
+ * Checks a `<sessionId>.<rawToken>` cookie against the stored hash. Deletes the session of a
+ * user who is no longer active, and extends one within a week of expiry after the response.
+ */
+async function resolveSession(
   deps: SessionDeps,
   cookieValue: string,
-): Promise<Result<ResolvedSession, VerificationError>> {
+): Promise<Result<ResolvedSession, InfraError | SessionRejection>> {
   const { logger } = deps
-  const parts = cookieValue.split('.')
+  const [sessionId, rawToken] = cookieValue.split('.')
 
-  const parseResult = trySync(
-    () => cookieValueSchema.Parse({ rawToken: parts[1], sessionId: parts[0] }),
-    createParseError,
-  )
-
-  if (!parseResult.ok) {
-    return parseResult
+  const parsed = Result.try({
+    catch: (cause) => new ParseError({ cause }),
+    try: () => cookieValueSchema.Parse({ rawToken, sessionId }),
+  })
+  if (parsed.isErr()) {
+    return parsed
   }
 
-  const { rawToken, sessionId } = parseResult.value
-  const sessionWithUserResult = await tryAsync(
-    () => deps.db.run(findSessionByIdWithUser(sessionId)),
-    createDBError,
-  )
-
-  if (!sessionWithUserResult.ok) {
-    return sessionWithUserResult
+  const found = await deps.db.run(findSessionByIdWithUser(parsed.value.sessionId))
+  if (found.isErr()) {
+    return found
+  }
+  if (found.value === null) {
+    return Result.err(new SessionNotFoundError())
   }
 
-  const sessionWithUser = sessionWithUserResult.value
+  const { session, user } = found.value
 
-  if (sessionWithUser === null) {
-    return err({ serializedCookie: clearSessionCookie(), type: 'SessionNotFoundError' })
-  }
-
-  const { session, user } = sessionWithUser
-
-  const isValid = constantTimeEqual(deps.hashToken(rawToken), session.tokenHash)
-
-  if (!isValid) {
-    return err({ serializedCookie: clearSessionCookie(), type: 'SessionInvalidError' })
+  if (!constantTimeEqual(deps.hashToken(parsed.value.rawToken), session.tokenHash)) {
+    return Result.err(new SessionInvalidError())
   }
 
   if (user.status !== 'active') {
-    const deleteResult = await tryAsync(
-      () => deps.db.run(deleteSessionById(session.id)),
-      createDBError,
-    )
-
-    if (!deleteResult.ok) {
-      logger.warn(
-        {
-          err: deleteResult.error.error,
-          error_type: deleteResult.error.type,
-          event: 'session.verify.inactive_delete_failed',
-          session_id: session.id,
-        },
-        'Failed to delete session of inactive user',
-      )
+    const deleted = await deps.db.run(deleteSessionById(session.id))
+    if (deleted.isErr()) {
+      logInfraEvent(logger, deleted.error, {
+        event: 'session.verify.inactive_delete_failed',
+        fields: { session_id: session.id },
+        level: 'warn',
+        msg: 'Failed to delete session of inactive user',
+      })
     }
-
-    return err({ serializedCookie: clearSessionCookie(), type: 'SessionUserInactiveError' })
+    return Result.err(new SessionUserInactiveError())
   }
 
   const daysLeft = differenceInDays(session.expiresAt, now())
 
   if (daysLeft <= 0) {
-    return err({ serializedCookie: clearSessionCookie(), type: 'SessionExpiredError' })
+    return Result.err(new SessionExpiredError())
   }
 
-  if (daysLeft <= 7) {
-    const extendedExpiresAt = addSeconds(now(), SESSION_MAX_AGE_SECONDS)
-
-    tryAsync(() => deps.db.run(extendSession(session.id, extendedExpiresAt)), createDBError)
-      .then((res) => {
-        if (res.ok) {
-          logger.info(
-            {
-              event: 'session.extend.background_success',
-              session_id: session.id,
-              user_id: user.id,
-            },
-            'Session extended successfully in background',
-          )
-        } else {
-          logger.warn(
-            {
-              err: res.error.error,
-              error_type: res.error.type,
-              event: 'session.extend.background_failed',
-              session_id: session.id,
-            },
-            'Database rejected session extension',
-          )
-        }
-      })
-      .catch((error: unknown) => {
-        logger.error(
-          { err: error, event: 'session.extend.background_crash', session_id: session.id },
-          'Critical error during background session extension',
-        )
-      })
-
-    const newCookieValue = serializeSessionCookie({ cookieValue, expiresAt: extendedExpiresAt })
-
-    return ok({
-      serializedCookie: newCookieValue,
-      session: { ...session, expiresAt: extendedExpiresAt },
-      user,
-    })
+  if (daysLeft > 7) {
+    return Result.ok({ serializedCookie: null, session, user })
   }
 
-  return ok({ serializedCookie: null, session, user })
+  const extended = {
+    session: { ...session, expiresAt: addSeconds(now(), SESSION_MAX_AGE_SECONDS) },
+    user,
+  }
+
+  await afterResponse(
+    extendInBackground(deps, extended).catch((error: unknown) => {
+      logger.error(
+        { err: error, event: 'session.extend.background_crash', session_id: session.id },
+        'Critical error during background session extension',
+      )
+    }),
+  )
+
+  return Result.ok({
+    ...extended,
+    serializedCookie: serializeSessionCookie({
+      cookieValue,
+      expiresAt: extended.session.expiresAt,
+    }),
+  })
 }
 
 /** Resolves the request's session cookie, and sets, refreshes or clears it on the response. */
@@ -162,60 +168,37 @@ export async function verifySessionCookie(
   cookieValue: string,
 ): Promise<SessionCheck> {
   const { logger } = deps
-  const verifyResult = await resolveSession(deps, cookieValue)
+  const resolved = await resolveSession(deps, cookieValue)
 
-  if (!verifyResult.ok) {
-    const { type } = verifyResult.error
-
-    switch (type) {
-      case 'DBEmptyReturnError':
-      case 'DBQueryError': {
-        logger.error(
-          {
-            err: verifyResult.error.error,
-            error_type: verifyResult.error.type,
-            event: 'session.verify.db_error',
-          },
-          'Database error during session verification',
-        )
-        setResponseHeader('Set-Cookie', clearSessionCookie())
-        break
-      }
-      case 'ParseError': {
-        logger.warn(
-          {
-            err: verifyResult.error.error,
-            error_type: verifyResult.error.type,
-            event: 'session.verify.validation_failed',
-          },
-          'Cookie format is invalid',
-        )
-        setResponseHeader('Set-Cookie', clearSessionCookie())
-        break
-      }
-      case 'SessionExpiredError':
-      case 'SessionInvalidError':
-      case 'SessionNotFoundError':
-      case 'SessionUserInactiveError': {
-        logger.info(
-          { event: 'session.verify.invalid', reason: type },
-          'Session is invalid or expired',
-        )
-        setResponseHeader('Set-Cookie', verifyResult.error.serializedCookie)
-        break
-      }
+  if (resolved.isOk()) {
+    const { serializedCookie, session, user } = resolved.value
+    if (serializedCookie !== null) {
+      setResponseHeader('Set-Cookie', serializedCookie)
     }
-
-    return { session: null, user: null }
+    return { session, user }
   }
 
-  const { serializedCookie, session, user } = verifyResult.value
-
-  if (serializedCookie !== null) {
-    setResponseHeader('Set-Cookie', serializedCookie)
+  const { error } = resolved
+  if (InfraError.is(error)) {
+    logInfraEvent(logger, error, {
+      event: 'session.verify.db_error',
+      level: 'error',
+      msg: 'Database error during session verification',
+    })
+  } else if (ParseError.is(error)) {
+    logger.warn(
+      { 'error.type': error._tag, err: error.cause, event: 'session.verify.validation_failed' },
+      'Cookie format is invalid',
+    )
+  } else {
+    logger.info(
+      { event: 'session.verify.invalid', reason: error._tag },
+      'Session is invalid or expired',
+    )
   }
+  setResponseHeader('Set-Cookie', clearSessionCookie())
 
-  return { session, user }
+  return { session: null, user: null }
 }
 
 /** Deletes the session row. A failure is only logged, so logout still clears the cookie. */
@@ -227,20 +210,26 @@ export async function endSession(
 
   logger.info({ event: 'auth.logout.processing', session_id: sessionId }, 'Processing user logout')
 
-  const result = await tryAsync(() => deps.db.run(deleteSessionById(sessionId)), createDBError)
-
-  if (!result.ok) {
-    logger.error(
-      { err: result.error.error, error_type: result.error.type, event: 'auth.logout.failed' },
-      'Failed to delete session from DB',
-    )
+  const deleted = await deps.db.run(deleteSessionById(sessionId))
+  if (deleted.isErr()) {
+    logInfraEvent(logger, deleted.error, {
+      event: 'auth.logout.failed',
+      level: 'error',
+      msg: 'Failed to delete session from DB',
+    })
   }
 }
 
-export async function logoutProcedure(
-  context: Pick<RequestContext, 'deps' | 'session'>,
-): Promise<never> {
-  if (context.session) {
+interface SessionInvocation {
+  readonly context: Pick<RequestContext, 'deps' | 'session'>
+}
+
+/** Whether the request carries a valid session. Nothing else about it leaves the server. */
+export const hasSessionAction = ({ context }: SessionInvocation) => context.session !== null
+
+/** Ends the session, if there is one, clears the cookie and sends the browser to login. */
+export async function logoutAction({ context }: SessionInvocation): Promise<never> {
+  if (context.session !== null) {
     await endSession(context.deps, context.session.id)
   }
 

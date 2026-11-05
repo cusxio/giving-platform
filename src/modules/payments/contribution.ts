@@ -1,6 +1,15 @@
+import { Result } from 'better-result'
+
 import type { Fund } from '#/core/brand/funds'
 import { ringgitToCents } from '#/core/money'
 import type { User } from '#/modules/account/server'
+
+/**
+ * The most one fund may receive in one contribution, in ringgit. Amounts are stored as integer
+ * cents in 32-bit columns (at most RM 21,474,836.47), and a gift to every fund at this amount
+ * still fits the transaction's total.
+ */
+export const MAX_FUND_AMOUNT = 5_000_000
 
 export interface ContributionItem {
   readonly amountInCents: number
@@ -46,20 +55,21 @@ export function decideDonor(
   return owner && owner.status !== 'guest' ? { kind: 'guest-email-exists' } : { kind: 'guest' }
 }
 
-/** Throws when a fund is missing from `funds`. */
+/** The transaction's item rows keyed by fund id, or `Err` naming the first fund `funds` lacks. */
 export function itemsFor(
   transactionId: string,
   items: readonly ContributionItem[],
   funds: readonly { readonly id: string; readonly name: string }[],
-) {
+): Result<{ amount: number; fundId: string; transactionId: string }[], string> {
   const fundIds = new Map(funds.map((f) => [f.name, f.id]))
-
-  return items.map((item) => {
+  const rows = []
+  for (const item of items) {
     const name = fundName(item.fund)
     const fundId = fundIds.get(name)
     if (fundId === undefined) {
-      throw new Error(`Invalid fund name: ${name}`)
+      return Result.err(name)
     }
-    return { amount: item.amountInCents, fundId, transactionId }
-  })
+    rows.push({ amount: item.amountInCents, fundId, transactionId })
+  }
+  return Result.ok(rows)
 }

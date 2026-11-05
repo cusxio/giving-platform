@@ -1,3 +1,4 @@
+export { MAX_FUND_AMOUNT } from './contribution'
 export {
   receiptQuery,
   savedPaymentMethodsQuery,

@@ -1,64 +1,40 @@
+import { Result } from 'better-result'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
-import { assertExhaustive } from '#/core/assert-exhaustive'
 import { config, funds as fundsName } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
-import {
-  createDBError,
-  createParseError,
-  createTransactionError,
-  TransactionRollbackError,
-} from '#/core/errors'
-import type { Result } from '#/core/result'
-import { tryAsync, trySync } from '#/core/result'
-import type {
-  BusinessErrorResponse,
-  ServerErrorResponse,
-  SuccessResponse,
-  ValidationErrorResponse,
-} from '#/core/wire'
 import type { User } from '#/modules/account/server'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
+import { anyone } from '#/server/authorize.server'
 import type { Executor } from '#/server/db.server'
 import type { Deps } from '#/server/deps.server'
-import type { RequestContext } from '#/server/request-context.server'
+import { InfraError, required } from '#/server/infra-error'
+import type { Parsed } from '#/server/input.server'
+import { parseWith } from '#/server/input.server'
+import { business, defineMutation } from '#/server/procedure.server'
 
 import type { ContributionItem } from './contribution'
-import { contributionItems, decideDonor, fundName, itemsFor, totalInCents } from './contribution'
-import type { CreatePendingContributionError } from './payments.errors'
-import { EmailBelongsToAnotherUserError, GuestEmailExistsError } from './payments.errors'
+import {
+  MAX_FUND_AMOUNT,
+  contributionItems,
+  decideDonor,
+  fundName,
+  itemsFor,
+  totalInCents,
+} from './contribution'
+import {
+  EmailBelongsToAnotherUser,
+  GuestEmailExists,
+  InvalidContribution,
+  PaymentMethodUnavailable,
+} from './payments.errors'
 import { findSavedCard } from './saved-cards.repository.server'
-import type { TransactionId } from './transactions.repository.server'
 import {
   findFundsByName,
   insertPendingTransaction,
   insertTransactionItems,
 } from './transactions.repository.server'
-
-const schema = Compile(
-  Type.Object({
-    contributions: Type.Record(Type.Union(fundsName.map((f) => Type.Literal(f))), Type.Number()),
-    email: Type.String({ format: 'email' }),
-    firstName: Type.String({ minLength: 1 }),
-    lastName: Type.String({ minLength: 1 }),
-    token: Type.Optional(Type.String()),
-  }),
-)
-
-export type StartContributionInput = ReturnType<typeof schema.Parse>
-
-type StartContributionResponse =
-  | BusinessErrorResponse<StartContributionBusinessErrorCode>
-  | ServerErrorResponse
-  | SuccessResponse<{ redirectURL: string }>
-  | ValidationErrorResponse
-
-type StartContributionBusinessErrorCode =
-  | 'EMAIL_EXISTS'
-  | 'INVALID_REQUEST'
-  | 'PAYMENT_METHOD_UNAVAILABLE'
-  | 'USER_MISMATCH'
 
 type SessionUser = Pick<User, 'id'>
 
@@ -68,259 +44,184 @@ interface DonorDetails {
   readonly lastName: string
 }
 
-interface PendingContribution {
-  readonly customerName: string
-  readonly transactionId: TransactionId
-}
-
-async function upsertGuest(tx: Executor, donor: DonorDetails): Promise<User['id']> {
-  const { email, firstName, lastName } = donor
-  const createResult = await tryAsync(
-    () => tx.run(upsertGuestUser({ email, firstName, lastName })),
-    createDBError,
+/**
+ * The guest's id. No row means the email was registered after the owner lookup, such as by a
+ * signup finishing in between, so the guest is refused as if the lookup had seen it.
+ */
+async function upsertGuest(tx: Executor, donor: DonorDetails) {
+  const guest = await tx.run(upsertGuestUser(donor))
+  return guest.andThen((row) =>
+    row === null ? Result.err(new GuestEmailExists()) : Result.ok(row.id),
   )
-
-  if (!createResult.ok) {
-    throw new TransactionRollbackError('Error creating user', { cause: createResult.error })
-  }
-
-  if (!createResult.value) {
-    throw new TransactionRollbackError('User creation returned no result')
-  }
-
-  return createResult.value.id
 }
 
 /**
- * Records a pending transaction and its items in one pool transaction, creating or updating the
- * guest account when no one is signed in. Anything thrown inside rolls the whole of it back.
+ * Records a pending transaction and its items in one pool transaction, creating the guest
+ * account when no one is signed in. Any `Err` rolls the whole of it back.
  */
-export async function createPendingContribution(
+export function createPendingContribution(
   deps: Pick<Deps, 'db'>,
   items: readonly ContributionItem[],
   donor: DonorDetails,
   sessionUser: null | SessionUser,
-): Promise<Result<PendingContribution, CreatePendingContributionError>> {
-  const { email, firstName, lastName } = donor
+) {
+  return deps.db.transaction((tx) =>
+    Result.gen(async function* pendingContribution() {
+      const owner = yield* Result.await(tx.run(findUserByEmail(donor.email)))
+      const decision = decideDonor(owner, sessionUser)
+      if (decision.kind === 'email-belongs-to-another-user') {
+        return Result.err(new EmailBelongsToAnotherUser())
+      }
+      if (decision.kind === 'guest-email-exists') {
+        return Result.err(new GuestEmailExists())
+      }
+      const userId =
+        decision.kind === 'session-user'
+          ? decision.userId
+          : yield* Result.await(upsertGuest(tx, donor))
 
-  return tryAsync(
-    () =>
-      deps.db.transaction(async (tx) => {
-        const ownerResult = await tryAsync(() => tx.run(findUserByEmail(email)), createDBError)
-
-        if (!ownerResult.ok) {
-          throw new TransactionRollbackError('Error finding user by email', {
-            cause: ownerResult.error,
-          })
-        }
-
-        const decision = decideDonor(ownerResult.value, sessionUser)
-
-        if (decision.kind === 'email-belongs-to-another-user') {
-          throw new EmailBelongsToAnotherUserError()
-        }
-
-        if (decision.kind === 'guest-email-exists') {
-          throw new GuestEmailExistsError()
-        }
-
-        const userId =
-          decision.kind === 'session-user' ? decision.userId : await upsertGuest(tx, donor)
-
-        const funds = await tx.run(findFundsByName(items.map((item) => fundName(item.fund))))
-
-        const transaction = await tx.run(
+      const funds = yield* Result.await(
+        tx.run(findFundsByName(items.map((item) => fundName(item.fund)))),
+      )
+      const inserted = yield* Result.await(
+        tx.run(
           insertPendingTransaction({
             amount: totalInCents(items),
             createdAs: sessionUser ? 'user' : 'guest',
             userId,
           }),
-        )
+        ),
+      )
+      const transaction = yield* required(inserted, insertPendingTransaction.queryName)
+      const rows = yield* itemsFor(transaction.id, items, funds).mapError(
+        (missing) =>
+          new InfraError({
+            cause: undefined,
+            message: `${findFundsByName.queryName} returned no row for ${missing}`,
+            op: findFundsByName.queryName,
+            reason: 'no-row',
+          }),
+      )
+      yield* Result.await(tx.run(insertTransactionItems(rows)))
 
-        if (!transaction) {
-          throw new TransactionRollbackError('Transaction creation returned no result')
-        }
-
-        await tx.run(insertTransactionItems(itemsFor(transaction.id, items, funds)))
-
-        return { customerName: `${firstName} ${lastName}`, transactionId: transaction.id }
-      }),
-    (error): CreatePendingContributionError => {
-      if (error instanceof GuestEmailExistsError) {
-        return { error, type: 'GuestEmailExistsError' }
-      }
-
-      if (error instanceof EmailBelongsToAnotherUserError) {
-        return { error, type: 'EmailBelongsToAnotherUserError' }
-      }
-
-      return createTransactionError(error)
-    },
+      return Result.ok({
+        customerName: `${donor.firstName} ${donor.lastName}`,
+        transactionId: transaction.id,
+      })
+    }),
   )
 }
 
-export async function beginContribution(
+const startContributionInput = parseWith(
+  Compile(
+    Type.Object({
+      contributions: Type.Record(
+        Type.Union(fundsName.map((f) => Type.Literal(f))),
+        Type.Number({ maximum: MAX_FUND_AMOUNT }),
+      ),
+      email: Type.String({ format: 'email', maxLength: 254 }),
+      firstName: Type.String({ maxLength: 32, minLength: 1 }),
+      lastName: Type.String({ maxLength: 32, minLength: 1 }),
+      token: Type.Optional(Type.String()),
+    }),
+  ),
+  // Form fields arrive as strings, so the fund amounts are converted to numbers.
+  { convert: ['contributions'], lowercase: ['email'], trim: ['email', 'firstName', 'lastName'] },
+)
+export type StartContributionInput = Parsed<typeof startContributionInput>
+
+/** Checks the gift and the saved card, records it pending, and answers the gateway's URL. */
+function beginContribution(
   deps: Pick<Deps, 'db' | 'eghl' | 'logger'>,
   sessionUser: null | SessionUser,
-  data: StartContributionInput,
-): Promise<StartContributionResponse> {
-  const { logger } = deps
+  input: StartContributionInput,
+) {
+  return Result.gen(async function* contribution() {
+    const { contributions, email, firstName, lastName, token } = input
+    const items = contributionItems(contributions as Record<Fund, number>)
+    if (items.length === 0) {
+      return Result.err(new InvalidContribution())
+    }
 
-  const parseResult = trySync(
-    () =>
-      schema.Parse(
-        // Convert coerces contribution amounts from form strings to numbers
-        // Before validation (TypeBox 1.1+ no longer does this automatically)
-        schema.Convert({
-          ...data,
-          email: data.email.toLowerCase().trim(),
-          firstName: data.firstName.trim(),
-          lastName: data.lastName.trim(),
-        }),
-      ),
-    createParseError,
-  )
+    if (token !== undefined) {
+      if (sessionUser === null) {
+        return Result.err(new PaymentMethodUnavailable({ userId: null }))
+      }
+      const card = yield* Result.await(deps.db.run(findSavedCard(sessionUser.id, token)))
+      if (card === null) {
+        return Result.err(new PaymentMethodUnavailable({ userId: sessionUser.id }))
+      }
+    }
 
-  if (!parseResult.ok) {
-    logger.warn(
+    const totalAmountInCents = totalInCents(items)
+    deps.logger.info(
       {
-        err: parseResult.error.error,
-        error_type: parseResult.error.type,
-        event: 'giving.start_contribution.validation_failed',
+        email,
+        event: 'giving.start_contribution.attempt',
+        funds: items.map((i) => i.fund),
+        total_cents: totalAmountInCents,
       },
-      'Input validation failed',
-    )
-    return {
-      errors: parseResult.error.error.cause.errors.map((v) => ({
-        path: v.instancePath,
-        message: v.message,
-      })),
-      type: 'VALIDATION_ERROR',
-    }
-  }
-
-  const { email, firstName, lastName, contributions, token } = parseResult.value
-  const itemsToInsert = contributionItems(contributions as Record<Fund, number>)
-
-  if (itemsToInsert.length === 0) {
-    logger.warn(
-      { email, event: 'giving.start_contribution.invalid_request' },
-      'Request contained 0 items',
-    )
-    return { error: { code: 'INVALID_REQUEST' }, type: 'BUSINESS_ERROR' }
-  }
-
-  if (token !== undefined) {
-    if (sessionUser === null) {
-      logger.warn(
-        { email, event: 'giving.start_contribution.blocked', reason: 'saved_card_without_user' },
-        'Saved card used without a session',
-      )
-      return { error: { code: 'PAYMENT_METHOD_UNAVAILABLE' }, type: 'BUSINESS_ERROR' }
-    }
-
-    const savedCardResult = await tryAsync(
-      () => deps.db.run(findSavedCard(sessionUser.id, token)),
-      createDBError,
+      'Creating pending transaction',
     )
 
-    if (!savedCardResult.ok) {
-      logger.error(
-        {
-          err: savedCardResult.error.error,
-          error_type: savedCardResult.error.type,
-          event: 'giving.start_contribution.failed',
-        },
-        'Database error while finding saved card',
-      )
-      return { type: 'SERVER_ERROR' }
-    }
+    const pending = yield* Result.await(
+      createPendingContribution(deps, items, { email, firstName, lastName }, sessionUser),
+    )
 
-    if (savedCardResult.value === null) {
-      logger.warn(
-        {
-          event: 'giving.start_contribution.blocked',
-          reason: 'saved_card_not_found',
-          user_id: sessionUser.id,
-        },
-        'Saved card not found for user',
-      )
-      return { error: { code: 'PAYMENT_METHOD_UNAVAILABLE' }, type: 'BUSINESS_ERROR' }
-    }
-  }
-
-  const totalAmountInCents = totalInCents(itemsToInsert)
-
-  logger.info(
-    {
-      email,
-      event: 'giving.start_contribution.attempt',
-      funds: itemsToInsert.map((i) => i.fund),
-      total_cents: totalAmountInCents,
-    },
-    'Creating pending transaction',
-  )
-
-  const txResult = await createPendingContribution(
-    deps,
-    itemsToInsert,
-    { email, firstName, lastName },
-    sessionUser,
-  )
-
-  if (!txResult.ok) {
-    switch (txResult.error.type) {
-      case 'EmailBelongsToAnotherUserError': {
-        logger.warn(
-          { email, event: 'giving.start_contribution.blocked', reason: 'user_mismatch' },
-          'Email mismatch',
-        )
-        return { error: { code: 'USER_MISMATCH' }, type: 'BUSINESS_ERROR' }
-      }
-      case 'GuestEmailExistsError': {
-        logger.warn(
-          { email, event: 'giving.start_contribution.blocked', reason: 'email_exists' },
-          'Guest used existing account email',
-        )
-        return { error: { code: 'EMAIL_EXISTS' }, type: 'BUSINESS_ERROR' }
-      }
-      case 'TransactionRollbackError': {
-        logger.error(
-          {
-            err: txResult.error.error,
-            error_type: txResult.error.type,
-            event: 'giving.start_contribution.failed',
-          },
-          'Transaction error during contribution',
-        )
-        return { type: 'SERVER_ERROR' }
-      }
-      default: {
-        return assertExhaustive(txResult.error)
-      }
-    }
-  }
-
-  const redirectURL = deps.eghl.paymentRequestUrl({
-    amountInCents: totalAmountInCents,
-    customerEmail: email,
-    customerName: txResult.value.customerName,
-    description: `${config.entity}'s Giving`,
-    token,
-    transactionId: txResult.value.transactionId,
+    const redirectURL = deps.eghl.paymentRequestUrl({
+      amountInCents: totalAmountInCents,
+      customerEmail: email,
+      customerName: pending.customerName,
+      description: `${config.entity}'s Giving`,
+      token,
+      transactionId: pending.transactionId,
+    })
+    deps.logger.info(
+      { event: 'giving.start_contribution.redirected', transaction_id: pending.transactionId },
+      'Success, redirecting to eGHL',
+    )
+    return Result.ok({ redirectURL })
   })
-
-  logger.info(
-    { event: 'giving.start_contribution.redirected', transaction_id: txResult.value.transactionId },
-    'Success, redirecting to eGHL',
-  )
-
-  return { type: 'SUCCESS', value: { redirectURL } }
 }
 
-export function startContributionProcedure(
-  context: Pick<RequestContext, 'deps' | 'user'>,
-  data: StartContributionInput,
-): Promise<StartContributionResponse> {
-  return beginContribution(context.deps, context.user, data)
-}
+export const startContributionAction = defineMutation({
+  auth: anyone,
+  event: 'giving.start_contribution',
+  input: startContributionInput,
+  run: ({ deps, user }, input) => beginContribution(deps, user, input),
+  wire: {
+    EmailBelongsToAnotherUser: (_error, { email }) =>
+      business('USER_MISMATCH', {
+        event: 'giving.start_contribution.blocked',
+        fields: { email, reason: 'user_mismatch' },
+        msg: 'Email mismatch',
+      }),
+    GuestEmailExists: (_error, { email }) =>
+      business('EMAIL_EXISTS', {
+        event: 'giving.start_contribution.blocked',
+        fields: { email, reason: 'email_exists' },
+        msg: 'Guest used existing account email',
+      }),
+    InvalidContribution: (_error, { email }) =>
+      business('INVALID_REQUEST', {
+        event: 'giving.start_contribution.invalid_request',
+        fields: { email },
+        msg: 'Request contained 0 items',
+      }),
+    PaymentMethodUnavailable: ({ userId }, { email }) =>
+      business(
+        'PAYMENT_METHOD_UNAVAILABLE',
+        userId === null
+          ? {
+              event: 'giving.start_contribution.blocked',
+              fields: { email, reason: 'saved_card_without_user' },
+              msg: 'Saved card used without a session',
+            }
+          : {
+              event: 'giving.start_contribution.blocked',
+              fields: { reason: 'saved_card_not_found', user_id: userId },
+              msg: 'Saved card not found for user',
+            },
+      ),
+  },
+})

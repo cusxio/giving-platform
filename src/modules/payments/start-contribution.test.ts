@@ -1,60 +1,30 @@
-import { pino } from 'pino'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 
+import type {
+  BusinessErrorResponse,
+  ServerErrorResponse,
+  SuccessResponse,
+  ValidationErrorResponse,
+} from '#/core/wire'
 import { findUserByEmail, upsertGuestUser } from '#/modules/account/server'
-import type { Db } from '#/server/db.server'
+import { InfraError } from '#/server/infra-error'
 import type { FakeDb } from '#/server/testing/fake-db'
 import { createFakeDb } from '#/server/testing/fake-db'
-import { testDeps } from '#/server/testing/test-deps'
+import { recordingLogger } from '#/server/testing/recording-logger'
+import { errValue, okValue } from '#/server/testing/result'
+import { MEMBER, testContext } from '#/server/testing/test-context'
 
+import type { startContribution } from './payments.functions'
 import { findSavedCard } from './saved-cards.repository.server'
-import { beginContribution, createPendingContribution } from './start-contribution.server'
+import { createPendingContribution, startContributionAction } from './start-contribution.server'
 import {
   findFundsByName,
   insertPendingTransaction,
   insertTransactionItems,
 } from './transactions.repository.server'
 
-interface LogLine {
-  readonly err?: { readonly message: string; readonly type: string }
-  readonly error_type?: string
-  readonly event?: string
-  readonly level: number
-  readonly reason?: string
-}
-
-function recordingLogger() {
-  const events: LogLine[] = []
-  const logger = pino(
-    { level: 'debug' },
-    {
-      write: (line: string) => {
-        events.push(JSON.parse(line) as LogLine)
-      },
-    },
-  )
-  return { events, logger }
-}
-
-/** Notes whether each transaction committed or rolled back, which the fake does not model. */
-function recordingTransactions(db: FakeDb) {
-  const outcomes: string[] = []
-  const wrapped: Db = {
-    ...db,
-    transaction: (work) =>
-      db.transaction(work).then(
-        (value) => {
-          outcomes.push('commit')
-          return value
-        },
-        (error: unknown) => {
-          outcomes.push('rollback')
-          throw error
-        },
-      ),
-  }
-  return { db: wrapped, outcomes }
-}
+const WARN = 40
+const ERROR = 50
 
 function fail(): never {
   throw new Error('connection terminated')
@@ -114,10 +84,12 @@ function contributionDb(owner: ReturnType<typeof userRow> | null) {
       pendingRow(input.amount, input.createdAs, input.userId),
     )
     .on(insertTransactionItems, () => {})
-    .on(findSavedCard, (userId, token) => (userId === 2 && token === 'tok_own' ? { id: 7 } : null))
+    .on(findSavedCard, (userId, token) =>
+      userId === MEMBER.id && token === 'tok_own' ? { id: 7 } : null,
+    )
 }
 
-const input = (overrides: Partial<Parameters<typeof beginContribution>[2]> = {}) => ({
+const input = (overrides: Record<string, unknown> = {}) => ({
   contributions: { future: 0, mission: 2.25, offering: 10, tithe: 0 },
   email: '  Donor@Give.Test ',
   firstName: ' Ada ',
@@ -125,20 +97,16 @@ const input = (overrides: Partial<Parameters<typeof beginContribution>[2]> = {})
   ...overrides,
 })
 
-const member = { id: 2 }
-
-async function start(
-  fake: FakeDb,
-  sessionUser: null | { id: number },
-  data: ReturnType<typeof input>,
-) {
-  const { db, outcomes } = recordingTransactions(fake)
+async function start(fake: FakeDb, user: typeof MEMBER | null, data: unknown) {
   const { events, logger } = recordingLogger()
-  const response = await beginContribution(testDeps({ db, logger }), sessionUser, data)
-  return { calls: fake.calls.map((c) => c.name), events, outcomes, response }
+  const response = await startContributionAction({
+    context: testContext(user, { db: fake, logger }),
+    data,
+  })
+  return { calls: fake.calls.map((c) => c.name), events, outcomes: fake.transactions, response }
 }
 
-function redirectParams(response: Awaited<ReturnType<typeof beginContribution>>) {
+function redirectParams(response: Awaited<ReturnType<typeof startContributionAction>>) {
   if (response.type !== 'SUCCESS') {
     throw new Error(`expected SUCCESS, got ${response.type}`)
   }
@@ -164,6 +132,14 @@ describe('starting a contribution as a guest', () => {
   it('creates the guest and a pending transaction, then redirects to the gateway', async () => {
     expect.hasAssertions()
 
+    expectTypeOf<Awaited<ReturnType<typeof startContribution>>>().toEqualTypeOf<
+      | BusinessErrorResponse<
+          'EMAIL_EXISTS' | 'INVALID_REQUEST' | 'PAYMENT_METHOD_UNAVAILABLE' | 'USER_MISMATCH'
+        >
+      | ServerErrorResponse
+      | SuccessResponse<{ redirectURL: string }>
+      | ValidationErrorResponse
+    >()
     const fake = contributionDb(null)
     const result = await start(fake, null, input())
 
@@ -190,13 +166,61 @@ describe('starting a contribution as a guest', () => {
         name: 'payments.insertTransactionItems',
       },
     ])
-    expect(result.events.map((e) => e.event)).toStrictEqual([
-      'giving.start_contribution.attempt',
-      'giving.start_contribution.redirected',
+    expect(result.events).toMatchObject([
+      {
+        email: 'donor@give.test',
+        event: 'giving.start_contribution.attempt',
+        funds: ['mission', 'offering'],
+        msg: 'Creating pending transaction',
+        total_cents: 1225,
+      },
+      {
+        event: 'giving.start_contribution.redirected',
+        msg: 'Success, redirecting to eGHL',
+        transaction_id: 'txn_pending_000000001',
+      },
     ])
   })
 
-  it('renames a guest who already gave with the email', async () => {
+  it('reads fund amounts sent as form strings', async () => {
+    expect.hasAssertions()
+
+    const result = await start(
+      contributionDb(null),
+      null,
+      input({ contributions: { future: '0', mission: '2.25', offering: '10', tithe: '0' } }),
+    )
+
+    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
+  })
+
+  it('accepts the most one fund may receive', async () => {
+    expect.hasAssertions()
+
+    const result = await start(
+      contributionDb(null),
+      null,
+      input({ contributions: { future: 0, mission: 0, offering: '5000000', tithe: 0 } }),
+    )
+
+    expect(redirectParams(result.response)).toMatchObject({ Amount: '5000000.00' })
+  })
+
+  it('accepts names as long as the account columns, after trimming', async () => {
+    expect.hasAssertions()
+
+    const [first, last] = ['f'.repeat(32), 'l'.repeat(32)]
+    const fake = contributionDb(null)
+    const result = await start(fake, null, input({ firstName: ` ${first} `, lastName: last }))
+
+    expect(redirectParams(result.response)).toMatchObject({ CustName: `${first} ${last}` })
+    expect(fake.calls[1]).toStrictEqual({
+      args: [{ email: 'donor@give.test', firstName: first, lastName: last }],
+      name: 'account.upsertGuestUser',
+    })
+  })
+
+  it('upserts a guest who already gave with the email', async () => {
     expect.hasAssertions()
 
     const result = await start(
@@ -230,8 +254,33 @@ describe('starting a contribution as a guest', () => {
     expect(result.calls).toStrictEqual(['account.findUserByEmail'])
     expect(result.outcomes).toStrictEqual(['rollback'])
     expect(result.events.at(-1)).toMatchObject({
+      email: 'donor@give.test',
       event: 'giving.start_contribution.blocked',
-      level: 40,
+      level: WARN,
+      msg: 'Guest used existing account email',
+      reason: 'email_exists',
+    })
+  })
+
+  it('refuses an email registered after the lookup saw a guest, and rolls back', async () => {
+    expect.hasAssertions()
+
+    const fake = contributionDb(userRow(41, 'donor@give.test', 'guest')).on(
+      upsertGuestUser,
+      () => null,
+    )
+    const result = await start(fake, null, input())
+
+    expect(result.response).toStrictEqual({
+      error: { code: 'EMAIL_EXISTS' },
+      type: 'BUSINESS_ERROR',
+    })
+    expect(result.calls).toStrictEqual(['account.findUserByEmail', 'account.upsertGuestUser'])
+    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.events.at(-1)).toMatchObject({
+      email: 'donor@give.test',
+      event: 'giving.start_contribution.blocked',
+      level: WARN,
       reason: 'email_exists',
     })
   })
@@ -246,7 +295,15 @@ describe('starting a contribution as a guest', () => {
       type: 'BUSINESS_ERROR',
     })
     expect(result.calls).toStrictEqual([])
-    expect(result.events.at(-1)).toMatchObject({ reason: 'saved_card_without_user' })
+    expect(result.events).toMatchObject([
+      {
+        email: 'donor@give.test',
+        event: 'giving.start_contribution.blocked',
+        level: WARN,
+        msg: 'Saved card used without a session',
+        reason: 'saved_card_without_user',
+      },
+    ])
   })
 })
 
@@ -255,7 +312,7 @@ describe('starting a contribution signed in', () => {
     expect.hasAssertions()
 
     const fake = contributionDb(userRow(2, 'donor@give.test', 'active'))
-    const result = await start(fake, member, input())
+    const result = await start(fake, MEMBER, input())
 
     expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
     expect(result.calls).toStrictEqual(SUCCESS_CALLS)
@@ -269,7 +326,7 @@ describe('starting a contribution signed in', () => {
   it('gives as the session user with an email nobody has', async () => {
     expect.hasAssertions()
 
-    const result = await start(contributionDb(null), member, input())
+    const result = await start(contributionDb(null), MEMBER, input())
 
     expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
     expect(result.calls).toStrictEqual(SUCCESS_CALLS)
@@ -282,7 +339,7 @@ describe('starting a contribution signed in', () => {
       // oxlint-disable-next-line no-await-in-loop -- one case per status, in order
       const result = await start(
         contributionDb(userRow(9, 'donor@give.test', status)),
-        member,
+        MEMBER,
         input(),
       )
 
@@ -292,13 +349,20 @@ describe('starting a contribution signed in', () => {
       })
       expect(result.calls).toStrictEqual(['account.findUserByEmail'])
       expect(result.outcomes).toStrictEqual(['rollback'])
+      expect(result.events.at(-1)).toMatchObject({
+        email: 'donor@give.test',
+        event: 'giving.start_contribution.blocked',
+        level: WARN,
+        msg: 'Email mismatch',
+        reason: 'user_mismatch',
+      })
     }
   })
 
   it('charges a saved card the user owns, signing its token into the URL', async () => {
     expect.hasAssertions()
 
-    const result = await start(contributionDb(null), member, input({ token: 'tok_own' }))
+    const result = await start(contributionDb(null), MEMBER, input({ token: 'tok_own' }))
 
     expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test', 'tok_own'))
     expect(result.calls).toStrictEqual(['payments.findSavedCard', ...SUCCESS_CALLS])
@@ -307,7 +371,7 @@ describe('starting a contribution signed in', () => {
   it('refuses a saved card the user does not own, before the transaction', async () => {
     expect.hasAssertions()
 
-    const result = await start(contributionDb(null), member, input({ token: 'tok_other' }))
+    const result = await start(contributionDb(null), MEMBER, input({ token: 'tok_other' }))
 
     expect(result.response).toStrictEqual({
       error: { code: 'PAYMENT_METHOD_UNAVAILABLE' },
@@ -315,7 +379,15 @@ describe('starting a contribution signed in', () => {
     })
     expect(result.calls).toStrictEqual(['payments.findSavedCard'])
     expect(result.outcomes).toStrictEqual([])
-    expect(result.events.at(-1)).toMatchObject({ reason: 'saved_card_not_found' })
+    expect(result.events).toMatchObject([
+      {
+        event: 'giving.start_contribution.blocked',
+        level: WARN,
+        msg: 'Saved card not found for user',
+        reason: 'saved_card_not_found',
+        user_id: MEMBER.id,
+      },
+    ])
   })
 
   it('is a server error when the saved card lookup fails', async () => {
@@ -323,17 +395,20 @@ describe('starting a contribution signed in', () => {
 
     const result = await start(
       contributionDb(null).on(findSavedCard, fail),
-      member,
+      MEMBER,
       input({ token: 'tok_own' }),
     )
 
     expect(result.response).toStrictEqual({ type: 'SERVER_ERROR' })
     expect(result.outcomes).toStrictEqual([])
-    expect(result.events.at(-1)).toMatchObject({
-      error_type: 'DBQueryError',
-      event: 'giving.start_contribution.failed',
-      level: 50,
-    })
+    expect(result.events).toMatchObject([
+      {
+        'error.type': 'Error',
+        event: 'giving.start_contribution.failed',
+        level: ERROR,
+        op: findSavedCard.queryName,
+      },
+    ])
   })
 })
 
@@ -347,6 +422,36 @@ describe('a contribution that is not recorded', () => {
       errors: [{ message: 'must match format "email"', path: '/email' }],
       type: 'VALIDATION_ERROR',
     })
+    expect(result.calls).toStrictEqual([])
+    expect(result.events).toMatchObject([
+      { event: 'giving.start_contribution.validation_failed', level: WARN },
+    ])
+  })
+
+  it.each([
+    { case: 'a blank first name', data: input({ firstName: '   ' }) },
+    { case: 'a first name that is a number', data: input({ firstName: 123 }) },
+    { case: 'a first name past 32 characters', data: input({ firstName: 'f'.repeat(33) }) },
+    { case: 'a last name past 32 characters', data: input({ lastName: 'l'.repeat(33) }) },
+    ...[5_000_000.01, 9e15, '1e308'].map((offering) => ({
+      case: `RM ${offering} to one fund`,
+      data: input({ contributions: { future: 0, mission: 0, offering, tithe: 0 } }),
+    })),
+    {
+      case: 'an email past 254 characters',
+      data: input({
+        email: `${'d'.repeat(64)}@${'x'.repeat(60)}.${'y'.repeat(60)}.${'z'.repeat(60)}.www.test`,
+      }),
+    },
+    { case: 'a saved card token that is a number', data: input({ token: 7 }) },
+    { case: 'a body that is not an object', data: 'nope' },
+    { case: 'no body', data: undefined },
+  ])('is a validation error for $case, before any query', async ({ data }) => {
+    expect.hasAssertions()
+
+    const result = await start(contributionDb(null), null, data)
+
+    expect(result.response).toMatchObject({ type: 'VALIDATION_ERROR' })
     expect(result.calls).toStrictEqual([])
   })
 
@@ -364,6 +469,14 @@ describe('a contribution that is not recorded', () => {
       type: 'BUSINESS_ERROR',
     })
     expect(result.calls).toStrictEqual([])
+    expect(result.events).toMatchObject([
+      {
+        email: 'donor@give.test',
+        event: 'giving.start_contribution.invalid_request',
+        level: WARN,
+        msg: 'Request contained 0 items',
+      },
+    ])
   })
 
   it('rolls back when a fund is missing from the table, inserting no items', async () => {
@@ -384,11 +497,13 @@ describe('a contribution that is not recorded', () => {
     ])
     expect(result.outcomes).toStrictEqual(['rollback'])
     expect(result.events.at(-1)).toMatchObject({
-      err: { message: 'Invalid fund name: Future', type: 'Error' },
-      error_type: 'TransactionRollbackError',
+      'error.type': 'no-row',
       event: 'giving.start_contribution.failed',
-      level: 50,
+      level: ERROR,
+      msg: 'payments.findFundsByName returned no row for Future',
+      op: 'payments.findFundsByName',
     })
+    expect(result.events.at(-1)).not.toHaveProperty('err')
   })
 
   it('rolls back when a statement fails mid-transaction', async () => {
@@ -404,9 +519,27 @@ describe('a contribution that is not recorded', () => {
     ])
     expect(result.outcomes).toStrictEqual(['rollback'])
     expect(result.events.at(-1)).toMatchObject({
-      err: { message: 'connection terminated' },
-      error_type: 'TransactionRollbackError',
+      'error.type': 'Error',
+      err: { message: 'connection terminated', type: 'Error' },
+      event: 'giving.start_contribution.failed',
+      level: ERROR,
+      op: insertTransactionItems.queryName,
     })
+  })
+
+  it('logs a failed statement without the parameters it was given', async () => {
+    expect.hasAssertions()
+
+    const result = await start(contributionDb(null).on(findUserByEmail, fail), null, input())
+    const failure = result.events.at(-1)
+
+    expect(result.response).toStrictEqual({ type: 'SERVER_ERROR' })
+    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(failure).toMatchObject({
+      event: 'giving.start_contribution.failed',
+      op: findUserByEmail.queryName,
+    })
+    expect(JSON.stringify(failure)).not.toContain('donor@give.test')
   })
 })
 
@@ -418,63 +551,41 @@ describe('the pending contribution transaction', () => {
     {
       case: 'the email lookup fails',
       fake: () => contributionDb(null).on(findUserByEmail, fail),
-      message: 'Error finding user by email',
+      op: findUserByEmail.queryName,
+      reason: 'failed',
     },
     {
       case: 'creating the guest fails',
       fake: () => contributionDb(null).on(upsertGuestUser, fail),
-      message: 'Error creating user',
-    },
-    {
-      case: 'creating the guest returns no row',
-      fake: () => contributionDb(null).on(upsertGuestUser, () => null),
-      message: 'User creation returned no result',
+      op: upsertGuestUser.queryName,
+      reason: 'failed',
     },
     {
       case: 'inserting the transaction returns no row',
       fake: () => contributionDb(null).on(insertPendingTransaction, () => null),
-      message: 'Transaction creation returned no result',
+      op: insertPendingTransaction.queryName,
+      reason: 'no-row',
     },
-  ])('rolls back with a TransactionRollbackError when $case', async ({ fake, message }) => {
+  ])('rolls back with an InfraError when $case', async ({ fake, op, reason }) => {
     expect.hasAssertions()
 
-    const { db, outcomes } = recordingTransactions(fake())
-    const result = await createPendingContribution({ db }, items, donor, null)
+    const db = fake()
+    const error = errValue(await createPendingContribution({ db }, items, donor, null))
 
-    expect(result).toMatchObject({
-      error: {
-        error: { message, name: 'TransactionRollbackError' },
-        type: 'TransactionRollbackError',
-      },
-      ok: false,
-    })
-    expect(outcomes).toStrictEqual(['rollback'])
-  })
-
-  it('keeps the DB error as the cause of a failed lookup', async () => {
-    expect.hasAssertions()
-
-    const result = await createPendingContribution(
-      { db: contributionDb(null).on(findUserByEmail, fail) },
-      items,
-      donor,
-      null,
-    )
-
-    expect(result).toMatchObject({
-      error: { error: { cause: { type: 'DBQueryError' } } },
-      ok: false,
-    })
+    expect(error).toBeInstanceOf(InfraError)
+    expect(error).toMatchObject({ op, reason })
+    expect(db.transactions).toStrictEqual(['rollback'])
   })
 
   it('names the customer for the gateway', async () => {
     expect.hasAssertions()
 
-    await expect(
-      createPendingContribution({ db: contributionDb(null) }, items, donor, member),
-    ).resolves.toStrictEqual({
-      ok: true,
-      value: { customerName: 'Ada Lovelace', transactionId: 'txn_pending_000000001' },
+    const db = contributionDb(null)
+
+    expect(okValue(await createPendingContribution({ db }, items, donor, MEMBER))).toStrictEqual({
+      customerName: 'Ada Lovelace',
+      transactionId: 'txn_pending_000000001',
     })
+    expect(db.transactions).toStrictEqual(['commit'])
   })
 })

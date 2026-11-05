@@ -1,36 +1,42 @@
-import { notFound } from '@tanstack/react-router'
+import { Result } from 'better-result'
+import { Type } from 'typebox'
+import { Compile } from 'typebox/compile'
 
+import { anyone } from '#/server/authorize.server'
 import type { Deps } from '#/server/deps.server'
-import type { RequestContext } from '#/server/request-context.server'
+import type { Parsed } from '#/server/input.server'
+import { parseWith } from '#/server/input.server'
+import { defineRead, toNotFound } from '#/server/procedure.server'
 
+import { ReceiptNotFound } from './payments.errors'
 import { toTransactionReceipt } from './receipt'
 import type { TransactionId } from './transactions.repository.server'
 import { findReceipt } from './transactions.repository.server'
 
-export interface ReceiptInput {
-  readonly transactionId: TransactionId
-}
-
-/** Null when no transaction has the id. Anyone holding the id may read the receipt. */
 export async function loadReceipt(deps: Pick<Deps, 'db'>, transactionId: TransactionId) {
-  const row = await deps.db.run(findReceipt(transactionId))
-  return row === null ? null : toTransactionReceipt(row)
+  const read = await deps.db.run(findReceipt(transactionId))
+  return read.andThen((row) =>
+    row === null
+      ? Result.err(new ReceiptNotFound({ transactionId }))
+      : Result.ok(toTransactionReceipt(row)),
+  )
 }
 
-export async function getReceiptProcedure(
-  context: Pick<RequestContext, 'deps'>,
-  data: ReceiptInput,
-) {
-  const { transactionId } = data
-  const receipt = await loadReceipt(context.deps, transactionId)
+const receiptInput = parseWith(Compile(Type.Object({ transactionId: Type.String() })))
+export type ReceiptInput = Parsed<typeof receiptInput>
 
-  if (receipt === null) {
-    context.deps.logger.warn(
-      { event: 'transaction.receipt.not_found', transaction_id: transactionId },
-      'Receipt not found',
-    )
-    throw notFound()
-  }
-
-  return receipt
-}
+/** Anyone holding the transaction id may read the receipt. */
+export const getReceiptAction = defineRead({
+  auth: anyone,
+  event: 'transaction.receipt',
+  input: receiptInput,
+  run: ({ deps }, { transactionId }) => loadReceipt(deps, transactionId),
+  wire: {
+    ReceiptNotFound: (error) =>
+      toNotFound({
+        event: 'transaction.receipt.not_found',
+        fields: { transaction_id: error.transactionId },
+        msg: 'Receipt not found',
+      }),
+  },
+})

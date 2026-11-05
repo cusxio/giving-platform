@@ -1,258 +1,154 @@
-import { redirect } from '@tanstack/react-router'
-import { setResponseHeader } from '@tanstack/react-start/server'
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server'
+import { Result } from 'better-result'
 import { nanoid } from 'nanoid'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
-import { assertExhaustive } from '#/core/assert-exhaustive'
-import { createDBError, createParseError, DBEmptyReturnError } from '#/core/errors'
-import type { Result } from '#/core/result'
-import { err, ok, trySync, tryAsync } from '#/core/result'
-import type {
-  BusinessErrorResponse,
-  ServerErrorResponse,
-  SuccessResponse,
-  ValidationErrorResponse,
-} from '#/core/wire'
 import type { User } from '#/modules/account/server'
 import { activateUser, findUserByEmail } from '#/modules/account/server'
+import { anonymousOnly } from '#/server/authorize.server'
 import { constantTimeEqual } from '#/server/crypto.server'
 import type { Deps } from '#/server/deps.server'
-import type { RequestContext } from '#/server/request-context.server'
+import { required } from '#/server/infra-error'
+import type { Parsed } from '#/server/input.server'
+import { parseWith } from '#/server/input.server'
+import { business, defineMutation, logInfraEvent } from '#/server/procedure.server'
 
-import type { AuthValidateOtpError } from './auth.errors'
-import { checkOtpVerify, resetOtpVerify } from './rate-limit.server'
+import { InvalidOtpError, InvalidRequestError } from './auth.errors'
+import { checkCode, checkOtpVerify, limitedAddress, resetOtpVerify } from './rate-limit.server'
 import { SESSION_MAX_AGE_SECONDS, serializeSessionCookie } from './session-cookie.server'
 import { createSession } from './sessions.repository.server'
 import { claimTokenIfUnused, findToken } from './tokens.repository.server'
 
-type Ctx = Pick<RequestContext, 'deps' | 'user'>
+type VerifyDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 
-const schema = Compile(
-  Type.Object({
-    email: Type.String({ format: 'email' }),
-    mode: Type.Union([Type.Literal('login'), Type.Literal('signup')]),
-    otp: Type.String({ pattern: '^[0-9]{6}$' }),
-  }),
+const verifyOtpInput = parseWith(
+  Compile(
+    Type.Object({
+      email: Type.String({ format: 'email', maxLength: 254 }),
+      mode: Type.Union([Type.Literal('login'), Type.Literal('signup')]),
+      otp: Type.String({ pattern: '^[0-9]{6}$' }),
+    }),
+  ),
+  { lowercase: ['email'], trim: ['email'] },
 )
+export type VerifyOtpInput = Parsed<typeof verifyOtpInput>
 
-export type VerifyOtpInput = ReturnType<typeof schema.Parse>
-
-export type VerifyOtpResponse =
-  | BusinessErrorResponse<VerifyOtpBusinessErrorCode>
-  | ServerErrorResponse
-  | SuccessResponse
-  | ValidationErrorResponse
-
-type VerifyOtpBusinessErrorCode = 'INVALID_OR_EXPIRED_OTP' | 'RATE_LIMIT_EXCEEDED'
+/** A login code signs in an active account; a signup code activates a guest. */
+const mayUse = (user: User, mode: VerifyOtpInput['mode']) =>
+  user.status === (mode === 'login' ? 'active' : 'guest')
 
 /**
- * Claims the user's newest unused code when it matches, then creates a session (and activates a
- * guest on signup) in one batch. Returns the serialized session cookie.
+ * Claims the user's newest unused code when it matches and has checks left, then creates a session
+ * (and activates a guest on signup) in one batch. Returns the serialized session cookie.
  */
-export async function validateOtp(
-  deps: Pick<Deps, 'db' | 'hashToken'>,
-  email: User['email'],
-  otp: string,
-  mode: 'login' | 'signup',
-): Promise<Result<string, AuthValidateOtpError>> {
-  const userRes = await tryAsync(() => deps.db.run(findUserByEmail(email)), createDBError)
+function validateOtp(deps: VerifyDeps, { email, mode, otp }: VerifyOtpInput) {
+  return Result.gen(async function* validate() {
+    const user = yield* Result.await(deps.db.run(findUserByEmail(email)))
+    if (user === null || !mayUse(user, mode)) {
+      return Result.err(new InvalidRequestError())
+    }
 
-  if (!userRes.ok) {
-    return userRes
-  }
+    const token = yield* Result.await(deps.db.run(findToken(user.id)))
+    if (token === null || token.mode !== mode) {
+      return Result.err(new InvalidRequestError())
+    }
+    yield* Result.await(checkCode(deps, token.id))
+    if (!constantTimeEqual(deps.hashToken(otp), token.tokenHash)) {
+      return Result.err(new InvalidOtpError())
+    }
 
-  const user = userRes.value
+    // The claim is a compare-and-set, so two concurrent requests cannot both use one code.
+    const claimed = yield* Result.await(deps.db.run(claimTokenIfUnused(token.id, token.tokenHash)))
+    if (!claimed) {
+      return Result.err(new InvalidRequestError())
+    }
 
-  if (user === null || (mode === 'signup' && user.status !== 'guest')) {
-    return err({ type: 'InvalidRequestError' })
-  }
-
-  const tokenRes = await tryAsync(() => deps.db.run(findToken(user.id)), createDBError)
-
-  if (!tokenRes.ok) {
-    return tokenRes
-  }
-
-  const token = tokenRes.value
-
-  if (token === null) {
-    return err({ type: 'InvalidRequestError' })
-  }
-
-  if (token.mode !== mode) {
-    return err({ type: 'InvalidRequestError' })
-  }
-
-  const isValid = constantTimeEqual(deps.hashToken(otp), token.tokenHash)
-
-  if (!isValid) {
-    return err({ type: 'InvalidOtpError' })
-  }
-
-  // The claim is a compare-and-set, so two concurrent requests cannot both use one code.
-  const claimResult = await tryAsync(
-    () => deps.db.run(claimTokenIfUnused(token.id, token.tokenHash)),
-    createDBError,
-  )
-
-  if (!claimResult.ok) {
-    return claimResult
-  }
-
-  if (!claimResult.value) {
-    return err({ type: 'InvalidRequestError' })
-  }
-
-  const rawToken = nanoid()
-  const sessionTokenHash = deps.hashToken(rawToken)
-  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
-  const newSession = createSession({ expiresAt, tokenHash: sessionTokenHash, userId: user.id })
-
-  const batchResult = await tryAsync(async () => {
-    const [session] =
+    const rawToken = nanoid()
+    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_SECONDS * 1000)
+    const newSession = createSession({
+      expiresAt,
+      tokenHash: deps.hashToken(rawToken),
+      userId: user.id,
+    })
+    const inserted = yield* Result.await(
       mode === 'signup'
-        ? await deps.db.batch([newSession, activateUser(user.id)])
-        : await deps.db.batch([newSession])
-    return session
-  }, createDBError)
+        ? deps.db.batch([newSession, activateUser(user.id)]).then((r) => r.map(([row]) => row))
+        : deps.db.batch([newSession]).then((r) => r.map(([row]) => row)),
+    )
+    const session = yield* required(inserted, createSession.queryName)
 
-  if (!batchResult.ok) {
-    return batchResult
-  }
+    return Result.ok(
+      serializeSessionCookie({ cookieValue: `${session.id}.${rawToken}`, expiresAt }),
+    )
+  })
+}
 
-  const session = batchResult.value
-  if (!session) {
-    return err({ error: new DBEmptyReturnError(), type: 'DBEmptyReturnError' })
-  }
+/** Checks the attempt count and the code, and answers the new session's cookie. */
+function verifyCode(deps: VerifyDeps, input: VerifyOtpInput, ip: null | string) {
+  const { email, mode } = input
+  return Result.gen(async function* verify() {
+    yield* Result.await(checkOtpVerify(deps, email, ip))
+    deps.logger.info({ email, event: 'auth.verify_otp.attempt', mode }, 'Attempting to verify code')
 
-  const cookieValue = serializeSessionCookie({
-    cookieValue: `${session.id}.${rawToken}`,
-    expiresAt,
+    const cookie = yield* Result.await(validateOtp(deps, input))
+
+    const reset = await resetOtpVerify(deps, email, ip)
+    if (reset.isErr()) {
+      logInfraEvent(deps.logger, reset.error, {
+        event: 'auth.verify_otp.rate_limit_reset_failed',
+        fields: { email },
+        level: 'error',
+        msg: 'Failed to reset rate limit after successful verification',
+      })
+    }
+    deps.logger.info(
+      { email, event: 'auth.verify_otp.success', mode },
+      'Verification success, session created',
+    )
+    return Result.ok(cookie)
+  })
+}
+
+/** One answer for a wrong code and a missing one, so a caller cannot tell them apart. */
+const invalid = (email: string, reason: 'code_exhausted' | 'expired_or_missing' | 'wrong_code') =>
+  business('INVALID_OR_EXPIRED_OTP', {
+    event: 'auth.verify_otp.invalid',
+    fields: { email, reason },
+    msg: 'Invalid or expired code',
   })
 
-  return ok(cookieValue)
-}
-
-export async function verifyOtpProcedure(
-  context: Ctx,
-  data: VerifyOtpInput,
-): Promise<undefined | VerifyOtpResponse> {
-  const { deps, user } = context
-  const { logger } = deps
-
-  if (user !== null) {
-    logger.info({ event: 'auth.verify_otp.redirected', user_id: user.id }, 'User already logged in')
-    throw redirect({ to: '/' })
-  }
-
-  const parseResult = trySync(
-    () => schema.Parse({ ...data, email: data.email.toLowerCase().trim() }),
-    createParseError,
-  )
-
-  if (!parseResult.ok) {
-    logger.warn(
-      {
-        err: parseResult.error.error,
-        error_type: parseResult.error.type,
-        event: 'auth.verify_otp.validation_failed',
-      },
-      'Input validation failed',
+export const verifyOtpAction = defineMutation({
+  auth: anonymousOnly,
+  event: 'auth.verify_otp',
+  input: verifyOtpInput,
+  run: async ({ deps }, input) => {
+    const verified = await verifyCode(
+      deps,
+      input,
+      limitedAddress(deps.logger, getRequest().headers),
     )
-    return {
-      errors: parseResult.error.error.cause.errors.map((v) => ({
-        path: v.instancePath,
-        message: v.message,
-      })),
-      type: 'VALIDATION_ERROR',
+    if (verified.isErr()) {
+      return Result.err(verified.error)
     }
-  }
-
-  const { mode, otp, email } = parseResult.value
-
-  const rateLimitResult = await checkOtpVerify(deps, email)
-  if (!rateLimitResult.ok) {
-    const { type } = rateLimitResult.error
-    if (type === 'RateLimitExceededError') {
-      logger.warn(
+    setResponseHeader('Set-Cookie', verified.value)
+    return Result.ok()
+  },
+  wire: {
+    CodeExhaustedError: (_error, { email }) => invalid(email, 'code_exhausted'),
+    InvalidOtpError: (_error, { email }) => invalid(email, 'wrong_code'),
+    InvalidRequestError: (_error, { email }) => invalid(email, 'expired_or_missing'),
+    RateLimitExceededError: ({ ip, retryAfterSeconds }, { email }) =>
+      business(
+        'RATE_LIMIT_EXCEEDED',
         {
-          email,
           event: 'auth.verify_otp.rate_limited',
-          retry_after_seconds: rateLimitResult.error.retryAfterSeconds,
+          fields: { email, ...(ip !== null && { ip }), retry_after_seconds: retryAfterSeconds },
+          msg: 'Rate limit exceeded for OTP verification',
         },
-        'Rate limit exceeded for OTP verification',
-      )
-      return {
-        error: {
-          code: 'RATE_LIMIT_EXCEEDED',
-          message: `Too many attempts. Please try again in ${Math.ceil(rateLimitResult.error.retryAfterSeconds / 60)} minutes.`,
-        },
-        type: 'BUSINESS_ERROR',
-      }
-    }
-    logger.error(
-      {
-        err: rateLimitResult.error.error,
-        error_type: type,
-        event: 'auth.verify_otp.rate_limit_check_failed',
-      },
-      'Rate limit check failed',
-    )
-    return { type: 'SERVER_ERROR' }
-  }
+        `Too many attempts. Please try again in ${Math.ceil(retryAfterSeconds / 60)} minutes.`,
+      ),
+  },
+})
 
-  logger.info({ email, event: 'auth.verify_otp.attempt', mode }, 'Attempting to verify code')
-
-  const userResult = await validateOtp(deps, email, otp, mode)
-
-  if (!userResult.ok) {
-    const { type } = userResult.error
-    switch (type) {
-      case 'InvalidOtpError':
-      case 'InvalidRequestError': {
-        // One error for the client, so a caller cannot tell a wrong code from a missing one.
-        const reason = type === 'InvalidOtpError' ? 'wrong_code' : 'expired_or_missing'
-        logger.warn({ email, event: 'auth.verify_otp.invalid', reason }, 'Invalid or expired code')
-        return { error: { code: 'INVALID_OR_EXPIRED_OTP' }, type: 'BUSINESS_ERROR' }
-      }
-      case 'DBQueryError':
-      case 'DBEmptyReturnError': {
-        logger.error(
-          {
-            err: userResult.error.error,
-            error_type: userResult.error.type,
-            event: 'auth.verify_otp.failed',
-          },
-          'System Error during OTP verification',
-        )
-        return { type: 'SERVER_ERROR' }
-      }
-      default: {
-        assertExhaustive(userResult.error)
-      }
-    }
-  }
-
-  setResponseHeader('Set-Cookie', userResult.value)
-
-  const resetResult = await resetOtpVerify(deps, email)
-  if (!resetResult.ok) {
-    logger.error(
-      {
-        email,
-        err: resetResult.error.error,
-        error_type: resetResult.error.type,
-        event: 'auth.verify_otp.rate_limit_reset_failed',
-      },
-      'Failed to reset rate limit after successful verification',
-    )
-  }
-
-  logger.info(
-    { email, event: 'auth.verify_otp.success', mode },
-    'Verification success, session created',
-  )
-
-  return { type: 'SUCCESS' }
-}
+export type VerifyOtpResponse = Awaited<ReturnType<typeof verifyOtpAction>>

@@ -1,49 +1,57 @@
-import { notFound } from '@tanstack/react-router'
+import { Type } from 'typebox'
+import { Compile } from 'typebox/compile'
 
+import { requireSu } from '#/server/authorize.server'
 import type { Deps } from '#/server/deps.server'
-import type { RequestContext } from '#/server/request-context.server'
+import type { Parsed } from '#/server/input.server'
+import { noInput, parseWith } from '#/server/input.server'
+import { defineRead } from '#/server/procedure.server'
 
 import {
   fundTotals,
   insightsSummary,
   weeklyCumulativeTotalsByYear,
 } from './analytics.repository.server'
-import type { Insights } from './insights'
 import { summarizeInsights } from './insights'
 import { toReportRows } from './reports'
 
-type Ctx = Pick<RequestContext, 'deps' | 'user'>
-
-export interface ReportsInput {
-  readonly endDateUTCExclusive: Date
-  readonly startDateUTC: Date
-}
-
-export async function loadInsights(deps: Pick<Deps, 'db'>): Promise<Insights> {
-  const [summary, weekly] = await deps.db.batch([insightsSummary(), weeklyCumulativeTotalsByYear()])
-  return summarizeInsights(summary, weekly)
+export async function loadInsights(deps: Pick<Deps, 'db'>) {
+  const read = await deps.db.batch([insightsSummary(), weeklyCumulativeTotalsByYear()])
+  return read.map(([summary, weekly]) => summarizeInsights(summary, weekly))
 }
 
 export async function loadReport(
   deps: Pick<Deps, 'db'>,
   input: { readonly endExclusive: Date; readonly start: Date },
 ) {
-  return toReportRows(await deps.db.run(fundTotals(input)))
+  const read = await deps.db.run(fundTotals(input))
+  return read.map((rows) => toReportRows(rows))
 }
 
-// Transport adapters. Phase 2 replaces the role guard with `requireRole('su')` middleware.
+export const getInsightsAction = defineRead({
+  auth: requireSu,
+  event: 'analytics.insights',
+  input: noInput,
+  run: ({ deps }) => loadInsights(deps),
+  wire: {},
+})
 
-export async function getInsightsProcedure(context: Ctx): Promise<Insights> {
-  if (context.user?.role !== 'su') {
-    throw notFound()
-  }
-  return loadInsights(context.deps)
-}
+const validDate = Type.Refine(
+  Type.Unsafe<Date>({}),
+  (value) => value instanceof Date && !Number.isNaN(value.getTime()),
+  () => 'must be a valid date',
+)
+const reportsSchema = Compile(
+  Type.Object({ endDateUTCExclusive: validDate, startDateUTC: validDate }),
+)
+const reportsInput = parseWith(reportsSchema)
+export type ReportsInput = Parsed<typeof reportsInput>
 
-export async function getReportsProcedure(context: Ctx, data: ReportsInput) {
-  const { startDateUTC, endDateUTCExclusive } = data
-  if (context.user?.role !== 'su') {
-    throw notFound()
-  }
-  return loadReport(context.deps, { endExclusive: endDateUTCExclusive, start: startDateUTC })
-}
+export const getReportsAction = defineRead({
+  auth: requireSu,
+  event: 'analytics.reports',
+  input: reportsInput,
+  run: ({ deps }, { endDateUTCExclusive, startDateUTC }) =>
+    loadReport(deps, { endExclusive: endDateUTCExclusive, start: startDateUTC }),
+  wire: {},
+})

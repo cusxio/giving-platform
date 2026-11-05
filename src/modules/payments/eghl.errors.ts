@@ -1,19 +1,31 @@
-import type { ParseError } from '#/core/errors'
+import { TaggedError } from 'better-result'
 
-export type EghlCallbackError =
+/** A callback or return request that is neither a GET nor a POST. */
+export class EghlInvalidMethodError extends TaggedError('EghlInvalidMethodError') {}
+
+/** The reply's body could not be read or split into fields. */
+export class EghlServerError extends TaggedError('EghlServerError') {}
+
+/** The reply's fields do not fit its schema. */
+export class ParseError extends TaggedError('ParseError')<{ cause: unknown }> {}
+
+/** The reply's signature does not match its fields. */
+export class EghlVerificationError extends TaggedError('EghlVerificationError') {}
+
+/** The status query got no reply: the request failed or timed out, or the body broke off. */
+export class EghlFetchError extends TaggedError('EghlFetchError')<{ cause: unknown }> {}
+
+/** The gateway answered the status query with an HTTP error. */
+export class EghlQueryResponseError extends TaggedError('EghlQueryResponseError') {}
+
+/** A verified status reply names another payment or amount than the one asked about. */
+export class EghlQueryMismatchError extends TaggedError('EghlQueryMismatchError') {}
+
+export type EghlReplyError =
   | EghlInvalidMethodError
   | EghlServerError
   | EghlVerificationError
   | ParseError
-
-export interface EghlFetchError {
-  readonly error: unknown
-  readonly type: 'EghlFetchError'
-}
-
-interface EghlInvalidMethodError {
-  readonly type: 'EghlInvalidMethodError'
-}
 
 export type EghlQueryError =
   | EghlFetchError
@@ -22,20 +34,3 @@ export type EghlQueryError =
   | EghlServerError
   | EghlVerificationError
   | ParseError
-
-interface EghlQueryMismatchError {
-  readonly type: 'EghlQueryMismatchError'
-}
-
-interface EghlQueryResponseError {
-  readonly message: string
-  readonly type: 'EghlQueryResponseError'
-}
-
-interface EghlServerError {
-  readonly type: 'EghlServerError'
-}
-
-interface EghlVerificationError {
-  readonly type: 'EghlVerificationError'
-}

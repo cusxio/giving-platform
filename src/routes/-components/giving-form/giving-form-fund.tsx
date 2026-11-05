@@ -5,6 +5,7 @@ import type { InputCurrencyProps } from '#/components/ui/input-currency'
 import { InputCurrency } from '#/components/ui/input-currency'
 import type { funds } from '#/core/brand'
 import { FUND_COLOR_MAP, FUND_ICON_MAP } from '#/core/brand/funds'
+import { MAX_FUND_AMOUNT } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 import type { GivingFormFundQuickFillProps } from './giving-form-fund-quick-fill'
@@ -57,6 +58,7 @@ export function GivingFormFund(props: GivingFormFundProps) {
 
       <InputCurrency
         autoComplete="off"
+        max={MAX_FUND_AMOUNT}
         name={store.names[fund]}
         onValueChange={handleCurrencyValueChange}
       />

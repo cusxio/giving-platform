@@ -1,19 +1,21 @@
 import { createServerFn } from '@tanstack/react-start'
 
+import { wireInput } from '#/core/wire'
+
 import type { ReceiptInput } from './receipt.server'
-import { getReceiptProcedure } from './receipt.server'
-import { getSavedPaymentMethodsProcedure } from './saved-cards.server'
+import { getReceiptAction } from './receipt.server'
+import { getSavedPaymentMethodsAction } from './saved-cards.server'
 import type { StartContributionInput } from './start-contribution.server'
-import { startContributionProcedure } from './start-contribution.server'
+import { startContributionAction } from './start-contribution.server'
 
 export const startContribution = createServerFn({ method: 'POST' })
-  .validator((input: StartContributionInput) => input)
-  .handler(({ context, data }) => startContributionProcedure(context, data))
+  .validator(wireInput<StartContributionInput>())
+  .handler((ctx) => startContributionAction(ctx))
 
-export const getSavedPaymentMethods = createServerFn().handler(({ context }) =>
-  getSavedPaymentMethodsProcedure(context),
-)
+export const getSavedPaymentMethods = createServerFn()
+  .validator(wireInput<undefined>())
+  .handler((ctx) => getSavedPaymentMethodsAction(ctx))
 
 export const getReceipt = createServerFn()
-  .validator((input: ReceiptInput) => input)
-  .handler(({ context, data }) => getReceiptProcedure(context, data))
+  .validator(wireInput<ReceiptInput>())
+  .handler((ctx) => getReceiptAction(ctx))

@@ -11,7 +11,7 @@ export interface ServerErrorResponse {
   type: 'SERVER_ERROR'
 }
 
-export type SuccessResponse<T = undefined> = T extends undefined
+export type SuccessResponse<T = undefined> = [T] extends [undefined | void]
   ? { type: 'SUCCESS' }
   : { type: 'SUCCESS'; value: T }
 
@@ -24,3 +24,12 @@ interface ValidationError {
   message: string
   path: string
 }
+
+/**
+ * A server function's input type for the client. It validates nothing: the procedure's parser
+ * does, on the server.
+ */
+export const wireInput =
+  <T>() =>
+  (raw: T): T =>
+    raw

@@ -1,10 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
 
-import type { ReportsInput } from './analytics.server'
-import { getInsightsProcedure, getReportsProcedure } from './analytics.server'
+import { wireInput } from '#/core/wire'
 
-export const getInsights = createServerFn().handler(({ context }) => getInsightsProcedure(context))
+import type { ReportsInput } from './analytics.server'
+import { getInsightsAction, getReportsAction } from './analytics.server'
+
+export const getInsights = createServerFn()
+  .validator(wireInput<undefined>())
+  .handler((ctx) => getInsightsAction(ctx))
 
 export const getReports = createServerFn()
-  .validator((input: ReportsInput) => input)
-  .handler(({ context, data }) => getReportsProcedure(context, data))
+  .validator(wireInput<ReportsInput>())
+  .handler((ctx) => getReportsAction(ctx))

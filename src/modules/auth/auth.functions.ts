@@ -1,21 +1,25 @@
 import { createServerFn } from '@tanstack/react-start'
 
+import { wireInput } from '#/core/wire'
+
 import type { RequestOtpInput } from './request-otp.server'
-import { requestOtpProcedure } from './request-otp.server'
-import { logoutProcedure } from './session.server'
+import { requestOtpAction } from './request-otp.server'
+import { hasSessionAction, logoutAction } from './session.server'
 import type { VerifyOtpInput } from './verify-otp.server'
-import { verifyOtpProcedure } from './verify-otp.server'
+import { verifyOtpAction } from './verify-otp.server'
 
-export const hasSession = createServerFn().handler(({ context }) => context.session !== null)
+export const hasSession = createServerFn()
+  .validator(wireInput<undefined>())
+  .handler((ctx) => hasSessionAction(ctx))
 
-export const logout = createServerFn({ method: 'POST' }).handler(({ context }) =>
-  logoutProcedure(context),
-)
+export const logout = createServerFn({ method: 'POST' })
+  .validator(wireInput<undefined>())
+  .handler((ctx) => logoutAction(ctx))
 
 export const requestOtp = createServerFn({ method: 'POST' })
-  .validator((input: RequestOtpInput) => input)
-  .handler(({ context, data }) => requestOtpProcedure(context, data))
+  .validator(wireInput<RequestOtpInput>())
+  .handler((ctx) => requestOtpAction(ctx))
 
 export const verifyOtp = createServerFn({ method: 'POST' })
-  .validator((input: VerifyOtpInput) => input)
-  .handler(({ context, data }) => verifyOtpProcedure(context, data))
+  .validator(wireInput<VerifyOtpInput>())
+  .handler((ctx) => verifyOtpAction(ctx))

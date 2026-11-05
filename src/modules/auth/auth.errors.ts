@@ -1,74 +1,47 @@
-import type { DBEmptyReturnErrorResult, DBQueryErrorResult, ParseError } from '#/core/errors'
+import { TaggedError } from 'better-result'
 
-export type AuthLoginError = DBEmptyReturnErrorResult | DBQueryErrorResult | NotExistsError
+/** Too many attempts in the window. `ip` is the client address whose limit refused the call. */
+export class RateLimitExceededError extends TaggedError('RateLimitExceededError')<{
+  ip: null | string
+  retryAfterSeconds: number
+}> {}
 
-export type AuthSignUpError =
-  | AlreadyExistsError
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
-  | InactiveAccountError
+/** A signup for an email whose account is already active. */
+export class AlreadyExistsError extends TaggedError('AlreadyExistsError') {}
 
-export type AuthValidateOtpError =
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
-  | InvalidOtpError
-  | InvalidRequestError
+/** A login for an email with no active account. */
+export class NotExistsError extends TaggedError('NotExistsError') {}
 
-export interface RateLimitExceededError {
-  readonly retryAfterSeconds: number
-  readonly type: 'RateLimitExceededError'
-}
+/** The code does not match the newest one issued. */
+export class InvalidOtpError extends TaggedError('InvalidOtpError') {}
 
-interface AlreadyExistsError {
-  readonly type: 'AlreadyExistsError'
-}
+/** The code had its last allowed check, so it is refused from now on, even when right. */
+export class CodeExhaustedError extends TaggedError('CodeExhaustedError') {}
 
-interface InactiveAccountError {
-  readonly type: 'InactiveAccountError'
-}
+/**
+ * No usable code: none issued, expired, already claimed, issued for the other mode, or held by an
+ * account that may not use it.
+ */
+export class InvalidRequestError extends TaggedError('InvalidRequestError') {}
 
-interface InvalidOtpError {
-  readonly type: 'InvalidOtpError'
-}
+/** The cookie is not `<sessionId>.<rawToken>` with two 21-character parts. */
+export class ParseError extends TaggedError('ParseError')<{ cause: unknown }> {}
 
-interface InvalidRequestError {
-  readonly type: 'InvalidRequestError'
-}
+/** No session has the cookie's id. */
+export class SessionNotFoundError extends TaggedError('SessionNotFoundError') {}
 
-interface NotExistsError {
-  readonly type: 'NotExistsError'
-}
+/** The cookie's token does not hash to the session's. */
+export class SessionInvalidError extends TaggedError('SessionInvalidError') {}
 
-export interface SendEmailError {
-  readonly error: unknown
-  readonly type: 'SendEmailError'
-}
+/** The session's user is no longer active. */
+export class SessionUserInactiveError extends TaggedError('SessionUserInactiveError') {}
 
-export type VerificationError =
-  | DBEmptyReturnErrorResult
-  | DBQueryErrorResult
+export class SessionExpiredError extends TaggedError('SessionExpiredError') {}
+
+/** Why a session cookie does not sign the request in. Each one clears the cookie. */
+export type SessionRejection =
   | ParseError
   | SessionExpiredError
   | SessionInvalidError
   | SessionNotFoundError
   | SessionUserInactiveError
-
-interface SessionExpiredError {
-  readonly serializedCookie: string
-  readonly type: 'SessionExpiredError'
-}
-
-interface SessionInvalidError {
-  readonly serializedCookie: string
-  readonly type: 'SessionInvalidError'
-}
-
-interface SessionNotFoundError {
-  readonly serializedCookie: string
-  readonly type: 'SessionNotFoundError'
-}
-
-interface SessionUserInactiveError {
-  readonly serializedCookie: string
-  readonly type: 'SessionUserInactiveError'
-}

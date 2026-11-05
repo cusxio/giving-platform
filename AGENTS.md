@@ -8,15 +8,15 @@ To add a feature, copy the nearest module in `src/modules/`. The table below is 
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/modules/<m>/index.ts`                     | The client entry: query options, mutation hooks, client-safe types.                                                                            | Its own module's client files.                                                                                                                        |
 | `src/modules/<m>/server.ts`                    | The server entry: what other modules and `src/server/` may use.                                                                                | Any file in its module.                                                                                                                               |
-| `src/modules/<m>/<m>.functions.ts`             | `createServerFn` exports. Handlers stay thin, usually one call into a `*.server.ts` file.                                                      | `*.server.ts` workflows, never a repository.                                                                                                          |
+| `src/modules/<m>/<m>.functions.ts`             | `createServerFn` exports, each one line: `.validator(wireInput<T>()).handler((ctx) => xAction(ctx))`.                                          | `*.server.ts` workflows, never a repository.                                                                                                          |
 | `src/modules/<m>/<m>.queries.ts`               | `queryOptions`, query keys, and mutation hooks.                                                                                                | `*.functions.ts`, `*.types.ts`, pure files, and `*Input` types from `*.server.ts`.                                                                    |
 | `src/modules/<m>/<m>.types.ts`                 | Client-safe types, derived from the server function return types.                                                                              | `*.functions.ts`.                                                                                                                                     |
-| `src/modules/<m>/<m>.errors.ts`                | Domain error types.                                                                                                                            | `src/core/`.                                                                                                                                          |
+| `src/modules/<m>/<m>.errors.ts`                | Domain errors: `TaggedError` classes, one per outcome a caller handles differently.                                                            | `better-result`.                                                                                                                                      |
 | `src/modules/<m>/<thing>.ts`                   | Pure domain code that runs on the client and the server. It declares the row shapes it reads.                                                  | Other pure code.                                                                                                                                      |
-| `src/modules/<m>/<use-case>.server.ts`         | Workflows `(deps, input) => result` and the `*Procedure` adapters that the server functions call.                                              | Any file in its module, other modules' `server.ts`, `#/server/db.server`, `#/server/deps.server`.                                                     |
+| `src/modules/<m>/<use-case>.server.ts`         | Workflows `(deps, input) => Promise<Result>` and the actions (`defineMutation`, `defineRead`) that the server functions call.                  | Any file in its module, other modules' `server.ts`, `#/server/db.server`, `#/server/deps.server`.                                                     |
 | `src/modules/<m>/<table>.repository.server.ts` | `defineQuery(...)` factories. The only module files that import `drizzle-orm` or the schema.                                                   | `drizzle-orm`, `#/server/schema.server`, `#/server/sql.server`.                                                                                       |
-| `src/server/`                                  | Platform code: the db port, neon clients, schema, env, root logger, mailer, the `deps.server.ts` composition root, and the request middleware. | Anything, but other modules only through their entries.                                                                                               |
-| `src/server/testing/`                          | `createFakeDb` and `testDeps` for workflow tests.                                                                                              | Anything, but other modules only through their entries.                                                                                               |
+| `src/server/`                                  | Platform code: the db port, the runner, policies, input parsing, neon clients, schema, env, root logger, mailer, `deps.server.ts`, middleware. | Anything, but other modules only through their entries.                                                                                               |
+| `src/server/testing/`                          | `createFakeDb`, `testDeps`, `testContext`, `okValue`/`errValue`, `recordingLogger` and span helpers for tests.                                 | Anything, but other modules only through their entries.                                                                                               |
 | `src/core/`                                    | Isomorphic helpers: brand, date, money, formatters, wire envelope types.                                                                       | No server code.                                                                                                                                       |
 | `src/routes/`                                  | File routes plus route-local `-components/` and `-hooks/`. `routes/api/` routes are one-line bindings to a module's `server.ts`.               | Client entries, `src/components/`, `src/hooks/`, `src/core/`. Only `routes/api/` may use `#/modules/<m>/server`.                                      |
 | `src/components/`, `src/hooks/`                | Shared UI and client hooks.                                                                                                                    | Client entries and `src/core/`. No server code.                                                                                                       |
@@ -34,12 +34,50 @@ To add a feature, copy the nearest module in `src/modules/`. The table below is 
 - Don't export a name that only its own file uses.
 - Never name a server file `*.client.*`. TanStack Start import protection denies those files on the server.
 
+## Errors
+
+Every failure is one of three kinds.
+
+- A domain error is a `TaggedError` from `<m>.errors.ts`, returned as `Result.err`. It names what happened, never how the client sees it.
+- `InfraError` (`src/server/infra-error.ts`) is any database, mailer or decoder failure. `op` names the failing query or label. Workflows pass it up unchanged; nobody maps it to a domain error. `required(row, op)` turns a missing `RETURNING` row into one.
+- A defect is any throw, including the `Panic` that `Result.gen` makes of a throw or a rejected await inside it. It is never caught and turned into an `Err`.
+
+The `Db` port returns `Result`: `deps.db.run(query)`, `deps.db.batch([...])` and `deps.db.transaction(work)` answer `Err(InfraError)` instead of throwing. A transaction rolls back when `work` returns `Err` and returns that `Err`; a throw from `work` rolls back and rethrows.
+
+Write a workflow as `Result.gen` and `yield* Result.await(...)` each step. Never throw a `redirect` or `notFound` from a workflow: inside `Result.gen` it becomes a `Panic` and a 500. Return a domain error and answer it in the action's `wire` table.
+
+## Procedures
+
+`src/server/procedure.server.ts` is the runner. It has two front doors with one runtime: policy, parse, run, settle.
+
+- `defineMutation` answers an envelope: `SUCCESS`, a `BUSINESS_ERROR` per `business(...)` row, `AUTH_ERROR` when the policy refuses, `VALIDATION_ERROR` for bad input, and `SERVER_ERROR` for an `InfraError`.
+- `defineRead` answers the bare value. A refused policy redirects to login (or `notFound()` when forbidden), and bad input or an `InfraError` throws a generic error, so no driver message reaches the browser. Rows are `toNotFound()` or `returning(value)`.
+
+An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exactly one row per domain error `run` can return; tsc names a missing or extra row. The wire type is derived from the spec, so `<m>.types.ts` reads it with `Awaited<ReturnType<typeof fn>>`. `src/server/procedure-bindings.test.ts` fails on a `*.functions.ts` export of any other shape than the one-line binding.
+
+- Policies (`src/server/authorize.server.ts`): `anyone`, `anonymousOnly` (a signed-in caller is redirected home), `requireUser`, `requireSu`. The workflow's context is the policy's narrowed one, so `user` is non-null under `requireUser`.
+- Input: `parseWith(Compile(schema), { trim, lowercase, convert })` returns a `Parser`; `noInput` takes none. The client's input type is `Parsed<typeof parser>`, exported as `<Name>Input`. Bound string inputs with `maxLength` when they reach a sized column.
+
+## Logs and traces
+
+- The runner logs each outcome once: a row's own `event`, `<event>.unauthorized`, `<event>.validation_failed` (with `issues`), `<event>.failed` for an `InfraError`, and `<event>.defect` for a throw.
+- A failure log carries `error.type` (the class, or a SQLSTATE or system code when the class is generic), `op`, and `err` with the class, code and SQL text but no query parameters or database messages. Never log a raw driver error yourself: use `logInfraFailure` or `logInfraEvent`.
+- A `SERVER_ERROR` envelope is an HTTP 200, so `<event>.failed` and `<event>.defect` also mark the request span `ERROR` and record the exception. Healthy spans stay `UNSET`.
+- An HTTP route that is not a server function wraps its handler in `logDefects(logger, event, handler)` so a defect is logged once and rethrown.
+
+## Lint bans
+
+- `redirect` and `notFound` from `@tanstack/react-router` are banned in `src/modules/**/*.server.ts` and `src/server/**`. Only the runner, `eghl.http.server.ts`, `session.server.ts` (logout) and `maintenance.server.ts` throw them, all outside any workflow.
+- `Panic` and `panic` from `better-result` are banned everywhere except the runner (`src/server/procedure.server.ts`), tests in `src/modules/**` (`*.test.ts`, `*.test.tsx`) and tests in `src/server/**` (`*.test.ts`). Tests elsewhere, such as in `src/core/**` or `src/routes/**`, may not import them.
+
 ## Tests
 
 - Test pure files directly, with plain rows and no fakes.
-- Test workflows by calling them with `createFakeDb()` and `testDeps(overrides)`. Don't mock env.
-- `createFakeDb().on(factory, impl)` answers a query. The `impl` type comes from the real factory, so a fake cannot drift from the query.
-- `db.calls` lists every query with its arguments. `db.roundTrips` lists the query names each database round trip carried. Assert `roundTrips` for every workflow that batches, so a lost `db.batch` fails a test.
+- Test workflows by calling them with `createFakeDb()` and `testDeps(overrides)`, and read their `Result` with `okValue` or `errValue`. Don't mock env.
+- Test an action by calling it with `{ context: testContext(user, deps), data }`. Assert the wire answer and the log lines from `recordingLogger()`.
+- `createFakeDb().on(factory, impl)` answers a query. The `impl` type comes from the real factory, so a fake cannot drift from the query. An `impl` that throws is a failed statement: `Err(InfraError)`.
+- `db.calls` lists every query with its arguments. `db.roundTrips` lists the query names each database round trip carried. Assert `roundTrips` for every workflow that batches, so a lost `db.batch` fails a test. `db.transactions` lists each transaction's `commit` or `rollback`.
+- Pin exact SQL with `createDriverDb` when the statement's text matters, such as an `ORDER BY`.
 
 ## Checks
 
