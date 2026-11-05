@@ -1,18 +1,50 @@
-interface SecretsEnv {
-  readonly CRON_SECRET?: string | undefined
-  readonly MAILERSEND_API_KEY?: string | undefined
-  readonly NODE_ENV: 'development' | 'production'
-  readonly SESSION_SECRET: string
-}
+import type { Static } from 'typebox'
+import { Type } from 'typebox'
+import { Compile } from 'typebox/compile'
+
+const exporter = Type.String({ pattern: '^(otlp|console|none)(,(otlp|console|none))*$' })
+
+const schema = Type.Object({
+  BASE_URL: Type.Optional(Type.String()),
+  NODE_ENV: Type.Enum(['development', 'production']),
+  SESSION_SECRET: Type.String(),
+  CRON_SECRET: Type.Optional(Type.String()),
+  //
+  DATABASE_URL: Type.String(),
+  //
+  EGHL_PASSWORD: Type.String(),
+  EGHL_SERVICE_ID: Type.String(),
+  EGHL_URL: Type.String(),
+  //
+  MAILERSEND_API_KEY: Type.Optional(Type.String()),
+  MAILERSEND_ROOT_DOMAIN: Type.Optional(Type.String()),
+  //
+  OTEL_LOG_LEVEL: Type.Optional(Type.String()),
+  OTEL_TRACES_EXPORTER: exporter,
+  OTEL_LOGS_EXPORTER: exporter,
+})
+
+export type Env = Static<typeof schema>
+
+const envType = Compile(schema)
 
 const MIN_SESSION_SECRET_LENGTH = 32
+
+/** Each variable that is missing or malformed, with the rule it breaks. Never a value. */
+function shapeProblems(source: Record<string, string | undefined>): string[] {
+  return [...envType.Errors(source)].flatMap((error) =>
+    error.keyword === 'required'
+      ? error.params.requiredProperties.map((name) => `${name} is required`)
+      : [`${error.instancePath.slice(1)} ${error.message}`],
+  )
+}
 
 /**
  * What a production deployment is missing. Without a mail key, login codes would go to a test
  * inbox; without a cron secret, both crons refuse every run; a short session secret weakens the
  * hash that stores login codes. Development may run without any of them.
  */
-export function productionEnvProblems(env: SecretsEnv): string[] {
+function productionEnvProblems(env: Env): string[] {
   if (env.NODE_ENV !== 'production') {
     return []
   }
@@ -29,4 +61,21 @@ export function productionEnvProblems(env: SecretsEnv): string[] {
     )
   }
   return problems
+}
+
+/**
+ * The environment the server runs with. Throws `Invalid environment: ...` naming every variable
+ * that is missing or malformed, or, once the shape is right, every production rule it breaks.
+ */
+export function parseEnv(source: Record<string, string | undefined>): Env {
+  const shape = shapeProblems(source)
+  if (shape.length > 0) {
+    throw new Error(`Invalid environment: ${shape.join('; ')}`)
+  }
+  const env = envType.Parse(source)
+  const problems = productionEnvProblems(env)
+  if (problems.length > 0) {
+    throw new Error(`Invalid environment: ${problems.join('; ')}`)
+  }
+  return env
 }

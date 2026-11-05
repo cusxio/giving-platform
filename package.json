@@ -36,7 +36,6 @@
     "cookie": "^2.0.1",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.4",
-    "env-schema": "^8.0.1",
     "input-otp": "^1.5.0",
     "mailersend": "^3.6.0",
     "nanoid": "^6.0.2",
