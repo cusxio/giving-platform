@@ -18,6 +18,11 @@ export class EghlFetchError extends TaggedError('EghlFetchError')<{ cause: unkno
 /** The gateway answered the status query with an HTTP error. */
 export class EghlQueryResponseError extends TaggedError('EghlQueryResponseError') {}
 
+/** The gateway could not look the payment up just now (an internal error). Ask again later. */
+export class EghlGatewayBusyError extends TaggedError('EghlGatewayBusyError')<{
+  queryDesc: string | undefined
+}> {}
+
 /** A verified status reply names another payment or amount than the one asked about. */
 export class EghlQueryMismatchError extends TaggedError('EghlQueryMismatchError') {}
 
@@ -29,6 +34,7 @@ export type EghlReplyError =
 
 export type EghlQueryError =
   | EghlFetchError
+  | EghlGatewayBusyError
   | EghlQueryMismatchError
   | EghlQueryResponseError
   | EghlServerError

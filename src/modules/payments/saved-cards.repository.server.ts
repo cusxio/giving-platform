@@ -5,6 +5,9 @@ import { clientTz, now } from '#/core/date'
 import { defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { User } from '#/server/schema.server'
 import { savedPaymentMethods } from '#/server/schema.server'
+import type { SameLength } from '#/server/sql.server'
+
+import type { CARD_FIELD_LENGTHS } from './eghl.wire'
 
 /** The user's saved cards that have not expired yet, most recently used first. */
 export const unexpiredSavedCards = defineQuery(
@@ -37,6 +40,15 @@ export const findSavedCard = defineQuery(
       .limit(1),
   firstOrNull,
 )
+
+/** @public */
+export const cardFieldsFitColumns: [
+  SameLength<(typeof CARD_FIELD_LENGTHS)['CardExp'], typeof savedPaymentMethods.cardExp>,
+  SameLength<(typeof CARD_FIELD_LENGTHS)['CardHolder'], typeof savedPaymentMethods.cardHolder>,
+  SameLength<(typeof CARD_FIELD_LENGTHS)['CardNoMask'], typeof savedPaymentMethods.cardNoMask>,
+  SameLength<(typeof CARD_FIELD_LENGTHS)['CardType'], typeof savedPaymentMethods.cardType>,
+  SameLength<(typeof CARD_FIELD_LENGTHS)['Token'], typeof savedPaymentMethods.token>,
+] = [true, true, true, true, true]
 
 type NewSavedCard = Pick<
   InferInsertModel<typeof savedPaymentMethods>,

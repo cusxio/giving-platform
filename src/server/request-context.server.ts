@@ -14,9 +14,9 @@ const ANONYMOUS: SessionCheck = { session: null, user: null }
 
 /** The one global request middleware after csrf and maintenance. */
 export const requestContext = createMiddleware().server<RequestContext>(async ({ next }) => {
-  const base = createDeps(logger)
   const cookie = getCookie(SESSION_COOKIE_NAME)
-  const check = cookie === undefined ? ANONYMOUS : await verifySessionCookie(base, cookie)
-  const deps: Deps = { ...base, logger: logger.child({ user_id: check.user?.id }) }
+  const check =
+    cookie === undefined ? ANONYMOUS : await verifySessionCookie(createDeps(logger), cookie)
+  const deps: Deps = createDeps(logger.child({ user_id: check.user?.id }))
   return next({ context: { deps, ...check } })
 })

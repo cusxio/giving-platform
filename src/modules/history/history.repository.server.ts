@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
+import { COUNTED_STATUS, LISTED_STATUSES } from '#/core/transaction-status'
 import { defineQuery, firstOrNull, rows } from '#/server/db.server'
 import type { Transaction, User } from '#/server/schema.server'
 import { funds, transactionItems, transactions } from '#/server/schema.server'
@@ -42,7 +43,7 @@ export const recentTransactions = defineQuery(
         status: transactions.status,
       })
       .from(transactions)
-      .where(and(...inScope(scope), inArray(transactions.status, ['success', 'failed'])))
+      .where(and(...inScope(scope), inArray(transactions.status, LISTED_STATUSES)))
       .orderBy(desc(transactions.createdAt))
       .limit(15),
   rows,
@@ -54,7 +55,7 @@ export const successTimeline = defineQuery(
     db
       .select({ amount: transactions.amount, createdAt: transactions.createdAt })
       .from(transactions)
-      .where(and(...inScope(scope), eq(transactions.status, 'success'))),
+      .where(and(...inScope(scope), eq(transactions.status, COUNTED_STATUS))),
   rows,
 )
 
@@ -70,7 +71,7 @@ export const successFundItems = defineQuery(
       .from(transactionItems)
       .innerJoin(transactions, eq(transactionItems.transactionId, transactions.id))
       .innerJoin(funds, eq(transactionItems.fundId, funds.id))
-      .where(and(...inScope(scope), eq(transactions.status, 'success'))),
+      .where(and(...inScope(scope), eq(transactions.status, COUNTED_STATUS))),
   rows,
 )
 
@@ -88,7 +89,7 @@ export const successYears = defineQuery(
       .where(
         and(
           eq(transactions.userId, donor.id),
-          eq(transactions.status, 'success'),
+          eq(transactions.status, COUNTED_STATUS),
           startFreshOnly(donor.journey),
         ),
       )
@@ -100,7 +101,7 @@ export const successYears = defineQuery(
 function listedFor(donor: Donor) {
   return and(
     eq(transactions.userId, donor.id),
-    inArray(transactions.status, ['success', 'failed']),
+    inArray(transactions.status, LISTED_STATUSES),
     startFreshOnly(donor.journey),
   )
 }

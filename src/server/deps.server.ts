@@ -30,9 +30,10 @@ interface ServerConfig {
 
 /**
  * Everything a workflow cannot build itself. Workflows take `Pick<Deps, ...>` of what they use.
- * `logger` is request-scoped (carries `user_id`); the rest are process singletons. The session
- * user and the open transaction are deliberately absent: one is an argument, the other is
- * explicit through `db.transaction`.
+ * `logger` is the request logger (`user_id` set once the session is known), and `eghl` logs through
+ * it, so `createDeps` is called with the child logger; the rest are process singletons. The session
+ * user and the open transaction are deliberately absent: one is an argument, the other is explicit
+ * through `db.transaction`.
  */
 export interface Deps {
   readonly config: ServerConfig
@@ -52,8 +53,7 @@ const config: ServerConfig = {
 const db = createDb(neonHttp, neonPool)
 const mailer = createMailer(config.mail, rootLogger)
 const hashToken = createTokenHasher(SESSION_SECRET)
-const eghl = createEghlClient(config.eghl)
 
 export function createDeps(logger: Logger): Deps {
-  return { config, db, eghl, hashToken, logger, mailer }
+  return { config, db, eghl: createEghlClient(config.eghl, logger), hashToken, logger, mailer }
 }

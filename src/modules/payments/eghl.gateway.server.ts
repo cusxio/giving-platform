@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { Result } from 'better-result'
+import type { Logger } from 'pino'
 import queryString from 'query-string'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
@@ -17,9 +18,24 @@ import {
   EghlVerificationError,
   ParseError,
 } from './eghl.errors'
-import type { EghlPaymentResponse, EghlQueryResponse } from './eghl.wire'
-import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
+import type { ClippedField } from './eghl.outcome'
+import {
+  centsOf,
+  isUnexpectedForSale,
+  isUnreadableRefundTotal,
+  outcomeOf,
+  refundedTotalOf,
+  replyOf,
+} from './eghl.outcome'
+import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
+import {
+  EghlPaymentResponseSchema,
+  EghlQueryResponseSchema,
+  EghlTxnExists,
+  EghlTxnStatus,
+} from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
+import { PAGE_TIMEOUT_MINUTES, PAYMENT_CURRENCY } from './payment-outcome'
 
 export interface EghlConfig {
   /** Origin the gateway calls back and returns the donor to. */
@@ -65,7 +81,53 @@ type SignedReply = Pick<
 
 type HashValue2Field = 'HashValue2' | 'OrderNumber' | 'Param6' | 'Param7'
 
-export function createEghlClient(config: EghlConfig): PaymentGateway {
+function logAnswer(logger: Logger, answer: EghlQueryResponse) {
+  const fields = {
+    event: 'eghl.query.answered',
+    status: answer.TxnStatus,
+    transaction_id: answer.PaymentID,
+    txn_exists: answer.TxnExists,
+  }
+  if (isUnexpectedForSale(answer)) {
+    logger.error(fields, 'Gateway reports a status a sale cannot reach, leaving it pending')
+  } else {
+    logger.info(fields, 'Gateway answered the status query')
+  }
+  const refunded = refundedTotalOf(answer)
+  if (answer.TxnStatus === EghlTxnStatus.Success && refunded !== null && refunded > 0) {
+    logger.warn(
+      {
+        amount_in_cents: centsOf(answer.Amount),
+        event: 'eghl.query.refund_on_success',
+        refunded_amount_in_cents: refunded,
+        transaction_id: answer.PaymentID,
+      },
+      'Gateway reports a success that shows a refunded total, recording the whole sale',
+    )
+  }
+  if (isUnreadableRefundTotal(answer)) {
+    logger.warn(
+      {
+        event: 'eghl.query.refund_total_unreadable',
+        total_refund_amount: answer.TotalRefundAmount,
+        transaction_id: answer.PaymentID,
+      },
+      'Gateway refunded total is not ringgit with two decimals',
+    )
+  }
+}
+
+function logClipped(logger: Logger, transactionId: string, clipped: readonly ClippedField[]) {
+  if (clipped.length === 0) {
+    return
+  }
+  logger.warn(
+    { event: 'payment.fields_clipped', fields: clipped, transaction_id: transactionId },
+    'Gateway fields do not fit their columns, cutting or dropping them',
+  )
+}
+
+export function createEghlClient(config: EghlConfig, logger: Logger): PaymentGateway {
   const hashValueFields = (reply: SignedReply) => [
     config.password,
     reply.TxnID,
@@ -112,12 +174,13 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
 
       const requestParams = {
         Amount: amount.toFixed(2),
-        CurrencyCode: 'MYR',
+        CurrencyCode: PAYMENT_CURRENCY,
         CustEmail: customerEmail,
         CustName: customerName,
         MerchantCallBackURL: `${config.baseUrl}/api/eghl/callback`,
         MerchantReturnURL: `${config.baseUrl}/api/eghl/return`,
         OrderNumber: transactionId,
+        PageTimeout: String(PAGE_TIMEOUT_MINUTES * 60),
         PaymentDesc: description,
         PaymentID: transactionId,
         PymtMethod: 'ANY',
@@ -137,7 +200,7 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
         requestParams.Amount,
         requestParams.CurrencyCode,
         '', // CustIP
-        '', // PageTimeout
+        requestParams.PageTimeout,
         '', // CardNo
         token ?? '',
         '', // RecurringCriteria
@@ -158,7 +221,21 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
           catch: parseFailed,
           try: () => EghlPaymentResponseSchema.Parse(fields),
         })
-        return matchesHashValue2(reply) ? Result.ok(reply) : Result.err(new EghlVerificationError())
+        if (!matchesHashValue2(reply)) {
+          return Result.err(new EghlVerificationError())
+        }
+        logger.info(
+          {
+            event: 'eghl.reply.verified',
+            status: reply.TxnStatus,
+            transaction_id: reply.PaymentID,
+          },
+          'Gateway reply signature verified',
+        )
+        const clipped: ClippedField[] = []
+        const mapped = replyOf(reply as Verified<EghlPaymentResponse>, clipped)
+        logClipped(logger, reply.PaymentID, clipped)
+        return Result.ok(mapped)
       }),
 
     queryStatus: ({ transactionId, amountInCents }) =>
@@ -167,7 +244,7 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
 
         const requestParams = {
           Amount: amount.toFixed(2),
-          CurrencyCode: 'MYR',
+          CurrencyCode: PAYMENT_CURRENCY,
           PaymentID: transactionId,
           PymtMethod: 'ANY',
           ServiceID: config.serviceId,
@@ -217,7 +294,11 @@ export function createEghlClient(config: EghlConfig): PaymentGateway {
           return Result.err(new EghlQueryMismatchError())
         }
 
-        return Result.ok(reply)
+        logAnswer(logger, reply)
+        const clipped: ClippedField[] = []
+        const outcome = outcomeOf(reply as Verified<EghlQueryResponse>, clipped)
+        logClipped(logger, reply.PaymentID, clipped)
+        return outcome
       }),
   }
 }

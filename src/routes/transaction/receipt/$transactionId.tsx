@@ -2,11 +2,16 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
+import { assertExhaustive } from '#/core/assert-exhaustive'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import type { Receipt } from '#/modules/payments'
 import { receiptQuery } from '#/modules/payments'
 
+import { Cancelled } from './-components/cancelled'
 import { Failed } from './-components/failed'
+import { Held } from './-components/held'
 import { Pending } from './-components/pending'
+import { Refunded } from './-components/refunded'
 import { Success } from './-components/success'
 
 export const Route = createFileRoute('/transaction/receipt/$transactionId')({
@@ -19,11 +24,36 @@ export const Route = createFileRoute('/transaction/receipt/$transactionId')({
   },
 })
 
+function ReceiptView(props: Receipt) {
+  const { transaction, user } = props
+  switch (transaction.status) {
+    case 'success': {
+      return <Success transaction={transaction} user={user} />
+    }
+    case 'failed': {
+      return <Failed transaction={transaction} />
+    }
+    case 'cancelled': {
+      return <Cancelled transaction={transaction} />
+    }
+    case 'pending': {
+      return <Pending transaction={transaction} />
+    }
+    case 'held': {
+      return <Held transaction={transaction} />
+    }
+    case 'refunded': {
+      return <Refunded transaction={transaction} />
+    }
+    default: {
+      return assertExhaustive(transaction.status)
+    }
+  }
+}
+
 function RouteComponent() {
   const { transactionId } = Route.useParams()
-  const {
-    data: { transaction, user, payment },
-  } = useSuspenseQueryDeferred(receiptQuery(transactionId))
+  const { data } = useSuspenseQueryDeferred(receiptQuery(transactionId))
 
   return (
     <>
@@ -31,13 +61,7 @@ function RouteComponent() {
 
       <div className="relative flex shrink-0 grow flex-col items-center justify-center px-4">
         <div className="mx-auto max-w-3xl">
-          {transaction.status === 'success' && <Success transaction={transaction} user={user} />}
-
-          {transaction.status === 'failed' && (
-            <Failed payment={payment ?? undefined} transaction={transaction} />
-          )}
-
-          {transaction.status === 'pending' && <Pending transaction={transaction} />}
+          <ReceiptView {...data} />
         </div>
       </div>
 

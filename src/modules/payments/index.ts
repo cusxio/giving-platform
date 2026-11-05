@@ -1,3 +1,4 @@
+export type { TransactionStatus } from '#/core/transaction-status'
 export { MAX_FUND_AMOUNT } from './contribution'
 export {
   receiptQuery,
@@ -5,4 +6,3 @@ export {
   useStartContributionMutation,
 } from './payments.queries'
 export type { Receipt, SavedPaymentMethod, StartContributionResponse } from './payments.types'
-export type { TransactionStatus } from './transaction-status'

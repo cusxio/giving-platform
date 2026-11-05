@@ -1,10 +1,16 @@
 import type { InferInsertModel } from 'drizzle-orm'
-import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, lt, lte } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
-import { affectedRows, defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
+import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
+import { defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
 import type { PaymentInsert, Transaction, User } from '#/server/schema.server'
 import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
+import type { SameLength } from '#/server/sql.server'
+
+import type { TEXT_COLUMN_LENGTHS } from './eghl.outcome'
+import type { Transition } from './payment-outcome'
+import { RECONCILE_MIN_AGE_MINUTES, RECONCILE_WINDOW_DAYS } from './payment-outcome'
 
 export type TransactionId = Transaction['id']
 
@@ -32,7 +38,9 @@ export const findReceipt = defineQuery(
       .from(transactions)
       .innerJoin(users, eq(users.id, transactions.userId))
       .leftJoin(payments, eq(payments.transactionId, transactions.id))
-      .where(eq(transactions.id, transactionId)),
+      .where(eq(transactions.id, transactionId))
+      .orderBy(desc(payments.id))
+      .limit(1),
   firstOrNull,
 )
 
@@ -76,17 +84,71 @@ export const findPendingAmountInCents = defineQuery(
   (found) => found[0]?.amount,
 )
 
-/** Moves a pending transaction to a final status. Null when it is no longer pending or unknown. */
-export const settleTransaction = defineQuery(
-  'payments.settleTransaction',
-  (db, transactionId: TransactionId, status: Exclude<Transaction['status'], 'pending'>) =>
+class UnknownStatusError extends Error {
+  override name = 'UnknownStatusError'
+}
+
+const knownStatus = <Row extends { status: string }>(row: Row | null): Row | null => {
+  if (row !== null && !(TRANSACTION_STATUSES as readonly string[]).includes(row.status)) {
+    throw new UnknownStatusError(
+      `transaction status "${row.status}" is not one of ${TRANSACTION_STATUSES.join(', ')}`,
+    )
+  }
+  return row
+}
+
+/** Locks the row for the rest of the settlement, so a callback, a return and the cron take turns. */
+export const lockTransaction = defineQuery(
+  'payments.lockTransaction',
+  (db, transactionId: TransactionId) =>
+    db
+      .select({
+        amountInCents: transactions.amount,
+        createdAs: transactions.createdAs,
+        status: transactions.status,
+        userId: transactions.userId,
+      })
+      .from(transactions)
+      .where(eq(transactions.id, transactionId))
+      .for('update'),
+  (found) => knownStatus(firstOrNull(found)),
+)
+
+export const findProviderTxnIds = defineQuery(
+  'payments.findProviderTxnIds',
+  (db, transactionId: TransactionId) =>
+    db
+      .select({ providerTxnId: payments.providerTransactionId })
+      .from(payments)
+      .where(eq(payments.transactionId, transactionId)),
+  (found) => found.map(({ providerTxnId }) => providerTxnId),
+)
+
+/**
+ * The WHERE repeats the table, so the database refuses what the table refuses even if a plan is
+ * wrong.
+ */
+export const moveTransaction = defineQuery(
+  'payments.moveTransaction',
+  (db, transition: Transition) =>
     db
       .update(transactions)
-      .set({ status })
-      .where(and(eq(transactions.id, transactionId), eq(transactions.status, 'pending')))
-      .returning({ createdAs: transactions.createdAs, userId: transactions.userId }),
+      .set({ status: transition.to })
+      .where(
+        and(
+          eq(transactions.id, transition.transactionId),
+          inArray(transactions.status, sourcesOf(transition.to)),
+        ),
+      )
+      .returning({ status: transactions.status }),
   firstOrNull,
 )
+
+/** @public */
+export const paymentTextFitsColumns: [
+  SameLength<(typeof TEXT_COLUMN_LENGTHS)['TxnMessage'], typeof payments.message>,
+  SameLength<(typeof TEXT_COLUMN_LENGTHS)['PymtMethod'], typeof payments.paymentMethod>,
+] = [true, true]
 
 export const insertPayment = defineQuery(
   'payments.insertPayment',
@@ -108,8 +170,8 @@ export const pendingTransactionsToReconcile = defineQuery(
       .where(
         and(
           eq(transactions.status, 'pending'),
-          lt(transactions.createdAt, addMinutes(now(), -15)),
-          gt(transactions.createdAt, addDays(now(), -2)),
+          lt(transactions.createdAt, addMinutes(now(), -RECONCILE_MIN_AGE_MINUTES)),
+          gt(transactions.createdAt, addDays(now(), -RECONCILE_WINDOW_DAYS)),
         ),
       )
       .orderBy(asc(transactions.createdAt))
@@ -117,13 +179,17 @@ export const pendingTransactionsToReconcile = defineQuery(
   rows,
 )
 
-/** Marks the transactions failed if they are still pending. Yields how many it changed. */
-export const markPendingTransactionsFailed = defineQuery(
-  'payments.markPendingTransactionsFailed',
-  (db, transactionIds: TransactionId[]) =>
+export const countStalePending = defineQuery(
+  'payments.countStalePending',
+  (db) =>
     db
-      .update(transactions)
-      .set({ status: 'failed' })
-      .where(and(inArray(transactions.id, transactionIds), eq(transactions.status, 'pending'))),
-  affectedRows,
+      .select({ value: count() })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.status, 'pending'),
+          lte(transactions.createdAt, addDays(now(), -RECONCILE_WINDOW_DAYS)),
+        ),
+      ),
+  (found) => found[0]?.value ?? 0,
 )

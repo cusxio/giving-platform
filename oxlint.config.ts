@@ -15,6 +15,8 @@ interface ImportPath {
 // Import boundaries. An override replaces the rule's whole pattern and path lists, so each zone
 // below composes these constants instead of repeating them.
 
+const SOURCE_SUFFIX = String.raw`(\.[jt]s)?`
+
 // Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
 // entry allow the import past every other pattern too, and its regex has no lookahead.
 const MODULE_ENTRY_ONLY: ImportPattern = {
@@ -48,18 +50,30 @@ const SERVER_CODE_IN_CLIENT: ImportPattern = {
 }
 const NO_REPOSITORY_IN_FUNCTIONS: ImportPattern = {
   message: 'A server function calls a *.server.ts workflow, never a repository.',
-  regex: String.raw`\.repository\.server$`,
+  regex: String.raw`\.repository\.server${SOURCE_SUFFIX}$`,
 }
 const NO_REPOSITORY_IN_CLIENT: ImportPattern = {
   message:
     'Client-reachable module files never import a repository, even types. Put shared types in <name>.types.ts or a pure domain file.',
-  regex: String.raw`\.repository\.server$`,
+  regex: String.raw`\.repository\.server${SOURCE_SUFFIX}$`,
 }
 const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
   message:
     'Client code never imports src/server. Only entry-server.tsx and entry-start.tsx (behind import.meta.env.SSR) may.',
   regex: String.raw`^\./server/`,
 }
+
+const ONE_SETTLEMENT_PATH: ImportPattern = {
+  message:
+    'Only payments/settlement.server.ts calls recordOutcome. Settle through settleReply or settlePolled.',
+  regex: String.raw`(^|/)record-outcome\.server${SOURCE_SUFFIX}$`,
+}
+const ONE_STATUS_WRITER: ImportPath[] = ['', '.js', '.ts'].map((suffix) => ({
+  importNames: ['lockTransaction', 'moveTransaction'],
+  message:
+    'Only payments/record-outcome.server.ts locks or moves a transaction. Settle through settlement.server.ts.',
+  name: `./transactions.repository.server${suffix}`,
+}))
 
 // Lessons of the Result migration. Inside Result.gen a throw becomes a Panic, so a thrown
 // redirect or notFound reaches the browser as a 500; and a Panic is a defect, never an Err.
@@ -85,6 +99,8 @@ const restrict =
 const restrictImports = restrict(NO_PANIC)
 /** Server code that may run inside a workflow. */
 const restrictServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW)
+const restrictModuleImports = restrict(NO_PANIC, ...ONE_STATUS_WRITER)
+const restrictModuleServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW, ...ONE_STATUS_WRITER)
 /** The runner, and tests, which build Panics to prove the runner. */
 const restrictImportsAllowingPanic = restrict()
 const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
@@ -110,7 +126,10 @@ export default defineConfig({
   ],
   options: { typeAware: true },
   plugins: ['unicorn', 'oxc', 'import', 'promise', 'eslint'],
+  jsPlugins: ['./lint/payments-plugin.ts'],
   rules: {
+    'payments/no-verified-cast': 'error',
+
     // Formatting and style opinions handled by the project/codebase conventions.
     'eslint/func-style': 'off',
     'eslint/no-continue': 'off',
@@ -278,11 +297,16 @@ export default defineConfig({
     },
     {
       files: ['src/modules/**'],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_CLIENT),
+      rules: restrictModuleImports(
+        ...OUTSIDE_PLATFORM,
+        FLAT_MODULES,
+        NO_REPOSITORY_IN_CLIENT,
+        ONE_SETTLEMENT_PATH,
+      ),
     },
     {
       files: ['src/modules/**/*.server.ts', 'src/modules/*/server.ts'],
-      rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+      rules: restrictModuleServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
     },
     {
       files: ['src/modules/**/*.test.{ts,tsx}'],
@@ -290,11 +314,21 @@ export default defineConfig({
     },
     {
       files: ['src/modules/**/*.repository.server.ts'],
-      rules: restrictServerImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
+      rules: restrictModuleServerImports(
+        ...EVERYWHERE,
+        FLAT_MODULES,
+        PLATFORM_INTERNALS,
+        ONE_SETTLEMENT_PATH,
+      ),
     },
     {
       files: ['src/modules/**/*.functions.ts'],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_FUNCTIONS),
+      rules: restrictModuleImports(
+        ...OUTSIDE_PLATFORM,
+        FLAT_MODULES,
+        NO_REPOSITORY_IN_FUNCTIONS,
+        ONE_SETTLEMENT_PATH,
+      ),
     },
     // These throw a redirect or notFound outside any workflow: the runner answers policies and
     // rows with them, the eGHL routes redirect the browser, logout ends with one, and the
@@ -306,7 +340,24 @@ export default defineConfig({
     { files: ['src/server/maintenance.server.ts'], rules: restrictImports(...EVERYWHERE) },
     {
       files: ['src/modules/payments/eghl.http.server.ts', 'src/modules/auth/session.server.ts'],
-      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+      rules: restrictModuleImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    {
+      files: ['src/modules/payments/settlement.server.ts'],
+      rules: restrictModuleServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
+    {
+      files: ['src/modules/payments/record-outcome.server.ts'],
+      rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    { files: ['src/modules/payments/**'], rules: { 'payments/no-never-or-any-cast': 'error' } },
+    {
+      files: [
+        'src/modules/payments/eghl.gateway.server.ts',
+        'src/modules/payments/eghl.live-replies.test.ts',
+        'src/modules/payments/eghl.outcome.test.ts',
+      ],
+      rules: { 'payments/no-never-or-any-cast': 'off', 'payments/no-verified-cast': 'off' },
     },
   ],
 })
