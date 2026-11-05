@@ -11,12 +11,16 @@ export class TransactionRepository {
     this.#db = db
   }
 
-  findFullTransactionByIdQuery(
+  findTransactionReceiptByIdQuery(
     transactionId: Transaction['id'],
     db: DB | DBTransaction = this.#db,
   ) {
     return db
-      .select({ payment: payments, transaction: transactions, user: users })
+      .select({
+        payment: { message: payments.message },
+        transaction: { id: transactions.id, status: transactions.status },
+        user: { email: users.email, firstName: users.firstName, status: users.status },
+      })
       .from(transactions)
       .innerJoin(users, eq(users.id, transactions.userId))
       .leftJoin(payments, eq(payments.transactionId, transactions.id))

@@ -87,7 +87,18 @@ export enum EghlTxnStatus {
   Success = '0',
 }
 
-const EghlPaymentResponseType = Type.Object({
+// Statuses a query reply can carry on top of the payment ones.
+export enum EghlQueryTxnStatus {
+  Authorized = '15',
+  Captured = '16',
+  InternalError = '-2',
+  NotFound = '-1',
+  Refunded = '10',
+  ReversalPending = '31',
+  Reversed = '9',
+}
+
+const eghlResponseFields = {
   TransactionType: Type.String(),
   PymtMethod: Type.String(),
   ServiceID: Type.String(),
@@ -99,9 +110,7 @@ const EghlPaymentResponseType = Type.Object({
   }),
   CurrencyCode: Type.String({ maxLength: 3, minLength: 3 }),
   HashValue: Type.String({ minLength: 1 }),
-  HashValue2: Type.String({ minLength: 1 }),
   TxnID: Type.String(), // EGHL's ID, can be empty on failure/cancellation
-  TxnStatus: Type.Enum(EghlTxnStatus),
   TxnMessage: Type.String(),
 
   Param6: Type.Optional(Type.String()),
@@ -120,9 +129,15 @@ const EghlPaymentResponseType = Type.Object({
   CardExp: Type.Optional(Type.String()),
   CardType: Type.Optional(Type.String()),
   CardHolder: Type.Optional(Type.String()),
-})
+}
 
-export const EghlPaymentResponseSchema = Compile(EghlPaymentResponseType)
+export const EghlPaymentResponseSchema = Compile(
+  Type.Object({
+    ...eghlResponseFields,
+    HashValue2: Type.String({ minLength: 1 }),
+    TxnStatus: Type.Enum(EghlTxnStatus),
+  }),
+)
 
 export enum EghlTxnExists {
   Exists = '0',
@@ -130,13 +145,31 @@ export enum EghlTxnExists {
   NotFound = '1',
 }
 
+const eghlQueryResponseFields = {
+  ...eghlResponseFields,
+  TxnStatus: Type.Union([Type.Enum(EghlTxnStatus), Type.Enum(EghlQueryTxnStatus)]),
+  QueryDesc: Type.Optional(Type.String()),
+  TotalRefundAmount: Type.Optional(Type.String()),
+}
+
 export const EghlQueryResponseSchema = Compile(
-  Type.Intersect([
-    EghlPaymentResponseType,
+  Type.Union([
     Type.Object({
-      QueryDesc: Type.Optional(Type.String()),
-      TotalRefundAmount: Type.Optional(Type.String()),
-      TxnExists: Type.Enum(EghlTxnExists),
+      ...eghlQueryResponseFields,
+      HashValue2: Type.String({ minLength: 1 }),
+      TxnExists: Type.Literal(EghlTxnExists.Exists),
+    }),
+    // Not-found and internal-error replies are signed with HashValue alone, which covers
+    // TxnStatus but not TxnExists, so each pins the status HashValue vouches for.
+    Type.Object({
+      ...eghlQueryResponseFields,
+      TxnExists: Type.Literal(EghlTxnExists.NotFound),
+      TxnStatus: Type.Literal(EghlQueryTxnStatus.NotFound),
+    }),
+    Type.Object({
+      ...eghlQueryResponseFields,
+      TxnExists: Type.Literal(EghlTxnExists.InternalError),
+      TxnStatus: Type.Literal(EghlQueryTxnStatus.InternalError),
     }),
   ]),
 )

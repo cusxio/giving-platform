@@ -1,11 +1,10 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
 
-import { parseAndVerifyEghlResponse } from './-eghl.shared'
+import { parseAndVerifyEghlResponse, settleInboundReply } from './-eghl.shared'
 
 export const Route = createFileRoute('/api/eghl/return')({
   server: {
@@ -62,33 +61,32 @@ export const Route = createFileRoute('/api/eghl/return')({
 
         const eghlResponse = responseResult.value
 
-        const message = eghlResponse.TxnMessage.toLowerCase()
-        const isTerminalStateFromGateway =
-          eghlResponse.TxnStatus === EghlTxnStatus.Failed &&
-          (message.includes('cancel') || message.includes('duplicate payment id'))
+        logger.info(
+          {
+            event: 'eghl.return.processing',
+            status: eghlResponse.TxnStatus,
+            transaction_id: eghlResponse.PaymentID,
+          },
+          'Signature verified, processing GET return',
+        )
 
-        if (isTerminalStateFromGateway) {
-          logger.info(
+        const finalizationResult = await settleInboundReply(eghlResponse, {
+          eghlService,
+          logger,
+          paymentService,
+        })
+
+        if (!finalizationResult.ok) {
+          logger.error(
             {
-              event: 'eghl.return.processing_terminal_state',
+              err: finalizationResult.error.error,
+              error_type: finalizationResult.error.type,
+              event: 'eghl.return.finalization_failed',
               transaction_id: eghlResponse.PaymentID,
             },
-            'Processing terminal failure state from GET return',
+            'Failed to record payment outcome in database',
           )
-          const finalizationResult = await paymentService.finalizePaymentFromCallback(eghlResponse)
-
-          if (!finalizationResult.ok) {
-            logger.error(
-              {
-                err: finalizationResult.error.error,
-                error_type: finalizationResult.error.type,
-                event: 'eghl.return.finalization_failed',
-                transaction_id: eghlResponse.PaymentID,
-              },
-              'Failed to record payment outcome in database',
-            )
-            throw errorRedirect
-          }
+          throw errorRedirect
         }
 
         logger.info(
@@ -165,7 +163,11 @@ export const Route = createFileRoute('/api/eghl/return')({
           'Signature verified, processing payment finalization',
         )
 
-        const finalizationResult = await paymentService.finalizePaymentFromCallback(eghlResponse)
+        const finalizationResult = await settleInboundReply(eghlResponse, {
+          eghlService,
+          logger,
+          paymentService,
+        })
 
         if (!finalizationResult.ok) {
           logger.error(

@@ -1,15 +1,15 @@
 import { and, eq, sql } from 'drizzle-orm'
 
 import { TZDate, now } from '#/core/date'
-import { createTransactionError } from '#/core/errors'
+import { createDBError, createTransactionError } from '#/core/errors'
 import { logger } from '#/core/logger'
-import { tryAsync } from '#/core/result'
+import { ok, tryAsync } from '#/core/result'
 import type { DBPool } from '#/db/client'
 import type { PaymentInsert, Transaction } from '#/db/schema'
 import { payments, savedPaymentMethods, transactions } from '#/db/schema'
 
-import type { EghlPaymentResponse } from '../payment-gateway/eghl.schema'
-import { EghlTxnStatus } from '../payment-gateway/eghl.schema'
+import type { EghlFinalStatus } from '../payment-gateway/eghl.finality'
+import type { EghlPaymentResponse, EghlQueryResponse } from '../payment-gateway/eghl.schema'
 
 export class PaymentService {
   readonly #dbPool: DBPool
@@ -18,10 +18,30 @@ export class PaymentService {
     this.#dbPool = db
   }
 
-  async finalizePaymentFromCallback(response: EghlPaymentResponse) {
+  /** The amount of a transaction still awaiting a final status, or undefined once settled. */
+  async findPendingAmountInCents(transactionId: Transaction['id']) {
+    const result = await tryAsync(
+      () =>
+        this.#dbPool
+          .select({ amount: transactions.amount })
+          .from(transactions)
+          .where(and(eq(transactions.id, transactionId), eq(transactions.status, 'pending'))),
+      createDBError,
+    )
+
+    if (!result.ok) {
+      return result
+    }
+
+    return ok(result.value[0]?.amount)
+  }
+
+  async finalizePaymentFromCallback(
+    response: EghlPaymentResponse | EghlQueryResponse,
+    status: EghlFinalStatus,
+  ) {
     const {
       PaymentID,
-      TxnStatus,
       PymtMethod,
       RespTime,
       RespTime2,
@@ -34,8 +54,7 @@ export class PaymentService {
       CardType,
       CardHolder,
     } = response
-    const isTransactionSuccess = TxnStatus === EghlTxnStatus.Success
-    const newStatus: Transaction['status'] = isTransactionSuccess ? 'success' : 'failed'
+    const isTransactionSuccess = status === 'success'
 
     let paidAt = now()
     const rawTime = RespTime ?? RespTime2
@@ -60,7 +79,7 @@ export class PaymentService {
         this.#dbPool.transaction(async (tx) => {
           const [transaction] = await tx
             .update(transactions)
-            .set({ status: newStatus })
+            .set({ status })
             .where(and(eq(transactions.id, PaymentID), eq(transactions.status, 'pending')))
             .returning({ createdAs: transactions.createdAs, userId: transactions.userId })
 
@@ -112,7 +131,12 @@ export class PaymentService {
             await tx
               .update(savedPaymentMethods)
               .set({ lastUsedAt: now() })
-              .where(eq(savedPaymentMethods.token, Token))
+              .where(
+                and(
+                  eq(savedPaymentMethods.userId, transaction.userId),
+                  eq(savedPaymentMethods.token, Token),
+                ),
+              )
           }
 
           return { finalized: true }

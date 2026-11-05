@@ -4,7 +4,8 @@ import { and, asc, eq, gt, inArray, lt } from 'drizzle-orm'
 import { addDays, addMinutes, differenceInMinutes, isBefore, now } from '#/core/date'
 import { transactions } from '#/db/schema'
 import { CRON_SECRET } from '#/envvars'
-import { EghlTxnExists, EghlTxnStatus } from '#/features/payment-gateway/eghl.schema'
+import { finalStatusOf } from '#/features/payment-gateway/eghl.finality'
+import { EghlTxnExists } from '#/features/payment-gateway/eghl.schema'
 import { dbMiddleware } from '#/server/middleware/db-middleware'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
@@ -129,11 +130,16 @@ export const Route = createFileRoute('/api/eghl/cron')({
             continue
           }
 
-          // Still pending at eGHL
-          if (eghlResponse.TxnStatus === EghlTxnStatus.Pending) {
+          const finalStatus = finalStatusOf(eghlResponse)
+
+          if (finalStatus === null) {
             logger.info(
-              { event: LOG_EVENTS.STILL_PENDING, transaction_id: eghlResponse.PaymentID },
-              'Transaction is still pending at payment gateway. Skipping',
+              {
+                event: LOG_EVENTS.STILL_PENDING,
+                status: eghlResponse.TxnStatus,
+                transaction_id: eghlResponse.PaymentID,
+              },
+              'Gateway status does not settle the transaction. Skipping',
             )
             continue
           }
@@ -150,7 +156,10 @@ export const Route = createFileRoute('/api/eghl/cron')({
 
           // Sequential by design: payment finalization has DB side effects and should be throttled.
           // oxlint-disable-next-line no-await-in-loop
-          const finalizationResult = await paymentService.finalizePaymentFromCallback(eghlResponse)
+          const finalizationResult = await paymentService.finalizePaymentFromCallback(
+            eghlResponse,
+            finalStatus,
+          )
 
           if (!finalizationResult.ok) {
             logger.error(

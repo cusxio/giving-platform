@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type * as Envvars from '#/envvars'
 
 import type { EghlPaymentResponse } from './eghl.schema'
-import { EghlTxnStatus } from './eghl.schema'
+import { EghlTxnExists, EghlTxnStatus } from './eghl.schema'
 
 const mockedEnv = vi.hoisted(() => ({
   BASE_URL: 'https://app.give.test',
@@ -62,6 +62,73 @@ const buildResponse = (overrides: Partial<EghlPaymentResponse> = {}): EghlPaymen
     )
 
   return { ...response, HashValue2: signature }
+}
+
+const hashValueOnlyReply = ({
+  TxnExists = EghlTxnExists.NotFound,
+  TxnStatus = '-1',
+  signatureOverride,
+}: { TxnExists?: EghlTxnExists; TxnStatus?: string; signatureOverride?: string } = {}) => {
+  const fields = {
+    Amount: '50.00',
+    AuthCode: '',
+    CurrencyCode: 'MYR',
+    OrderNumber: '',
+    PaymentID: 'txn_abc123',
+    PymtMethod: 'ANY',
+    QueryDesc: 'Not found',
+    ServiceID: mockedEnv.EGHL_SERVICE_ID,
+    TransactionType: 'QUERY',
+    TxnExists,
+    TxnID: '',
+    TxnMessage: '',
+    TxnStatus,
+  }
+  const signature =
+    signatureOverride ??
+    hashValue(
+      [
+        mockedEnv.EGHL_PASSWORD,
+        fields.TxnID,
+        fields.ServiceID,
+        fields.PaymentID,
+        fields.TxnStatus,
+        fields.Amount,
+        fields.CurrencyCode,
+        fields.AuthCode,
+      ].join(''),
+    )
+  return new URLSearchParams({ ...fields, HashValue: signature }).toString()
+}
+
+const existingTransactionReply = (overrides: Partial<EghlPaymentResponse> = {}) => {
+  const { HashValue2, ...fields } = buildResponse({
+    TransactionType: 'QUERY',
+    TxnMessage: 'Transaction Failed',
+    TxnStatus: EghlTxnStatus.Failed,
+    ...overrides,
+  })
+  return new URLSearchParams({
+    ...fields,
+    HashValue2,
+    QueryDesc: 'Exists',
+    TxnExists: EghlTxnExists.Exists,
+  }).toString()
+}
+
+const queryAgainstGatewayReply = async (body: string) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>(() => Promise.resolve(new Response(body, { status: 200 }))),
+  )
+  try {
+    return await createService().queryTransactionStatus({
+      amountInCents: 5000,
+      transactionId: 'txn_abc123',
+    })
+  } finally {
+    vi.unstubAllGlobals()
+  }
 }
 
 describe('eghlService', () => {
@@ -143,6 +210,78 @@ describe('eghlService', () => {
       const response = buildResponse({ HashValue2: 'not-valid' })
 
       expect(service.verifyPaymentResponse(response)).toBe(false)
+    })
+  })
+
+  describe('queryTransactionStatus', () => {
+    it('returns a verified not-found reply that carries only HashValue', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(hashValueOnlyReply())
+
+      expect(result).toMatchObject({
+        ok: true,
+        value: { TxnExists: EghlTxnExists.NotFound, TxnStatus: '-1' },
+      })
+    })
+
+    it('rejects a not-found reply whose HashValue does not match', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({ signatureOverride: 'not-valid' }),
+      )
+
+      expect(result).toStrictEqual({ error: { type: 'EghlVerificationError' }, ok: false })
+    })
+
+    it('rejects an existing transaction reply that carries only HashValue', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({ TxnExists: EghlTxnExists.Exists, TxnStatus: EghlTxnStatus.Failed }),
+      )
+
+      expect(result.ok).toBe(false)
+    })
+
+    it('rejects a reply signed with HashValue only that carries a final status', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        hashValueOnlyReply({ TxnStatus: EghlTxnStatus.Failed }),
+      )
+
+      expect(result.ok).toBe(false)
+    })
+
+    it('returns a verified reply for the queried payment and amount', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(existingTransactionReply())
+
+      expect(result).toMatchObject({
+        ok: true,
+        value: { Amount: '50.00', PaymentID: 'txn_abc123', TxnStatus: EghlTxnStatus.Failed },
+      })
+    })
+
+    it('rejects a verified reply for another payment', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(
+        existingTransactionReply({ OrderNumber: 'txn_other', PaymentID: 'txn_other' }),
+      )
+
+      expect(result.ok).toBe(false)
+    })
+
+    it('rejects a verified reply for another amount', async () => {
+      expect.hasAssertions()
+
+      const result = await queryAgainstGatewayReply(existingTransactionReply({ Amount: '5.00' }))
+
+      expect(result.ok).toBe(false)
     })
   })
 })

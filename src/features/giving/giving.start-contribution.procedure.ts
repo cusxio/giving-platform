@@ -16,6 +16,7 @@ import type {
 import { trySync } from '#/core/result'
 import { contributionServiceMiddleware } from '#/server/middleware/contribution-service-middleware'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
+import { savedPaymentMethodRepositoryMiddleware } from '#/server/middleware/saved-payment-method-repository-middleware'
 
 const schema = Compile(
   Type.Object({
@@ -35,13 +36,21 @@ export type StartContributionResponse =
   | SuccessResponse<{ redirectURL: string }>
   | ValidationErrorResponse
 
-type StartContributionBusinessErrorCode = 'EMAIL_EXISTS' | 'INVALID_REQUEST' | 'USER_MISMATCH'
+type StartContributionBusinessErrorCode =
+  | 'EMAIL_EXISTS'
+  | 'INVALID_REQUEST'
+  | 'PAYMENT_METHOD_UNAVAILABLE'
+  | 'USER_MISMATCH'
 
 export const startContribution = createServerFn({ method: 'POST' })
-  .middleware([contributionServiceMiddleware, eghlServiceMiddleware])
+  .middleware([
+    contributionServiceMiddleware,
+    eghlServiceMiddleware,
+    savedPaymentMethodRepositoryMiddleware,
+  ])
   .validator((v: StartContributionInput) => v)
   .handler(async ({ data, context }): Promise<StartContributionResponse> => {
-    const { contributionService, user, eghlService, logger } = context
+    const { contributionService, user, eghlService, savedPaymentMethodRepository, logger } = context
 
     const parseResult = trySync(
       () =>
@@ -87,6 +96,45 @@ export const startContribution = createServerFn({ method: 'POST' })
         'Request contained 0 items',
       )
       return { error: { code: 'INVALID_REQUEST' }, type: 'BUSINESS_ERROR' }
+    }
+
+    if (token !== undefined) {
+      if (user === null) {
+        logger.warn(
+          { email, event: 'giving.start_contribution.blocked', reason: 'saved_card_without_user' },
+          'Saved card used without a session',
+        )
+        return { error: { code: 'PAYMENT_METHOD_UNAVAILABLE' }, type: 'BUSINESS_ERROR' }
+      }
+
+      const savedCardResult = await savedPaymentMethodRepository.findByUserIdAndToken(
+        user.id,
+        token,
+      )
+
+      if (!savedCardResult.ok) {
+        logger.error(
+          {
+            err: savedCardResult.error.error,
+            error_type: savedCardResult.error.type,
+            event: 'giving.start_contribution.failed',
+          },
+          'Database error while finding saved card',
+        )
+        return { type: 'SERVER_ERROR' }
+      }
+
+      if (savedCardResult.value === null) {
+        logger.warn(
+          {
+            event: 'giving.start_contribution.blocked',
+            reason: 'saved_card_not_found',
+            user_id: user.id,
+          },
+          'Saved card not found for user',
+        )
+        return { error: { code: 'PAYMENT_METHOD_UNAVAILABLE' }, type: 'BUSINESS_ERROR' }
+      }
     }
 
     const totalAmountInCents = itemsToInsert.reduce((sum, item) => sum + item.amountInCents, 0)

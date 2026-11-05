@@ -4,7 +4,7 @@ import { assertExhaustive } from '#/core/assert-exhaustive'
 import { eghlServiceMiddleware } from '#/server/middleware/eghl-service-middleware'
 import { paymentServiceMiddleware } from '#/server/middleware/payment-service-middleware'
 
-import { parseAndVerifyEghlResponse } from './-eghl.shared'
+import { parseAndVerifyEghlResponse, settleInboundReply } from './-eghl.shared'
 
 export const Route = createFileRoute('/api/eghl/callback')({
   server: {
@@ -66,7 +66,11 @@ export const Route = createFileRoute('/api/eghl/callback')({
           'Signature verified, processing payment finalization',
         )
 
-        const finalizationResult = await paymentService.finalizePaymentFromCallback(eghlResponse)
+        const finalizationResult = await settleInboundReply(eghlResponse, {
+          eghlService,
+          logger,
+          paymentService,
+        })
 
         if (!finalizationResult.ok) {
           logger.error(
@@ -86,7 +90,8 @@ export const Route = createFileRoute('/api/eghl/callback')({
           'Callback processed and saved successfully',
         )
 
-        return new Response('ok', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
+        // eGHL resends the callback, up to 3 times, until it reads this exact body.
+        return new Response('OK', { headers: { 'Content-Type': 'text/plain' }, status: 200 })
       },
     },
     middleware: [eghlServiceMiddleware, paymentServiceMiddleware],

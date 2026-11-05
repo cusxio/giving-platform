@@ -7,6 +7,7 @@ export type VerificationError =
   | SessionExpiredError
   | SessionInvalidError
   | SessionNotFoundError
+  | SessionUserInactiveError
 // | DBError
 // | ExpiredError
 // | InvalidSessionError
@@ -25,6 +26,11 @@ interface SessionInvalidError {
 interface SessionNotFoundError {
   readonly serializedCookie: string
   readonly type: 'SessionNotFoundError'
+}
+
+interface SessionUserInactiveError {
+  readonly serializedCookie: string
+  readonly type: 'SessionUserInactiveError'
 }
 
 // Interface DBError {

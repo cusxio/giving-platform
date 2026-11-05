@@ -76,7 +76,7 @@ export class SessionRepository {
               id: sessions.id,
               tokenHash: sessions.tokenHash,
             },
-            user: { id: users.id, journey: users.journey, role: users.role },
+            user: { id: users.id, journey: users.journey, role: users.role, status: users.status },
           })
           .from(sessions)
           .innerJoin(users, eq(sessions.userId, users.id))

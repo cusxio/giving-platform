@@ -1,4 +1,4 @@
-import { clientTz } from './date'
+import { TZDate, clientTz } from './date'
 
 export const REDACTED_VALUE = '—'
 
@@ -41,4 +41,8 @@ export function createDateFormatter(
   options: Omit<Intl.DateTimeFormatOptions, 'timeZone'>,
 ): Intl.DateTimeFormat {
   return new Intl.DateTimeFormat('en-MY', { timeZone: clientTz, ...options })
+}
+
+export function monthLabel(month: number, style: 'long' | 'short') {
+  return createDateFormatter({ month: style }).format(new TZDate(2000, month - 1, 1, clientTz))
 }

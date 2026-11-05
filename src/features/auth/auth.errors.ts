@@ -2,7 +2,11 @@ import type { DBEmptyReturnErrorResult, DBQueryErrorResult } from '#/core/errors
 
 export type AuthLoginError = DBEmptyReturnErrorResult | DBQueryErrorResult | NotExistsError
 
-export type AuthSignUpError = AlreadyExistsError | DBEmptyReturnErrorResult | DBQueryErrorResult
+export type AuthSignUpError =
+  | AlreadyExistsError
+  | DBEmptyReturnErrorResult
+  | DBQueryErrorResult
+  | InactiveAccountError
 
 export type AuthValidateOtpError =
   | DBEmptyReturnErrorResult
@@ -17,6 +21,10 @@ export interface RateLimitExceededError {
 
 interface AlreadyExistsError {
   readonly type: 'AlreadyExistsError'
+}
+
+interface InactiveAccountError {
+  readonly type: 'InactiveAccountError'
 }
 
 interface InvalidOtpError {
