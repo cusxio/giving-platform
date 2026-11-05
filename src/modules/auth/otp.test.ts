@@ -317,6 +317,20 @@ describe('requesting a code', () => {
     expect(tokens[0]?.tokenHash).toBe(deps.hashToken(lastOtp()))
   })
 
+  it("drops the user's used and expired codes in the batch that stores the new one", async () => {
+    expect.hasAssertions()
+
+    const { db, deps, otp } = await issued('active', 'login')
+    await verify(deps, { email: EMAIL, mode: 'login', otp })
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(success)
+    expect(db.calls.slice(-2)).toStrictEqual([
+      { args: [1], name: 'auth.deleteDeadTokensOf' },
+      { args: [1, expect.any(String), 'login'], name: 'auth.createToken' },
+    ])
+    expect(db.roundTrips.at(-1)).toStrictEqual(['auth.deleteDeadTokensOf', 'auth.createToken'])
+  })
+
   it('normalizes the email before limiting and looking it up', async () => {
     expect.hasAssertions()
 
