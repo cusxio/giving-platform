@@ -7,15 +7,16 @@ import type { Fund } from '#/core/brand/funds'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 import type { User } from '#/modules/account'
 import { savedPaymentMethodsQuery } from '#/modules/payments'
+import type { LinkedGift } from '#/routes/-hooks/fund-search'
 
 import { GivingFormDetails } from './giving-form-details'
-import { GivingFormFund } from './giving-form-fund'
+import { GivingFormFund, OVER_MAX_MESSAGE } from './giving-form-fund'
 import { GivingFormTotal } from './giving-form-total'
 import type { GivingFormView } from './use-giving-form'
 import { extractFundAmounts, useGivingForm } from './use-giving-form'
 
 interface GivingFormProps {
-  initialFunds: Partial<Record<Fund, string>>
+  gift: LinkedGift
   initialView: GivingFormView
   onBack: () => void
   onContinue: (funds: Record<Fund, string>) => void
@@ -23,14 +24,15 @@ interface GivingFormProps {
 }
 
 export function GivingForm(props: GivingFormProps) {
-  const { user, initialFunds, initialView, onContinue, onBack } = props
+  const { user, gift, initialView, onContinue, onBack } = props
   const authenticated = user !== undefined
 
   const { data: savedPaymentMethods } = useSuspenseQueryDeferred(
     savedPaymentMethodsQuery(authenticated),
   )
   const { store, view, submitPayment } = useGivingForm(user, savedPaymentMethods[0]?.token, {
-    initialFunds,
+    initialErrors: Object.fromEntries(gift.overMax.map((fund) => [fund, OVER_MAX_MESSAGE])),
+    initialFunds: gift.amounts,
     initialView,
   })
 

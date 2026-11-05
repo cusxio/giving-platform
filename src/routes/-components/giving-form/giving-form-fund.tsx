@@ -13,7 +13,7 @@ import { cx } from '#/styles/cx'
 import { GivingFormFundQuickFill } from './giving-form-fund-quick-fill'
 import type { GivingFormStore } from './use-giving-form'
 
-const OVER_MAX_MESSAGE = `The most you can give to one fund is ${createCurrencyFormatter({ showSymbol: true }).format(MAX_FUND_AMOUNT)}.`
+export const OVER_MAX_MESSAGE = `The most you can give to one fund is ${createCurrencyFormatter({ showSymbol: true }).format(MAX_FUND_AMOUNT)}.`
 
 const alert = <Alert className="text-balance empty:hidden" />
 
