@@ -64,7 +64,7 @@ describe('storing a code', () => {
 })
 
 describe('reading and claiming a code', () => {
-  it("reads only the user's unexpired, unclaimed codes of the requested mode, in id order", async () => {
+  it("reads the user's unexpired, unclaimed codes of the mode in id order, so concurrent checks lock their counts in one order", async () => {
     expect.hasAssertions()
 
     const statements = await sent(findLiveTokens(7, 'login'))
