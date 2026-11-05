@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, lte, sql } from 'drizzle-orm'
 
 import { addSeconds } from '#/core/date'
 import { defineQuery, firstOrNull, nothing } from '#/server/db.server'
@@ -7,11 +7,14 @@ import { rateLimitAttempts } from '#/server/schema.server'
 
 type Action = RateLimitAttempt['action']
 
+/** A row whose window started at or before `windowStart` counts for nothing under that limit. */
+const windowExpired = (windowStart: Date) => lte(rateLimitAttempts.windowStartedAt, windowStart)
+
 /** Atomically counts one attempt, starting a new window when the current one has expired. */
 export const recordAttempt = defineQuery(
   'auth.recordAttempt',
   (db, identifier: string, action: Action, windowSeconds: number, currentTime: Date) => {
-    const windowStart = addSeconds(currentTime, -windowSeconds)
+    const expired = windowExpired(addSeconds(currentTime, -windowSeconds))
 
     return db
       .insert(rateLimitAttempts)
@@ -27,14 +30,14 @@ export const recordAttempt = defineQuery(
           // Reset count to 1 if window expired, otherwise increment
           attemptCount: sql`
                 CASE
-                  WHEN ${rateLimitAttempts.windowStartedAt} <= ${windowStart} THEN 1
+                  WHEN ${expired} THEN 1
                   ELSE ${rateLimitAttempts.attemptCount} + 1
                 END
               `,
           // Reset window start if expired, otherwise keep existing
           windowStartedAt: sql`
                 CASE
-                  WHEN ${rateLimitAttempts.windowStartedAt} <= ${windowStart} THEN ${currentTime}
+                  WHEN ${expired} THEN ${currentTime}
                   ELSE ${rateLimitAttempts.windowStartedAt}
                 END
               `,
@@ -45,6 +48,16 @@ export const recordAttempt = defineQuery(
       .returning()
   },
   firstOrNull,
+)
+
+export const deleteStaleAttempts = defineQuery(
+  'auth.deleteStaleAttempts',
+  (db, windowStart: Date) =>
+    db
+      .delete(rateLimitAttempts)
+      .where(windowExpired(windowStart))
+      .returning({ id: rateLimitAttempts.id }),
+  (deleted) => deleted.length,
 )
 
 export const resetAttempts = defineQuery(

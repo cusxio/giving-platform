@@ -439,6 +439,52 @@ describe('updating privacy mode', () => {
   })
 })
 
+const capture = () => {
+  const statements: { params: unknown[]; sql: string }[] = []
+  const db = createDriverDb((sql, params) => {
+    statements.push({ params, sql })
+    return Promise.resolve({ rowCount: 0, rows: [] })
+  })
+  return { db, statements }
+}
+
+describe('the profile write', () => {
+  const PROFILE_UPDATE =
+    'update "users" set "first_name" = $1, "updated_at" = $2 where "users"."id" = $3 returning "id", "email", "email_verified_at", "first_name", "last_name", "role", "status", "journey", "created_at", "updated_at"'
+
+  it('sets only the profile columns, whatever else the caller passes', async () => {
+    expect.hasAssertions()
+
+    const { db, statements } = capture()
+    const changes = { email: 'x@give.test', firstName: 'Ada', role: 'su', status: 'suspended' }
+    await db.run(updateUserById(2, changes as Parameters<typeof updateUserById>[1]))
+
+    expect(statements).toStrictEqual([
+      { params: ['Ada', expect.any(String), 2], sql: PROFILE_UPDATE },
+    ])
+  })
+
+  it('lets a member change only their names and journey, whatever else the body sends', async () => {
+    expect.hasAssertions()
+
+    const { db, statements } = capture()
+    await updateUserAction({
+      context: testContext(MEMBER, { db }),
+      data: {
+        email: 'x@give.test',
+        emailVerifiedAt: new Date('2025-06-01T00:00:00Z'),
+        firstName: 'Ada',
+        role: 'su',
+        status: 'suspended',
+      },
+    })
+
+    expect(statements).toStrictEqual([
+      { params: ['Ada', expect.any(String), MEMBER.id], sql: PROFILE_UPDATE },
+    ])
+  })
+})
+
 describe('the guest upsert', () => {
   it('fills in only the names a guest lacks, and changes no registered account', async () => {
     expect.hasAssertions()

@@ -156,26 +156,40 @@ export const insertPayment = defineQuery(
   nothing,
 )
 
-/** Up to 25 pending transactions created between 2 days and 15 minutes ago, oldest first. */
-export const pendingTransactionsToReconcile = defineQuery(
-  'payments.pendingTransactionsToReconcile',
+export const claimTransactionsToReconcile = defineQuery(
+  'payments.claimTransactionsToReconcile',
   (db) =>
     db
-      .select({
+      .update(transactions)
+      .set({ updatedAt: now() })
+      .where(
+        and(
+          inArray(
+            transactions.id,
+            db
+              .select({ id: transactions.id })
+              .from(transactions)
+              .where(
+                and(
+                  eq(transactions.status, 'pending'),
+                  lt(transactions.createdAt, addMinutes(now(), -RECONCILE_MIN_AGE_MINUTES)),
+                  gt(transactions.createdAt, addDays(now(), -RECONCILE_WINDOW_DAYS)),
+                ),
+              )
+              .orderBy(asc(transactions.updatedAt))
+              .limit(25),
+          ),
+          // Read Committed rechecks this outer WHERE on a row a concurrent writer settled, but the
+          // subquery keeps its start-of-statement snapshot.
+          // https://www.postgresql.org/docs/current/transaction-iso.html#XACT-READ-COMMITTED
+          eq(transactions.status, 'pending'),
+        ),
+      )
+      .returning({
         amountInCents: transactions.amount,
         createdAt: transactions.createdAt,
         transactionId: transactions.id,
-      })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.status, 'pending'),
-          lt(transactions.createdAt, addMinutes(now(), -RECONCILE_MIN_AGE_MINUTES)),
-          gt(transactions.createdAt, addDays(now(), -RECONCILE_WINDOW_DAYS)),
-        ),
-      )
-      .orderBy(asc(transactions.createdAt))
-      .limit(25),
+      }),
   rows,
 )
 

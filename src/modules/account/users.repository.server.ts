@@ -23,8 +23,8 @@ export const findUserByEmail = defineQuery(
 
 export const updateUserById = defineQuery(
   'account.updateUserById',
-  (db, userId: User['id'], changes: ProfileChanges) =>
-    db.update(users).set(changes).where(eq(users.id, userId)).returning(),
+  (db, userId: User['id'], { firstName, journey, lastName }: ProfileChanges) =>
+    db.update(users).set({ firstName, journey, lastName }).where(eq(users.id, userId)).returning(),
   firstOrNull,
 )
 

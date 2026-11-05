@@ -23,6 +23,7 @@ interface UseGivingFormInput {
 }
 
 interface UseGivingFormOptions {
+  initialErrors: Partial<Record<Fund, string>>
   initialFunds: Partial<Record<Fund, string>>
   initialView: GivingFormView
 }
@@ -37,9 +38,11 @@ export function useGivingForm(
   savedPaymentToken: UseGivingFormInput['savedPaymentToken'],
   options: UseGivingFormOptions,
 ) {
-  const { initialFunds, initialView } = options
+  const { initialErrors, initialFunds, initialView } = options
 
-  const store = useFormStore({
+  const store = useFormStore<ReturnType<typeof getInitialFormValues>>({
+    defaultErrors: initialErrors,
+    defaultTouched: Object.fromEntries(Object.keys(initialErrors).map((fund) => [fund, true])),
     defaultValues: getInitialFormValues(user, savedPaymentToken, initialFunds),
   })
   const [isRedirecting, setIsRedirecting] = useState(false)

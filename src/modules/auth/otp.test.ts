@@ -20,7 +20,12 @@ import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 import type { RequestOtpInput } from './request-otp.server'
 import { requestOtpAction } from './request-otp.server'
 import { createSession } from './sessions.repository.server'
-import { claimTokenIfUnused, createToken, findToken } from './tokens.repository.server'
+import {
+  claimTokenIfUnused,
+  createToken,
+  deleteDeadTokensOf,
+  findLiveTokens,
+} from './tokens.repository.server'
 import type { VerifyOtpInput } from './verify-otp.server'
 import { verifyOtpAction } from './verify-otp.server'
 
@@ -43,7 +48,7 @@ const EMAIL = 'donor@example.com'
 const ADDRESS = '198.51.100.1'
 
 type UserRow = NonNullable<QueryResult<typeof findUserByEmail>>
-type TokenRow = NonNullable<QueryResult<typeof findToken>>
+type TokenRow = QueryResult<typeof findLiveTokens>[number]
 type Status = UserRow['status']
 
 interface LogLine {
@@ -83,6 +88,7 @@ function setup(existing?: Status) {
     users.set(EMAIL, userRow(EMAIL, 1, existing))
   }
   const tokens: TokenRow[] = []
+  let tokenIds = 0
   const sentEmails: MailMessage[] = []
   const events: LogLine[] = []
   const attempts = new Map<string, number>()
@@ -106,17 +112,37 @@ function setup(existing?: Status) {
       }
     })
     .on(createToken, (userId, tokenHash, mode) => {
+      const expiresAt = new Date(Date.now() + 5 * 60_000)
+      const held = tokens.find((t) => t.userId === userId && t.tokenHash === tokenHash)
+      if (held) {
+        Object.assign(held, { expiresAt, mode })
+        return
+      }
+      tokenIds += 1
       tokens.unshift({
         createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 5 * 60_000),
-        id: tokens.length + 1,
+        expiresAt,
+        id: tokenIds,
         mode,
         tokenHash,
         usedAt: null,
         userId,
       })
     })
-    .on(findToken, (userId) => tokens.find((t) => t.userId === userId && t.usedAt === null) ?? null)
+    .on(deleteDeadTokensOf, (userId) => {
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        const t = tokens[i]
+        if (t?.userId === userId && (t.usedAt !== null || t.expiresAt <= new Date())) {
+          tokens.splice(i, 1)
+        }
+      }
+    })
+    .on(findLiveTokens, (userId, mode) =>
+      tokens.filter(
+        (t) =>
+          t.userId === userId && t.mode === mode && t.usedAt === null && t.expiresAt > new Date(),
+      ),
+    )
     .on(claimTokenIfUnused, (id) => {
       const token = tokens.find((t) => t.id === id && t.usedAt === null)
       if (token) {
@@ -312,6 +338,20 @@ describe('requesting a code', () => {
     expect(tokens[0]?.tokenHash).toBe(deps.hashToken(lastOtp()))
   })
 
+  it("drops the user's used and expired codes in the batch that stores the new one", async () => {
+    expect.hasAssertions()
+
+    const { db, deps, otp } = await issued('active', 'login')
+    await verify(deps, { email: EMAIL, mode: 'login', otp })
+
+    await expect(request(deps, { email: EMAIL, mode: 'login' })).resolves.toStrictEqual(success)
+    expect(db.calls.slice(-2)).toStrictEqual([
+      { args: [1], name: 'auth.deleteDeadTokensOf' },
+      { args: [1, expect.any(String), 'login'], name: 'auth.createToken' },
+    ])
+    expect(db.roundTrips.at(-1)).toStrictEqual(['auth.deleteDeadTokensOf', 'auth.createToken'])
+  })
+
   it('normalizes the email before limiting and looking it up', async () => {
     expect.hasAssertions()
 
@@ -434,10 +474,22 @@ describe('requesting a code', () => {
   })
 
   it.each([
-    ['the rate limit check fails', (db: FakeDb) => db.on(recordAttempt, fail)],
-    ['the user lookup fails', (db: FakeDb) => db.on(findUserByEmail, fail)],
-    ['the token insert fails', (db: FakeDb) => db.on(createToken, fail)],
-  ] as const)('is a server error when %s', async (_case, breakDb) => {
+    [
+      'the rate limit check fails',
+      (db: FakeDb) => db.on(recordAttempt, fail),
+      'auth.recordAttempt',
+    ],
+    [
+      'the user lookup fails',
+      (db: FakeDb) => db.on(findUserByEmail, fail),
+      'account.findUserByEmail',
+    ],
+    [
+      'the token insert fails',
+      (db: FakeDb) => db.on(createToken, fail),
+      'auth.deleteDeadTokensOf + auth.createToken',
+    ],
+  ] as const)('is a server error when %s', async (_case, breakDb, op) => {
     expect.hasAssertions()
 
     const { db, deps, events } = setup('active')
@@ -450,7 +502,7 @@ describe('requesting a code', () => {
       'error.type': 'Error',
       event: 'auth.request_otp.failed',
       level: 50,
-      op: db.calls.at(-1)?.name,
+      op,
     })
   })
 
@@ -548,11 +600,32 @@ describe('verifying a code', () => {
       'auth.recordAttempt',
       'auth.recordAttempt',
       'account.findUserByEmail',
-      'auth.findToken',
+      'auth.findLiveTokens',
       'auth.recordAttempt',
       'auth.claimTokenIfUnused',
       'auth.createSession',
       'auth.resetAttempts',
+    ])
+  })
+
+  it('counts every live code in one batch before comparing', async () => {
+    expect.hasAssertions()
+
+    const { db, deps, otp } = await issued('active', 'login')
+    await request(deps, { email: EMAIL, mode: 'login' })
+    const start = db.roundTrips.length
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    expect(db.roundTrips.slice(start)).toStrictEqual([
+      ['auth.recordAttempt'],
+      ['auth.recordAttempt'],
+      ['auth.recordAttempt'],
+      ['account.findUserByEmail'],
+      ['auth.findLiveTokens'],
+      ['auth.recordAttempt', 'auth.recordAttempt'],
+      ['auth.claimTokenIfUnused'],
+      ['auth.createSession'],
+      ['auth.resetAttempts'],
     ])
   })
 
@@ -581,6 +654,19 @@ describe('verifying a code', () => {
         .map((c) => c.name)
         .slice(-3),
     ).toStrictEqual(['auth.createSession', 'account.activateUser', 'auth.resetAttempts'])
+  })
+
+  it('accepts an older code while a newer one is live, and counts a guess against each', async () => {
+    expect.hasAssertions()
+
+    const { attempts, deps, otp } = await issued('active', 'login')
+    await request(deps, { email: EMAIL, mode: 'login' })
+    await verify(deps, { email: EMAIL, mode: 'login', otp: '000000' })
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    expect(io.setCookies).toHaveLength(1)
+    expect(attempts.get('otp_verify:code:1')).toBe(2)
+    expect(attempts.get('otp_verify:code:2')).toBe(2)
   })
 
   it('rejects a wrong code without a cookie', async () => {
@@ -639,7 +725,7 @@ describe('verifying a code', () => {
     expect.hasAssertions()
 
     const { db, deps, events, otp } = await issued('active', 'login')
-    db.on(findToken, () => null)
+    db.on(findLiveTokens, () => [])
 
     await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual({
       error: { code: 'INVALID_OR_EXPIRED_OTP' },
@@ -879,6 +965,18 @@ describe('one address against another', () => {
     expect(io.setCookies).toHaveLength(1)
   })
 
+  it('cannot void the code the owner holds by requesting a new one', async () => {
+    expect.hasAssertions()
+
+    const { deps, otp, sentEmails } = await issued('active', 'login')
+    fromAddress(ATTACKER)
+    await request(deps, { email: EMAIL, mode: 'login' })
+    fromAddress(VICTIM)
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    expect(sentEmails.map((e) => e.to)).toStrictEqual([EMAIL, EMAIL])
+  })
+
   it('cannot keep a slow owner from signing in by voiding each new code', async () => {
     expect.hasAssertions()
 
@@ -1003,6 +1101,26 @@ describe('one code against many addresses', () => {
       ...wrong.map(() => invalidCode),
       success,
     ])
+    expect(io.setCookies).toHaveLength(1)
+  })
+
+  it('refuses a spent code while a newer one is live, and accepts the newer one', async () => {
+    expect.hasAssertions()
+
+    const { deps, events, lastOtp, otp } = await issued('active', 'login')
+    await guess(
+      deps,
+      [...ADDRESSES, '203.0.113.4', '203.0.113.5'].map((address) => [address, WRONG] as const),
+    )
+    await request(deps, { email: EMAIL, mode: 'login' })
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(
+      invalidCode,
+    )
+    expect(events.at(-1)).toMatchObject({ reason: 'code_exhausted' })
+    await expect(
+      verify(deps, { email: EMAIL, mode: 'login', otp: lastOtp() }),
+    ).resolves.toStrictEqual(success)
     expect(io.setCookies).toHaveLength(1)
   })
 

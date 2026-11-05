@@ -20,7 +20,7 @@ import EmailVerification from './emails/email-verification'
 import Login from './emails/login'
 import { generateOtp } from './otp-code.server'
 import { checkOtpRequest, limitedAddress } from './rate-limit.server'
-import { createToken } from './tokens.repository.server'
+import { issueCode } from './tokens.repository.server'
 
 type OtpDeps = Pick<Deps, 'db' | 'hashToken' | 'logger' | 'mailer'>
 
@@ -54,7 +54,7 @@ function signupAccount(deps: OtpDeps, email: User['email']) {
 /** Stores the hash of a new code and emails the code. */
 async function sendOtp(deps: OtpDeps, user: User, mode: RequestOtpInput['mode']) {
   const otp = generateOtp()
-  const stored = await deps.db.run(createToken(user.id, deps.hashToken(otp), mode))
+  const stored = await deps.db.batch(issueCode(user.id, deps.hashToken(otp), mode))
   if (stored.isErr()) {
     return stored
   }

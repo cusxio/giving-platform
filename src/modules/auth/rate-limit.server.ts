@@ -7,7 +7,7 @@ import { clientIp } from '#/server/client-ip.server'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
 
-import { CodeExhaustedError, RateLimitExceededError } from './auth.errors'
+import { RateLimitExceededError } from './auth.errors'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 import { CODE_LIFETIME_MINUTES } from './tokens.repository.server'
 
@@ -24,9 +24,7 @@ interface Limit {
  * - `address`: the client address across all emails, so one address cannot work through many
  *   emails. Supabase Auth's per-IP defaults, which leave room for a congregation on one network.
  * - `client`: the email from one address. The strict limit, so a client that floods an inbox or
- *   guesses codes stops itself without locking out the same email on another address. Its checks
- *   match one code's five over the request window, so one address voids at most one code in a
- *   window in which the owner can ask for five.
+ *   guesses codes stops itself without locking out the same email on another address.
  * - `email`: the email across all addresses, so many addresses together cannot flood one inbox
  *   or guess one code. Its window is never longer than the client's, so one address fills at most
  *   two client windows inside it; the cap is more than twice the client limit, so one address
@@ -144,21 +142,35 @@ export function resetOtpVerify(
 /**
  * Checks one code accepts from every address together, the right one included. Counting comes
  * before the comparison, so concurrent guesses cannot slip past the limit. The window opens at the
- * first check, after the code was issued, so it outlives the code and never resets during its
- * life. One code thus faces at most five guesses, however many addresses send them.
+ * first check, after the code was issued, so it outlives the code's own lifetime. One issue of a
+ * code thus faces at most five guesses, however many addresses send them, and a guess while
+ * several codes are live counts against each of them.
  */
 const CODE_CHECKS: Limit = { maxAttempts: 5, windowSeconds: CODE_LIFETIME_MINUTES * 60 }
 
-/** Counts a check of the code and refuses every check after its fifth. */
-export async function checkCode(
+/** A rate-limit row whose window started this long ago counts for nothing under any limit. */
+export const LONGEST_WINDOW_SECONDS = Math.max(
+  CODE_CHECKS.windowSeconds,
+  ...Object.values(LIMITS).flatMap((limits) =>
+    Object.values(limits).map((limit) => limit.windowSeconds),
+  ),
+)
+
+/** Counts one check of each code in one atomic batch and answers the ids with checks left. */
+export async function checkCodes(
   deps: Pick<Deps, 'db'>,
-  tokenId: number,
-): Promise<Result<void, CodeExhaustedError | InfraError>> {
+  tokenIds: readonly [number, ...number[]],
+): Promise<Result<ReadonlySet<number>, InfraError>> {
   const { maxAttempts, windowSeconds } = CODE_CHECKS
-  const recorded = await deps.db.run(
-    recordAttempt(`code:${tokenId}`, 'otp_verify', windowSeconds, now()),
-  )
-  return recorded.andThen((row) =>
-    (row?.attemptCount ?? 1) <= maxAttempts ? Result.ok() : Result.err(new CodeExhaustedError()),
+  const currentTime = now()
+  const count = (tokenId: number) =>
+    recordAttempt(`code:${tokenId}`, 'otp_verify', windowSeconds, currentTime)
+  const [first, ...rest] = tokenIds
+  const recorded = await deps.db.batch([count(first), ...rest.map((tokenId) => count(tokenId))])
+  return recorded.map(
+    (counted) =>
+      new Set(
+        tokenIds.filter((_tokenId, index) => (counted[index]?.attemptCount ?? 1) <= maxAttempts),
+      ),
   )
 }

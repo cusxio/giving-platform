@@ -6,3 +6,8 @@
 .output/
 
 .vercel
+
+# local secrets
+mise.local.toml
+.env*
+!.env.example

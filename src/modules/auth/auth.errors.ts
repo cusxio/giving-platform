@@ -12,10 +12,10 @@ export class AlreadyExistsError extends TaggedError('AlreadyExistsError') {}
 /** A login for an email with no active account. */
 export class NotExistsError extends TaggedError('NotExistsError') {}
 
-/** The code does not match the newest one issued. */
+/** The code matches none of the live codes. */
 export class InvalidOtpError extends TaggedError('InvalidOtpError') {}
 
-/** The code had its last allowed check, so it is refused from now on, even when right. */
+/** The code, or every live code, is past its fifth check, so it is refused even when right. */
 export class CodeExhaustedError extends TaggedError('CodeExhaustedError') {}
 
 /**

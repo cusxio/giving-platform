@@ -1,23 +1,23 @@
+import { isCronRequest } from '#/server/cron.server'
 import type { Deps } from '#/server/deps.server'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import { settlePolled } from './settlement.server'
-import { countStalePending, pendingTransactionsToReconcile } from './transactions.repository.server'
+import { claimTransactionsToReconcile, countStalePending } from './transactions.repository.server'
 
 type ReconcileDeps = Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>
 
 async function reconcile(deps: ReconcileDeps, request: Request) {
   const { config, db, logger } = deps
-  const authHeader = request.headers.get('authorization')
 
-  if (config.cronSecret === undefined || authHeader !== `Bearer ${config.cronSecret}`) {
+  if (!isCronRequest(config.cronSecret, request.headers.get('authorization'))) {
     logger.warn({ event: 'eghl.cron.unauthorized' }, 'Unauthorized cron job attempt')
     return new Response('Unauthorized', { status: 401 })
   }
 
   logger.info({ event: 'eghl.cron.job_start' }, 'Starting eGHL cron job')
 
-  const pending = await db.run(pendingTransactionsToReconcile())
+  const pending = await db.run(claimTransactionsToReconcile())
   if (pending.isErr()) {
     logInfraFailure(logger, 'eghl.cron', pending.error)
     return new Response('Internal Server Error', { status: 500 })

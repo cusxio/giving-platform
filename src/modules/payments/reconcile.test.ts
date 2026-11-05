@@ -35,10 +35,13 @@ const minutesAgo = (minutes: number) => new Date(NOW.getTime() - minutes * 60_00
 /** How drizzle sends a timestamptz parameter. */
 const pgTimestamp = (date: Date) => date.toISOString().replace('Z', '+00:00')
 
-const PENDING_SELECT =
-  'select "amount", "created_at", "id" from "transactions" ' +
-  'where ("transactions"."status" = $1 and "transactions"."created_at" < $2 ' +
-  'and "transactions"."created_at" > $3) order by "transactions"."created_at" asc limit $4'
+const CLAIM =
+  'update "transactions" set "updated_at" = $1 ' +
+  'where ("transactions"."id" in (select "id" from "transactions" ' +
+  'where ("transactions"."status" = $2 and "transactions"."created_at" < $3 ' +
+  'and "transactions"."created_at" > $4) order by "transactions"."updated_at" asc limit $5) ' +
+  'and "transactions"."status" = $6) ' +
+  'returning "amount", "created_at", "id"'
 
 const STALE_COUNT =
   'select count(*) from "transactions" ' +
@@ -61,27 +64,17 @@ interface Statement {
   sql: string
 }
 
-type StatementKind = 'count' | 'select' | 'update'
+type StatementKind = 'claim' | 'count'
 
-const kindOf = (sql: string): StatementKind => {
-  if (sql.startsWith('select count(')) {
-    return 'count'
-  }
-  return sql.startsWith('select') ? 'select' : 'update'
-}
+const kindOf = (sql: string): StatementKind => (sql.startsWith('select count(') ? 'count' : 'claim')
 
 const fakeDb = (
   pendingRows: PendingRow[],
-  {
-    failOn,
-    stalePending = 0,
-    updatedRows = 0,
-  }: { failOn?: StatementKind; stalePending?: number; updatedRows?: number } = {},
+  { failOn, stalePending = 0 }: { failOn?: StatementKind; stalePending?: number } = {},
 ) => {
   const statements: Statement[] = []
   const answers: Record<StatementKind, () => { rowCount: number; rows: unknown[][] }> = {
-    count: () => ({ rowCount: 1, rows: [[stalePending]] }),
-    select: () => ({
+    claim: () => ({
       rowCount: pendingRows.length,
       rows: pendingRows.map((row) => [
         row.amountInCents,
@@ -89,7 +82,7 @@ const fakeDb = (
         row.transactionId,
       ]),
     }),
-    update: () => ({ rowCount: updatedRows, rows: [] }),
+    count: () => ({ rowCount: 1, rows: [[stalePending]] }),
   }
   const client = (sql: string, params: unknown[]) => {
     statements.push({ params, sql })
@@ -157,11 +150,13 @@ const notFound = () => Result.ok<PaymentOutcome>({ kind: 'notFound' })
 
 const runCron = async ({
   authorization = `Bearer ${settings.CRON_SECRET}`,
+  config = { cronSecret: settings.CRON_SECRET },
   db,
   finalize = finalizeBy(),
   replies = {},
 }: {
   authorization?: string | null
+  config?: Pick<Deps['config'], 'cronSecret'>
   db: ReturnType<typeof fakeDb>['db']
   finalize?: (outcome: Settling) => Promise<FinalizeResult>
   replies?: Record<string, QueryResult>
@@ -186,7 +181,7 @@ const runCron = async ({
     const base = testDeps()
     response = await handleReconcile(
       {
-        config: { ...base.config, cronSecret: settings.CRON_SECRET },
+        config: { ...base.config, ...config },
         db,
         eghl: { ...base.eghl, queryStatus: queryTransactionStatus },
         logger: logger as unknown as Deps['logger'],
@@ -220,7 +215,7 @@ const pending = (transactionId: string, ageMinutes: number): PendingRow => ({
 })
 
 describe('eGHL cron', () => {
-  it('selects up to 25 pending transactions created between 2 days and 15 minutes ago', async () => {
+  it('takes the 25 least recently checked pending transactions of its window and stamps them checked', async () => {
     expect.hasAssertions()
 
     const { db, statements } = fakeDb([])
@@ -229,8 +224,15 @@ describe('eGHL cron', () => {
     expect(run).toMatchObject({ body: 'ok', completeLevel: 'info', status: 200 })
     expect(statements).toStrictEqual([
       {
-        params: ['pending', pgTimestamp(minutesAgo(15)), pgTimestamp(minutesAgo(2 * 24 * 60)), 25],
-        sql: PENDING_SELECT,
+        params: [
+          pgTimestamp(NOW),
+          'pending',
+          pgTimestamp(minutesAgo(15)),
+          pgTimestamp(minutesAgo(2 * 24 * 60)),
+          25,
+          'pending',
+        ],
+        sql: CLAIM,
       },
       { params: ['pending', pgTimestamp(minutesAgo(2 * 24 * 60))], sql: STALE_COUNT },
     ])
@@ -304,7 +306,7 @@ describe('eGHL cron', () => {
       ...Object.fromEntries(Object.entries(reply).map(([id, r]) => [id, Result.ok(r)])),
       txn_internal_error: Result.err(new EghlGatewayBusyError({ queryDesc: 'desc' })),
     }
-    const { db, statements } = fakeDb(rows, { updatedRows: 1 })
+    const { db, statements } = fakeDb(rows)
 
     const run = await runCron({
       db,
@@ -343,7 +345,7 @@ describe('eGHL cron', () => {
       [reply.txn_already_final, 'cron'],
       [reply.txn_finalize_error, 'cron'],
     ])
-    expect(statements.map(({ sql }) => sql)).toStrictEqual([PENDING_SELECT, STALE_COUNT])
+    expect(statements.map(({ sql }) => sql)).toStrictEqual([CLAIM, STALE_COUNT])
     expect(run.stats).toStrictEqual({
       errors: 3,
       finalized: 2,
@@ -470,15 +472,15 @@ describe('eGHL cron', () => {
     expect(span.status.code).toBe(SpanStatusCode.ERROR)
   })
 
-  it('answers 500 without querying eGHL when the pending select fails', async () => {
+  it('answers 500 without querying eGHL when taking the pending transactions fails', async () => {
     expect.hasAssertions()
 
-    const { db } = fakeDb([pending('txn_a', 40)], { failOn: 'select' })
+    const { db } = fakeDb([pending('txn_a', 40)], { failOn: 'claim' })
     const run = await runCron({ db })
 
     expect(run).toMatchObject({ body: 'Internal Server Error', queried: [], status: 500 })
     expect(run.errors).toMatchObject([
-      { event: 'eghl.cron.failed', op: 'payments.pendingTransactionsToReconcile' },
+      { event: 'eghl.cron.failed', op: 'payments.claimTransactionsToReconcile' },
     ])
   })
 
@@ -491,6 +493,19 @@ describe('eGHL cron', () => {
 
     const { db, statements } = fakeDb([pending('txn_a', 40)])
     const run = await runCron({ authorization, db })
+
+    expect(run).toMatchObject({ body: 'Unauthorized', queried: [], status: 401 })
+    expect(statements).toStrictEqual([])
+  })
+
+  it.each([
+    ['an empty secret', '', 'Bearer '],
+    ['an unset secret', undefined, 'Bearer undefined'],
+  ])('answers 401 to every call under %s', async (_case, cronSecret, authorization) => {
+    expect.hasAssertions()
+
+    const { db, statements } = fakeDb([pending('txn_a', 40)])
+    const run = await runCron({ authorization, config: { cronSecret }, db })
 
     expect(run).toMatchObject({ body: 'Unauthorized', queried: [], status: 401 })
     expect(statements).toStrictEqual([])

@@ -1,37 +1,35 @@
 import type { FormInputProps } from '@ariakit/react'
 import { FormInput } from '@ariakit/react'
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import type { CurrencyInputProps } from 'react-currency-input-field'
-import { CurrencyInput } from 'react-currency-input-field'
+import { CurrencyInput, cleanValue } from 'react-currency-input-field'
 
 import { createCurrencyFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
-type ValueChange = NonNullable<CurrencyInputProps['onValueChange']>
-
 export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' | 'name'> {
-  /** The largest amount the field takes. A keystroke that would pass it is ignored. */
+  /** The largest amount the field takes. An entry past it leaves the field as it was. */
   max: number
-  onValueChange: ValueChange
+  onOverMax: () => void
+  onValueChange: NonNullable<CurrencyInputProps['onValueChange']>
 }
 
-/** Whether the field's clean value, such as `1234.5`, is at most `max`. Empty fits. */
-export const fitsMax = (value: string | undefined, max: number) =>
-  !(Number.parseFloat(value ?? '') > max)
+const amountFormat = {
+  allowNegativeValue: false,
+  decimalSeparator: '.',
+  decimalsLimit: 2,
+  disableAbbreviations: true,
+  groupSeparator: ',',
+} as const
 
-/** Characters of the largest amount with its cents, such as `5000000.00`. */
-export const maxLengthFor = (max: number) => `${Math.trunc(max)}.00`.length
+export const fitsMax = (text: string | undefined, max: number) =>
+  !(Number.parseFloat(cleanValue({ ...amountFormat, value: text ?? '' })) > max)
+
+export const sameAmount = (a: string, b: string) =>
+  a === b || Number.parseFloat(a) === Number.parseFloat(b)
 
 export function InputCurrency(props: InputCurrencyProps) {
-  const { autoComplete, max, name, onValueChange } = props
-  const handleValueChange: ValueChange = useCallback(
-    (value, ...rest) => {
-      if (fitsMax(value, max)) {
-        onValueChange(value, ...rest)
-      }
-    },
-    [max, onValueChange],
-  )
+  const { autoComplete, max, name, onOverMax, onValueChange } = props
   const currency = useMemo(
     () =>
       createCurrencyFormatter({ showSymbol: true })
@@ -78,12 +76,20 @@ export function InputCurrency(props: InputCurrencyProps) {
          */
         render={({ onChange, defaultValue, ...rest }) => (
           <CurrencyInput
-            allowNegativeValue={false}
+            {...amountFormat}
             inputMode="numeric"
             max={max}
-            maxLength={maxLengthFor(max)}
-            onValueChange={handleValueChange}
+            onValueChange={onValueChange}
             placeholder="0.00"
+            // The library keeps its own copy of the text and edits the next keystroke against it, so
+            // an entry past `max` is swapped for the kept amount before the library stores it.
+            transformRawValue={(text) => {
+              if (fitsMax(text, max)) {
+                return text
+              }
+              onOverMax()
+              return 'value' in rest && typeof rest.value === 'string' ? rest.value : ''
+            }}
             type="text"
             {...rest}
           />
