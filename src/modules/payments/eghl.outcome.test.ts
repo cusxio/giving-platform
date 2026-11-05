@@ -283,9 +283,9 @@ const EXISTING_ANSWERS = [
   [EghlQueryTxnStatus.Captured, '', 'pending'],
   [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded'],
   [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded', '50.00'],
-  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'pending', '25.00'],
-  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'pending', '50.01'],
-  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'pending', '25'],
+  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded', '25.00'],
+  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded', '50.01'],
+  [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded', '25'],
   [EghlQueryTxnStatus.Refunded, 'Transaction refunded', 'refunded', ''],
   [EghlQueryTxnStatus.Reversed, 'Transaction reversed', 'refunded'],
   [EghlQueryTxnStatus.Reversed, 'Transaction reversed', 'refunded', '25.00'],
@@ -314,41 +314,25 @@ describe('what a status query answer says', () => {
     },
   )
 
-  it.each(['25.00', '50.01'])(
-    'leaves a refund of %s on a 50.00 sale as an inconclusive pending',
-    (TotalRefundAmount) => {
-      expect.hasAssertions()
-
-      expect(
-        outcomeOf(
-          answered({
-            TotalRefundAmount,
-            TxnMessage: 'Transaction refunded',
-            TxnStatus: EghlQueryTxnStatus.Refunded,
-          }),
-        ).unwrap(),
-      ).toMatchObject({ answer: 'inconclusive', kind: 'pending' })
-    },
-  )
-
   it.each([
-    [undefined, null],
-    ['50.00', 5000],
-    ['', null],
+    [EghlQueryTxnStatus.Refunded, undefined, { kind: 'none' }],
+    [EghlQueryTxnStatus.Refunded, '', { kind: 'none' }],
+    [EghlQueryTxnStatus.Refunded, '50.00', { cents: 5000, kind: 'total' }],
+    [EghlQueryTxnStatus.Refunded, '25.00', { cents: 2500, kind: 'total' }],
+    [EghlQueryTxnStatus.Refunded, '50.01', { cents: 5001, kind: 'total' }],
+    [EghlQueryTxnStatus.Refunded, '25', { kind: 'unreadable' }],
+    [EghlQueryTxnStatus.Reversed, '25.00', { kind: 'none' }],
+    [EghlQueryTxnStatus.Reversed, '25', { kind: 'none' }],
   ] as const)(
-    'carries a refunded total of %j as %j cents',
-    (TotalRefundAmount, refundedAmountInCents) => {
+    'carries a status %s answer with a refunded total of %j as %j',
+    (TxnStatus, TotalRefundAmount, refund) => {
       expect.hasAssertions()
 
       expect(
         outcomeOf(
-          answered({
-            TotalRefundAmount,
-            TxnMessage: 'Transaction refunded',
-            TxnStatus: EghlQueryTxnStatus.Refunded,
-          }),
+          answered({ TotalRefundAmount, TxnMessage: 'Transaction refunded', TxnStatus }),
         ).unwrap(),
-      ).toMatchObject({ kind: 'refunded', refundedAmountInCents })
+      ).toMatchObject({ kind: 'refunded', refund })
     },
   )
 
@@ -385,7 +369,7 @@ describe('what a status query answer says', () => {
         outcomeOf(answered({ ...newCard, TxnMessage: 'Transaction refunded', TxnStatus })).unwrap(),
       ).toStrictEqual({
         kind: 'refunded',
-        refundedAmountInCents: null,
+        refund: { kind: 'none' },
         record: {
           amountInCents: 5000,
           currency: 'MYR',

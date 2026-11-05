@@ -465,8 +465,8 @@ describe('the eGHL client reading replies', () => {
       ['25.00', 2500],
       ['50.01', 5001],
     ])(
-      'leaves a status 10 answer refunding %s of a 50.00 sale pending, and logs it as an error',
-      async (TotalRefundAmount, refundedCents) => {
+      'reads a status 10 answer refunding %s of a 50.00 sale as refunded with that total',
+      async (TotalRefundAmount, cents) => {
         expect.hasAssertions()
         const { events, logger } = recordingLogger()
 
@@ -478,20 +478,17 @@ describe('the eGHL client reading replies', () => {
           logger,
         )
 
-        expect(okValue(result)).toMatchObject({ answer: 'inconclusive', kind: 'pending' })
+        expect(okValue(result)).toMatchObject({
+          kind: 'refunded',
+          refund: { cents, kind: 'total' },
+        })
         expect(events).toMatchObject([
-          {
-            amount_in_cents: 5000,
-            event: 'eghl.query.answered',
-            level: 50,
-            refunded_amount_in_cents: refundedCents,
-            status: EghlQueryTxnStatus.Refunded,
-          },
+          { event: 'eghl.query.answered', level: 30, status: EghlQueryTxnStatus.Refunded },
         ])
       },
     )
 
-    it('leaves a status 10 answer with an unreadable refunded total pending, and logs it', async () => {
+    it('reads a status 10 answer with an unreadable refunded total as refunded, and logs the total', async () => {
       expect.hasAssertions()
       const { events, logger } = recordingLogger()
 
@@ -503,14 +500,9 @@ describe('the eGHL client reading replies', () => {
         logger,
       )
 
-      expect(okValue(result)).toMatchObject({ answer: 'inconclusive', kind: 'pending' })
+      expect(okValue(result)).toMatchObject({ kind: 'refunded', refund: { kind: 'unreadable' } })
       expect(events).toMatchObject([
-        {
-          amount_in_cents: 5000,
-          event: 'eghl.query.answered',
-          level: 50,
-          refunded_amount_in_cents: null,
-        },
+        { event: 'eghl.query.answered', level: 30 },
         {
           event: 'eghl.query.refund_total_unreadable',
           level: 40,
@@ -518,6 +510,52 @@ describe('the eGHL client reading replies', () => {
           transaction_id: 'txn_abc123',
         },
       ])
+    })
+
+    it('reads a success answer that shows a refunded total as a success, and warns with both amounts', async () => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      const result = await queryAgainstGatewayReply(
+        existingTransactionReply({
+          TotalRefundAmount: '25.00',
+          TxnMessage: 'Transaction Successful',
+          TxnStatus: EghlTxnStatus.Success,
+        } as unknown as Partial<EghlPaymentResponse>),
+        logger,
+      )
+
+      expect(okValue(result)).toMatchObject({ kind: 'succeeded' })
+      expect(events).toMatchObject([
+        { event: 'eghl.query.answered', level: 30, status: EghlTxnStatus.Success },
+        {
+          amount_in_cents: 5000,
+          event: 'eghl.query.refund_on_success',
+          level: 40,
+          refunded_amount_in_cents: 2500,
+          transaction_id: 'txn_abc123',
+        },
+      ])
+    })
+
+    it.each([
+      ['no refunded total', {}],
+      ['an empty refunded total', { TotalRefundAmount: '' }],
+      ['a refunded total of 0.00', { TotalRefundAmount: '0.00' }],
+    ])('logs nothing more for a success answer with %s', async (_case, refundTotal) => {
+      expect.hasAssertions()
+      const { events, logger } = recordingLogger()
+
+      await queryAgainstGatewayReply(
+        existingTransactionReply({
+          ...refundTotal,
+          TxnMessage: 'Transaction Successful',
+          TxnStatus: EghlTxnStatus.Success,
+        }),
+        logger,
+      )
+
+      expect(events.map(({ event }) => event)).toStrictEqual(['eghl.query.answered'])
     })
 
     it('rejects a verified reply for another payment', async () => {

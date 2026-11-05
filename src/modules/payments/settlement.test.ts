@@ -414,7 +414,7 @@ const PENDING_ROW_AGED_40_MINUTES = {
 const rowTheGatewayRefunded = async () => {
   const row = statefulRow()
   row.queryStatus.mockResolvedValue(
-    Result.ok({ kind: 'refunded', record: REFUND, refundedAmountInCents: null }),
+    Result.ok({ kind: 'refunded', record: REFUND, refund: { kind: 'none' } }),
   )
   await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
   row.mark()
@@ -427,7 +427,7 @@ describe('a pending row the gateway answers refunded or reversed', () => {
 
     const row = statefulRow()
     row.queryStatus.mockResolvedValue(
-      Result.ok({ kind: 'refunded', record: REFUND, refundedAmountInCents: null }),
+      Result.ok({ kind: 'refunded', record: REFUND, refund: { kind: 'none' } }),
     )
     const settled = await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
 
@@ -459,20 +459,36 @@ describe('a pending row the gateway answers refunded or reversed', () => {
     )
   })
 
-  it.each(['13.50', '27.01'])(
-    'stays pending on the cron when the gateway refunded %s of a 27.00 sale',
-    async (total) => {
+  it.each([
+    ['13.50', 1350],
+    ['27.01', 2701],
+    ['13', null],
+  ] as const)(
+    'is held by the cron with an alert when the gateway shows %s refunded of a 27.00 sale',
+    async (total, refundedCents) => {
       expect.hasAssertions()
 
       const row = statefulRow()
-      const { answer, events } = await realClientReadingSignedRefund(total)
+      const { answer } = await realClientReadingSignedRefund(total)
       row.queryStatus.mockResolvedValue(answer)
       const settled = await settlePolled(row.deps, PENDING_ROW_AGED_40_MINUTES)
 
-      expect(okValue(settled)).toStrictEqual({ kind: 'waiting', why: 'gateway_pending' })
-      expect([row.status(), row.paymentRows()]).toStrictEqual(['pending', 0])
-      expect(row.callsSince()).toStrictEqual([])
-      expect(events).toMatchObject([{ event: 'eghl.query.answered', level: 50 }])
+      expect(okValue(settled)).toStrictEqual({ kind: 'held', why: 'refund_mismatch' })
+      expect([row.status(), row.paymentRows()]).toStrictEqual(['held', 0])
+      expect(row.callsSince()).toStrictEqual(HELD_WRITES)
+      expect(row.eventsSince()).toStrictEqual([
+        expect.objectContaining({ event: 'eghl.cron.syncing_status' }),
+        expect.objectContaining({
+          amount_in_cents: STORED_CENTS,
+          event: 'payment.finalize.refund_mismatch',
+          from: 'pending',
+          level: 50,
+          provider_txn_id: 'CIVtxn_abc123',
+          refunded_amount_in_cents: refundedCents,
+          source: 'cron',
+          stored_amount_in_cents: STORED_CENTS,
+        }),
+      ])
     },
   )
 
@@ -487,7 +503,7 @@ describe('a pending row the gateway answers refunded or reversed', () => {
 
       const row = statefulRow()
       row.queryStatus.mockResolvedValue(
-        Result.ok({ kind: 'refunded', record: REFUND, refundedAmountInCents: null }),
+        Result.ok({ kind: 'refunded', record: REFUND, refund: { kind: 'none' } }),
       )
       const settled = await settleReply(
         row.deps,

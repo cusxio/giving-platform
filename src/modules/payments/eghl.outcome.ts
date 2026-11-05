@@ -12,7 +12,13 @@ import {
   EghlTxnExists,
   EghlTxnStatus,
 } from './eghl.wire'
-import type { CardUse, GatewayReply, PaymentOutcome, PaymentRecord } from './payment-outcome'
+import type {
+  CardUse,
+  GatewayReply,
+  PaymentOutcome,
+  PaymentRecord,
+  RefundShown,
+} from './payment-outcome'
 
 type Wire = EghlPaymentResponse | EghlQueryResponse
 
@@ -47,7 +53,7 @@ export function centsOf(amount: string): number {
   return Number(parts.ringgit) * 100 + Number(parts.cents)
 }
 
-export function refundedCentsOf({ TotalRefundAmount }: EghlQueryResponse): number | null {
+export function refundedTotalOf({ TotalRefundAmount }: EghlQueryResponse): number | null {
   return TotalRefundAmount !== undefined && AMOUNT.test(TotalRefundAmount)
     ? centsOf(TotalRefundAmount)
     : null
@@ -56,16 +62,15 @@ export function refundedCentsOf({ TotalRefundAmount }: EghlQueryResponse): numbe
 export const isUnreadableRefundTotal = ({ TotalRefundAmount }: EghlQueryResponse) =>
   TotalRefundAmount !== undefined && TotalRefundAmount !== '' && !AMOUNT.test(TotalRefundAmount)
 
-/**
- * Neither eGHL hash covers TotalRefundAmount, so it may only hold a row back, never settle one. An
- * unreadable total holds it back too: the refunded receipt promises the full amount.
- */
-export function refundNotWholeSale(wire: EghlQueryResponse): boolean {
+function refundShownOf(wire: EghlQueryResponse): RefundShown {
   if (wire.TxnStatus !== EghlQueryTxnStatus.Refunded) {
-    return false
+    return { kind: 'none' }
   }
-  const refunded = refundedCentsOf(wire)
-  return isUnreadableRefundTotal(wire) || (refunded !== null && refunded !== centsOf(wire.Amount))
+  if (isUnreadableRefundTotal(wire)) {
+    return { kind: 'unreadable' }
+  }
+  const cents = refundedTotalOf(wire)
+  return cents === null ? { kind: 'none' } : { cents, kind: 'total' }
 }
 
 /** The gateway sends Malaysia time with no zone. */
@@ -177,9 +182,7 @@ function existingOutcomeOf(wire: EghlQueryResponse, clipped: ClippedField[]): Pa
     }
     case EghlQueryTxnStatus.Refunded:
     case EghlQueryTxnStatus.Reversed: {
-      return refundNotWholeSale(wire)
-        ? { answer: 'inconclusive', kind: 'pending', record }
-        : { kind: 'refunded', record, refundedAmountInCents: refundedCentsOf(wire) }
+      return { kind: 'refunded', record, refund: refundShownOf(wire) }
     }
     case EghlQueryTxnStatus.Authorized:
     case EghlQueryTxnStatus.Captured:

@@ -51,7 +51,7 @@ const OUTCOME_INTO = {
   refunded: {
     kind: 'refunded',
     record: { ...record, message: 'Transaction refunded' },
-    refundedAmountInCents: null,
+    refund: { kind: 'none' },
   },
   success: { card: null, kind: 'succeeded', record },
 } as const satisfies Record<Reachable, Settling>

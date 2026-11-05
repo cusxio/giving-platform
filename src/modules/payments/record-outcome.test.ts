@@ -50,7 +50,7 @@ const cancelled = (): Settling => ({
 const refunded = (): Settling => ({
   kind: 'refunded',
   record: paidRecord({ message: 'Transaction refunded' }),
-  refundedAmountInCents: 5000,
+  refund: { cents: 5000, kind: 'total' },
 })
 
 const newCard: CardUse = {
@@ -814,4 +814,41 @@ describe('a refunded row', () => {
       'payments.findProviderTxnIds',
     ])
   })
+})
+
+describe('a refund the gateway does not show to be the whole donation', () => {
+  it.each([
+    ['a partial refunded total', { cents: 2500, kind: 'total' }, 2500],
+    ['an unreadable refunded total', { kind: 'unreadable' }, null],
+  ] as const)(
+    'moves the row to held on %s, with no payment, and alerts with both amounts',
+    async (_case, refund, refundedCents) => {
+      expect.hasAssertions()
+
+      const { events, logger } = recordingLogger()
+      const db = storedAs('guest')
+      const result = await record(
+        db,
+        { kind: 'refunded', record: paidRecord({ message: 'Transaction refunded' }), refund },
+        logger,
+      )
+
+      expect(okValue(result)).toStrictEqual({ kind: 'held', why: 'refund_mismatch' })
+      expect(db.calls.map(({ name }) => name)).toStrictEqual([
+        'payments.lockTransaction',
+        'payments.findProviderTxnIds',
+        'payments.moveTransaction',
+      ])
+      expect(events).toStrictEqual([
+        expect.objectContaining({
+          amount_in_cents: 5000,
+          event: 'payment.finalize.refund_mismatch',
+          from: 'pending',
+          level: 50,
+          refunded_amount_in_cents: refundedCents,
+          stored_amount_in_cents: 5000,
+        }),
+      ])
+    },
+  )
 })

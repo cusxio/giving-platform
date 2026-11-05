@@ -10,6 +10,7 @@ import type {
   PaymentOutcome,
   PaymentRecord,
   Plan,
+  RefundShown,
   Settling,
   StoredTransaction,
 } from './payment-outcome'
@@ -50,7 +51,7 @@ const outcomeOf = (kind: Settling['kind'], money: Money = 'same money'): Settlin
       return { kind, record: MONEY[money] }
     }
     case 'refunded': {
-      return { kind, record: MONEY[money], refundedAmountInCents: null }
+      return { kind, record: MONEY[money], refund: { kind: 'none' } }
     }
     case 'expired': {
       return { kind, transactionId: 'txn_abc123' }
@@ -235,7 +236,7 @@ const STEPS = {
   refunded: {
     kind: 'refunded',
     record: { ...record, message: 'Transaction refunded' },
-    refundedAmountInCents: null,
+    refund: { kind: 'none' },
   },
   succeeded: outcomeOf('succeeded'),
 } as const satisfies Record<string, Settling>
@@ -413,6 +414,34 @@ describe('planning a transition', () => {
       move('success', 'failed'),
     )
   })
+
+  const refundOf = (refund: RefundShown): Settling => ({ kind: 'refunded', record, refund })
+  const holdRefund = {
+    kind: 'hold',
+    received: record,
+    transition: transition('held', 'pending'),
+    why: 'refund_mismatch',
+  }
+
+  it.each([
+    ['a refunded total below the donation', { cents: 2500, kind: 'total' }, holdRefund],
+    ['a refunded total above the donation', { cents: 5001, kind: 'total' }, holdRefund],
+    ['an unreadable refunded total', { kind: 'unreadable' }, holdRefund],
+    ['a refunded total of the whole donation', { cents: 5000, kind: 'total' }, move('refunded')],
+    ['no refunded total', { kind: 'none' }, move('refunded')],
+  ] as const)('plans a pending row refunded with %s', (_case, refund, plan) => {
+    expect.hasAssertions()
+
+    expect(fieldsOf(planTransition(stored('pending'), refundOf(refund)))).toStrictEqual(plan)
+  })
+
+  it('absorbs a partial refund on a held row as a replay', () => {
+    expect.hasAssertions()
+
+    expect(planTransition(stored('held'), refundOf({ cents: 2500, kind: 'total' }))).toStrictEqual(
+      absorb('held', 'replay'),
+    )
+  })
 })
 
 describe('any sequence of outcomes', () => {
@@ -536,7 +565,7 @@ describe('deciding what a status query answer means', () => {
     failed: { kind: 'failed', record },
     notFound: { kind: 'notFound' },
     pending: { answer: 'gateway_pending', kind: 'pending', record },
-    refunded: { kind: 'refunded', record, refundedAmountInCents: null },
+    refunded: { kind: 'refunded', record, refund: { kind: 'none' } },
     succeeded: { card: null, kind: 'succeeded', record },
   } as const satisfies Record<PaymentOutcome['kind'], PaymentOutcome>
   const openedPage = { answer: 'gateway_pending', kind: 'pending', record: noReference } as const

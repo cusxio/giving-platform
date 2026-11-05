@@ -8,7 +8,7 @@ import { required } from '#/server/infra-error'
 import { logAlert } from '#/server/procedure.server'
 
 import type { HoldReason, Plan, Settling, StoredTransaction } from './payment-outcome'
-import { planTransition, targetOf, transactionIdOf } from './payment-outcome'
+import { planTransition, refundedCentsOf, targetOf, transactionIdOf } from './payment-outcome'
 import { touchSavedCard, upsertSavedCard } from './saved-cards.repository.server'
 import {
   findProviderTxnIds,
@@ -38,6 +38,7 @@ const HOLD_MESSAGES: Record<HoldReason, string> = {
   amount_mismatch: 'Gateway reports a success for other money than the transaction, holding it',
   conflict: 'Gateway reports a success under a TxnID the transaction already recorded, holding it',
   currency_mismatch: 'Gateway reports a success for other money than the transaction, holding it',
+  refund_mismatch: 'Gateway reports a refund it does not show to be the whole sale, holding it',
 }
 
 type LateCause = 'cancel' | 'gateway_failure' | 'no_gateway_txn'
@@ -136,6 +137,9 @@ export function recordOutcome(
             method: plan.received.method,
             provider_txn_id: plan.received.providerTxnId,
             stored_amount_in_cents: stored.amountInCents,
+            ...(outcome.kind === 'refunded' && {
+              refunded_amount_in_cents: refundedCentsOf(outcome.refund),
+            }),
             ...logFields,
           },
           HOLD_MESSAGES[plan.why],
@@ -195,7 +199,7 @@ export function recordOutcome(
             event: 'payment.finalize.refunded',
             method: record.method,
             provider_txn_id: record.providerTxnId,
-            refunded_amount_in_cents: outcome.refundedAmountInCents,
+            refunded_amount_in_cents: refundedCentsOf(outcome.refund),
             stored_amount_in_cents: stored.amountInCents,
             ...logFields,
           },

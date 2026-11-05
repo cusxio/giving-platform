@@ -24,12 +24,16 @@ import {
   isUnexpectedForSale,
   isUnreadableRefundTotal,
   outcomeOf,
-  refundNotWholeSale,
-  refundedCentsOf,
+  refundedTotalOf,
   replyOf,
 } from './eghl.outcome'
 import type { EghlPaymentResponse, EghlQueryResponse, Verified } from './eghl.wire'
-import { EghlPaymentResponseSchema, EghlQueryResponseSchema, EghlTxnExists } from './eghl.wire'
+import {
+  EghlPaymentResponseSchema,
+  EghlQueryResponseSchema,
+  EghlTxnExists,
+  EghlTxnStatus,
+} from './eghl.wire'
 import type { PaymentGateway, PaymentRequest } from './gateway'
 import { PAGE_TIMEOUT_MINUTES, PAYMENT_CURRENCY } from './payment-outcome'
 
@@ -86,17 +90,20 @@ function logAnswer(logger: Logger, answer: EghlQueryResponse) {
   }
   if (isUnexpectedForSale(answer)) {
     logger.error(fields, 'Gateway reports a status a sale cannot reach, leaving it pending')
-  } else if (refundNotWholeSale(answer)) {
-    logger.error(
-      {
-        ...fields,
-        amount_in_cents: centsOf(answer.Amount),
-        refunded_amount_in_cents: refundedCentsOf(answer),
-      },
-      'Gateway reports a refund it does not show to be the whole sale, leaving it pending',
-    )
   } else {
     logger.info(fields, 'Gateway answered the status query')
+  }
+  const refunded = refundedTotalOf(answer)
+  if (answer.TxnStatus === EghlTxnStatus.Success && refunded !== null && refunded > 0) {
+    logger.warn(
+      {
+        amount_in_cents: centsOf(answer.Amount),
+        event: 'eghl.query.refund_on_success',
+        refunded_amount_in_cents: refunded,
+        transaction_id: answer.PaymentID,
+      },
+      'Gateway reports a success that shows a refunded total, recording the whole sale',
+    )
   }
   if (isUnreadableRefundTotal(answer)) {
     logger.warn(

@@ -32,6 +32,18 @@ export interface PaymentRecord {
   readonly transactionId: string
 }
 
+/**
+ * The refunded total a refund answer shows. eGHL shows one for card payments only (spec 2.4), and a
+ * reversal undoes the whole sale, so its total is not read.
+ */
+export type RefundShown =
+  | { readonly cents: number; readonly kind: 'total' }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'unreadable' }
+
+export const refundedCentsOf = (refund: RefundShown): number | null =>
+  refund.kind === 'total' ? refund.cents : null
+
 /** What the gateway reports about one payment. */
 export type PaymentOutcome =
   | { readonly card: CardUse | null; readonly kind: 'succeeded'; readonly record: PaymentRecord }
@@ -42,12 +54,7 @@ export type PaymentOutcome =
       readonly kind: 'pending'
       readonly record: PaymentRecord
     }
-  | {
-      readonly kind: 'refunded'
-      readonly record: PaymentRecord
-      /** eGHL reports a refunded total for card payments only (spec 2.4). */
-      readonly refundedAmountInCents: number | null
-    }
+  | { readonly kind: 'refunded'; readonly record: PaymentRecord; readonly refund: RefundShown }
 
 type SucceededOutcome = Extract<PaymentOutcome, { kind: 'succeeded' }>
 type FailedOutcome = Extract<PaymentOutcome, { kind: 'failed' }>
@@ -123,7 +130,7 @@ class Transition {
 }
 export type { Transition }
 
-export type HoldReason = 'amount_mismatch' | 'conflict' | 'currency_mismatch'
+export type HoldReason = 'amount_mismatch' | 'conflict' | 'currency_mismatch' | 'refund_mismatch'
 
 export type Plan =
   | {
@@ -151,7 +158,19 @@ interface HoldCause {
 const recordedBefore = (stored: StoredTransaction, record: PaymentRecord): boolean =>
   record.providerTxnId !== '' && stored.providerTxnIds.includes(record.providerTxnId)
 
+/**
+ * The refunded receipt promises the full amount back. The total is not signed, so it can only hold
+ * a refund back, never settle one.
+ */
+const shownWhole = (stored: StoredTransaction, refund: RefundShown): boolean =>
+  refund.kind === 'none' || (refund.kind === 'total' && refund.cents === stored.amountInCents)
+
 function holdCauseOf(stored: StoredTransaction, outcome: Settling): HoldCause | null {
+  if (outcome.kind === 'refunded') {
+    return shownWhole(stored, outcome.refund)
+      ? null
+      : { received: outcome.record, why: 'refund_mismatch' }
+  }
   if (outcome.kind !== 'succeeded') {
     return null
   }
