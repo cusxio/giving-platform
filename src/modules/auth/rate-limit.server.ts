@@ -24,9 +24,10 @@ interface Limit {
  * - `address`: the client address across all emails, so one address cannot work through many
  *   emails. Supabase Auth's per-IP defaults, which leave room for a congregation on one network.
  * - `client`: the email from one address. The strict limit, so a client that floods an inbox or
- *   guesses codes stops itself without locking out the same email on another address. Its checks
- *   match one code's five over the request window, so one address voids at most one code in a
- *   window in which the owner can ask for five.
+ *   guesses codes stops itself without locking out the same email on another address. A guess
+ *   spends a check of every live code, so five quick wrong guesses from one address void every
+ *   code live at that moment, and that address then cannot verify the email for the rest of the
+ *   window. That is the cost of bounding each code at five guesses.
  * - `email`: the email across all addresses, so many addresses together cannot flood one inbox
  *   or guess one code. Its window is never longer than the client's, so one address fills at most
  *   two client windows inside it; the cap is more than twice the client limit, so one address
@@ -146,9 +147,10 @@ export function resetOtpVerify(
  * before the comparison, so concurrent guesses cannot slip past the limit. The window opens at the
  * first check, after the code was issued, so it outlives the code's own lifetime. One issue of a
  * code thus faces at most five guesses, however many addresses send them, and a guess while
- * several codes are live counts against each of them. Only a reissue of the same digits while the
- * code is live (`createToken`) extends it past its window, and then the reissue gets its own five,
- * as a new code would.
+ * several codes are live counts against each of them. A reissue of the same digits while the code
+ * is live (`createToken`) extends its life and keeps its count. It spends what is left of the old
+ * window first and gets five fresh checks only once that window ends, so the digits still face at
+ * most five guesses per issue.
  */
 const CODE_CHECKS: Limit = { maxAttempts: 5, windowSeconds: CODE_LIFETIME_MINUTES * 60 }
 
