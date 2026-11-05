@@ -20,7 +20,12 @@ import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 import type { RequestOtpInput } from './request-otp.server'
 import { requestOtpAction } from './request-otp.server'
 import { createSession } from './sessions.repository.server'
-import { claimTokenIfUnused, createToken, findLiveTokens } from './tokens.repository.server'
+import {
+  claimTokenIfUnused,
+  createToken,
+  deleteDeadTokensOf,
+  findLiveTokens,
+} from './tokens.repository.server'
 import type { VerifyOtpInput } from './verify-otp.server'
 import { verifyOtpAction } from './verify-otp.server'
 
@@ -83,6 +88,7 @@ function setup(existing?: Status) {
     users.set(EMAIL, userRow(EMAIL, 1, existing))
   }
   const tokens: TokenRow[] = []
+  let tokenIds = 0
   const sentEmails: MailMessage[] = []
   const events: LogLine[] = []
   const attempts = new Map<string, number>()
@@ -106,15 +112,30 @@ function setup(existing?: Status) {
       }
     })
     .on(createToken, (userId, tokenHash, mode) => {
+      const expiresAt = new Date(Date.now() + 5 * 60_000)
+      const held = tokens.find((t) => t.userId === userId && t.tokenHash === tokenHash)
+      if (held) {
+        Object.assign(held, { expiresAt, mode })
+        return
+      }
+      tokenIds += 1
       tokens.unshift({
         createdAt: new Date(),
-        expiresAt: new Date(Date.now() + 5 * 60_000),
-        id: tokens.length + 1,
+        expiresAt,
+        id: tokenIds,
         mode,
         tokenHash,
         usedAt: null,
         userId,
       })
+    })
+    .on(deleteDeadTokensOf, (userId) => {
+      for (let i = tokens.length - 1; i >= 0; i--) {
+        const t = tokens[i]
+        if (t?.userId === userId && (t.usedAt !== null || t.expiresAt <= new Date())) {
+          tokens.splice(i, 1)
+        }
+      }
     })
     .on(findLiveTokens, (userId, mode) =>
       tokens.filter(
@@ -453,10 +474,22 @@ describe('requesting a code', () => {
   })
 
   it.each([
-    ['the rate limit check fails', (db: FakeDb) => db.on(recordAttempt, fail)],
-    ['the user lookup fails', (db: FakeDb) => db.on(findUserByEmail, fail)],
-    ['the token insert fails', (db: FakeDb) => db.on(createToken, fail)],
-  ] as const)('is a server error when %s', async (_case, breakDb) => {
+    [
+      'the rate limit check fails',
+      (db: FakeDb) => db.on(recordAttempt, fail),
+      'auth.recordAttempt',
+    ],
+    [
+      'the user lookup fails',
+      (db: FakeDb) => db.on(findUserByEmail, fail),
+      'account.findUserByEmail',
+    ],
+    [
+      'the token insert fails',
+      (db: FakeDb) => db.on(createToken, fail),
+      'auth.deleteDeadTokensOf + auth.createToken',
+    ],
+  ] as const)('is a server error when %s', async (_case, breakDb, op) => {
     expect.hasAssertions()
 
     const { db, deps, events } = setup('active')
@@ -469,7 +502,7 @@ describe('requesting a code', () => {
       'error.type': 'Error',
       event: 'auth.request_otp.failed',
       level: 50,
-      op: db.calls.at(-1)?.name,
+      op,
     })
   })
 

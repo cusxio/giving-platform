@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 
 import { addMinutes, now } from '#/core/date'
 import { defineQuery, nothing, rows } from '#/server/db.server'
@@ -29,6 +29,11 @@ export const claimTokenIfUnused = defineQuery(
 /** How long a code can be used after it is issued. */
 export const CODE_LIFETIME_MINUTES = 5
 
+/**
+ * Stores a code's hash. The hash is unique per user, so a repeated six digits conflict with the
+ * row that holds them. Run after `deleteDeadTokensOf` in one batch, that row is live, and so it is
+ * this very code: it keeps its id, and with it its check count, and takes the new expiry and mode.
+ */
 export const createToken = defineQuery(
   'auth.createToken',
   (
@@ -39,7 +44,21 @@ export const createToken = defineQuery(
   ) =>
     db
       .insert(tokens)
-      .values({ expiresAt: addMinutes(now(), CODE_LIFETIME_MINUTES), mode, tokenHash, userId }),
+      .values({ expiresAt: addMinutes(now(), CODE_LIFETIME_MINUTES), mode, tokenHash, userId })
+      .onConflictDoUpdate({
+        set: { expiresAt: sql`excluded.expires_at`, mode: sql`excluded.mode` },
+        target: [tokens.tokenHash, tokens.userId],
+      }),
+  nothing,
+)
+
+/** A code nobody can enter any more: claimed, or past its expiry. */
+const dead = () => or(isNotNull(tokens.usedAt), lte(tokens.expiresAt, now()))
+
+/** Removes the user's dead codes, so a new code can only conflict with a live one. */
+export const deleteDeadTokensOf = defineQuery(
+  'auth.deleteDeadTokensOf',
+  (db, userId: Token['userId']) => db.delete(tokens).where(and(eq(tokens.userId, userId), dead())),
   nothing,
 )
 

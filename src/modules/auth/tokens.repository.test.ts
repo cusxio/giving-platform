@@ -3,7 +3,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { Query } from '#/server/db.server'
 import { createDriverDb } from '#/server/testing/driver-db'
 
-import { createToken } from './tokens.repository.server'
+import { createToken, deleteDeadTokensOf } from './tokens.repository.server'
 
 const NOW = new Date('2026-11-05T10:00:00Z')
 const minutesFromNow = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000)
@@ -36,7 +36,22 @@ describe('storing a code', () => {
         sql:
           'insert into "tokens" ("created_at", "expires_at", "id", "mode", "token_hash", "used_at", "user_id") ' +
           'values (default, $1, default, $2, $3, default, $4) ' +
-          'on conflict ("token_hash","user_id") do update set "expires_at" = excluded."expires_at", "mode" = excluded."mode"',
+          'on conflict ("token_hash","user_id") do update set "expires_at" = excluded.expires_at, "mode" = excluded.mode',
+      },
+    ])
+  })
+
+  it("deletes only the user's claimed and expired codes", async () => {
+    expect.hasAssertions()
+
+    const statements = await sent(deleteDeadTokensOf(7))
+
+    expect(statements).toStrictEqual([
+      {
+        params: [7, pgTimestamp(NOW)],
+        sql:
+          'delete from "tokens" where ("tokens"."user_id" = $1 and ' +
+          '("tokens"."used_at" is not null or "tokens"."expires_at" <= $2))',
       },
     ])
   })
