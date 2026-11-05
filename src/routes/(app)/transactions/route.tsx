@@ -24,18 +24,15 @@ export const Route = createFileRoute('/(app)/transactions')({
 
     return { page: parseResult.output.page }
   },
-  beforeLoad({ search }) {
-    return { page: Math.max(1, search.page ?? 1) }
-  },
+  loaderDeps: ({ search }) => ({ page: Math.max(1, search.page ?? 1) }),
 
   component: RouteComponent,
 
   head: () => ({ meta: [{ title: `Transactions · ${config.entity}` }] }),
 
-  async loader({ context }) {
+  async loader({ context, deps: { page } }) {
     const {
       user: { id: userId, journey },
-      page,
       queryClient,
     } = context
 
@@ -44,7 +41,7 @@ export const Route = createFileRoute('/(app)/transactions')({
 })
 
 function RouteComponent() {
-  const { page } = Route.useRouteContext()
+  const { page } = Route.useLoaderDeps()
   const {
     user: { id: userId, journey },
     userSettings: { privacyMode },
