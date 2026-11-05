@@ -1,10 +1,9 @@
 import { useFormStore, useFormSubmit, useFormValidate, useStoreState } from '@ariakit/react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import type { User } from '#/modules/account'
-import { useUpdateUserMutation, welcomeQuery } from '#/modules/account'
+import { useUpdateUserMutation } from '#/modules/account'
 
 export function useWelcomeForm(params: {
   guestTransactionExists: boolean
@@ -30,31 +29,14 @@ export function useWelcomeForm(params: {
   }, [store])
 
   const updateUser = useUpdateUserMutation()
-  const queryClient = useQueryClient()
   useFormSubmit(store, async (state) => {
     try {
-      const res = await updateUser.mutateAsync(
-        {
-          firstName: state.values.firstName,
-          lastName: state.values.lastName,
-          // Undefined because it will be handled in the following flow
-          journey: guestTransactionExists ? undefined : 'start_fresh',
-        },
-        {
-          onSuccess(data) {
-            if (data?.type !== 'SUCCESS') {
-              return
-            }
-
-            queryClient.setQueryData(welcomeQuery().queryKey, (prev) => {
-              if (!prev) {
-                return prev
-              }
-              return { ...prev, user: { ...prev.user, ...data.value.user } }
-            })
-          },
-        },
-      )
+      const res = await updateUser.mutateAsync({
+        firstName: state.values.firstName,
+        lastName: state.values.lastName,
+        // Undefined because it will be handled in the following flow
+        journey: guestTransactionExists ? undefined : 'start_fresh',
+      })
 
       if (!res) {
         return

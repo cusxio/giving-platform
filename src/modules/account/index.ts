@@ -6,4 +6,4 @@ export {
   useUpdateUserMutation,
   welcomeQuery,
 } from './account.queries'
-export type { CurrentUserResponse, User, UserSettings } from './account.types'
+export type { User, UserSettings } from './account.types'
