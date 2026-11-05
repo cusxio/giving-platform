@@ -1,7 +1,21 @@
-import { QueryObserver } from '@tanstack/react-query'
+import { QueryObserver, queryOptions } from '@tanstack/react-query'
+import { createMemoryHistory } from '@tanstack/react-router'
 import { describe, expect, it, vi } from 'vitest'
 
+import type * as Account from '#/modules/account'
+
 import { getRouter } from './router'
+
+const getCurrentUser = vi.hoisted(() => vi.fn<() => Promise<{ type: 'AUTH_ERROR' }>>())
+
+vi.mock<typeof Account>(import('#/modules/account'), async (actual) => {
+  const account = await actual()
+  return {
+    ...account,
+    currentUserQuery: () =>
+      queryOptions({ ...account.currentUserQuery(), queryFn: getCurrentUser }),
+  }
+})
 
 async function fetchesOnMount(ageMs: number) {
   const { queryClient } = getRouter().options.context
@@ -29,5 +43,21 @@ describe('the router query cache', () => {
     expect.hasAssertions()
 
     await expect(fetchesOnMount(31_000)).resolves.toBe(1)
+  })
+})
+
+describe('maintenance mode', () => {
+  it('shows the notice at / on a page the server rendered in maintenance, without asking for the user', async () => {
+    expect.hasAssertions()
+
+    getCurrentUser.mockReset().mockResolvedValue({ type: 'AUTH_ERROR' })
+    const router = getRouter()
+    router.update({ ...router.options, history: createMemoryHistory({ initialEntries: ['/'] }) })
+    await router.options.hydrate?.({ isMaintenanceMode: true })
+
+    await router.load()
+
+    expect(router.state.matches.at(-1)?.context).toMatchObject({ isMaintenanceMode: true })
+    expect(getCurrentUser).not.toHaveBeenCalled()
   })
 })

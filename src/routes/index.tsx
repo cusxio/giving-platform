@@ -14,7 +14,7 @@ import { useGivingUrl } from './-hooks/use-giving-url'
 
 export const Route = createFileRoute('/')({
   async beforeLoad({ context, search }) {
-    if (process.env.MAINTENANCE_MODE === 'true') {
+    if (context.isMaintenanceMode) {
       return { isAuthenticated: false, isMaintenanceMode: true }
     }
 
