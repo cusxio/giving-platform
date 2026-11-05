@@ -4,7 +4,12 @@ import { TZDate } from '#/core/date'
 import type { Query } from '#/server/db.server'
 import { createDriverDb } from '#/server/testing/driver-db'
 
-import { createToken, deleteDeadTokensOf } from './tokens.repository.server'
+import {
+  claimTokenIfUnused,
+  createToken,
+  deleteDeadTokensOf,
+  findLiveTokens,
+} from './tokens.repository.server'
 
 const NOW = new Date('2026-11-05T10:00:00Z')
 const minutesFromNow = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000)
@@ -53,6 +58,40 @@ describe('storing a code', () => {
         sql:
           'delete from "tokens" where ("tokens"."user_id" = $1 and ' +
           '("tokens"."used_at" is not null or "tokens"."expires_at" <= $2))',
+      },
+    ])
+  })
+})
+
+describe('reading and claiming a code', () => {
+  it("reads only the user's unexpired, unclaimed codes of the requested mode", async () => {
+    expect.hasAssertions()
+
+    const statements = await sent(findLiveTokens(7, 'login'))
+
+    expect(statements).toStrictEqual([
+      {
+        params: [7, 'login', param(NOW)],
+        sql:
+          'select "created_at", "expires_at", "id", "mode", "token_hash", "used_at", "user_id" ' +
+          'from "tokens" where ("tokens"."user_id" = $1 and "tokens"."mode" = $2 and ' +
+          '"tokens"."expires_at" > $3 and "tokens"."used_at" is null)',
+      },
+    ])
+  })
+
+  it('claims a code only while it is unclaimed and unexpired', async () => {
+    expect.hasAssertions()
+
+    const statements = await sent(claimTokenIfUnused(41, 'hash-of-123456'))
+
+    expect(statements).toStrictEqual([
+      {
+        params: [param(NOW), 41, 'hash-of-123456', param(NOW)],
+        sql:
+          'update "tokens" set "used_at" = $1 where ("tokens"."id" = $2 and ' +
+          '"tokens"."token_hash" = $3 and "tokens"."used_at" is null and ' +
+          '"tokens"."expires_at" > $4) returning "id"',
       },
     ])
   })
