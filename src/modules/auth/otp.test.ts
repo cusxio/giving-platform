@@ -20,7 +20,7 @@ import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 import type { RequestOtpInput } from './request-otp.server'
 import { requestOtpAction } from './request-otp.server'
 import { createSession } from './sessions.repository.server'
-import { claimTokenIfUnused, createToken, findToken } from './tokens.repository.server'
+import { claimTokenIfUnused, createToken, findLiveTokens } from './tokens.repository.server'
 import type { VerifyOtpInput } from './verify-otp.server'
 import { verifyOtpAction } from './verify-otp.server'
 
@@ -43,7 +43,7 @@ const EMAIL = 'donor@example.com'
 const ADDRESS = '198.51.100.1'
 
 type UserRow = NonNullable<QueryResult<typeof findUserByEmail>>
-type TokenRow = NonNullable<QueryResult<typeof findToken>>
+type TokenRow = QueryResult<typeof findLiveTokens>[number]
 type Status = UserRow['status']
 
 interface LogLine {
@@ -116,7 +116,12 @@ function setup(existing?: Status) {
         userId,
       })
     })
-    .on(findToken, (userId) => tokens.find((t) => t.userId === userId && t.usedAt === null) ?? null)
+    .on(findLiveTokens, (userId, mode) =>
+      tokens.filter(
+        (t) =>
+          t.userId === userId && t.mode === mode && t.usedAt === null && t.expiresAt > new Date(),
+      ),
+    )
     .on(claimTokenIfUnused, (id) => {
       const token = tokens.find((t) => t.id === id && t.usedAt === null)
       if (token) {
@@ -548,11 +553,32 @@ describe('verifying a code', () => {
       'auth.recordAttempt',
       'auth.recordAttempt',
       'account.findUserByEmail',
-      'auth.findToken',
+      'auth.findLiveTokens',
       'auth.recordAttempt',
       'auth.claimTokenIfUnused',
       'auth.createSession',
       'auth.resetAttempts',
+    ])
+  })
+
+  it('counts every live code in one batch before comparing', async () => {
+    expect.hasAssertions()
+
+    const { db, deps, otp } = await issued('active', 'login')
+    await request(deps, { email: EMAIL, mode: 'login' })
+    const start = db.roundTrips.length
+
+    await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual(success)
+    expect(db.roundTrips.slice(start)).toStrictEqual([
+      ['auth.recordAttempt'],
+      ['auth.recordAttempt'],
+      ['auth.recordAttempt'],
+      ['account.findUserByEmail'],
+      ['auth.findLiveTokens'],
+      ['auth.recordAttempt', 'auth.recordAttempt'],
+      ['auth.claimTokenIfUnused'],
+      ['auth.createSession'],
+      ['auth.resetAttempts'],
     ])
   })
 
@@ -652,7 +678,7 @@ describe('verifying a code', () => {
     expect.hasAssertions()
 
     const { db, deps, events, otp } = await issued('active', 'login')
-    db.on(findToken, () => null)
+    db.on(findLiveTokens, () => [])
 
     await expect(verify(deps, { email: EMAIL, mode: 'login', otp })).resolves.toStrictEqual({
       error: { code: 'INVALID_OR_EXPIRED_OTP' },

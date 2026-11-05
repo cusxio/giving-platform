@@ -14,11 +14,12 @@ import type { Parsed } from '#/server/input.server'
 import { parseWith } from '#/server/input.server'
 import { business, defineMutation, logInfraEvent } from '#/server/procedure.server'
 
-import { InvalidOtpError, InvalidRequestError } from './auth.errors'
-import { checkCode, checkOtpVerify, limitedAddress, resetOtpVerify } from './rate-limit.server'
+import { CodeExhaustedError, InvalidOtpError, InvalidRequestError } from './auth.errors'
+import { checkCodes, checkOtpVerify, limitedAddress, resetOtpVerify } from './rate-limit.server'
 import { SESSION_MAX_AGE_SECONDS, serializeSessionCookie } from './session-cookie.server'
 import { createSession } from './sessions.repository.server'
-import { claimTokenIfUnused, findToken } from './tokens.repository.server'
+import type { Token } from './tokens.repository.server'
+import { claimTokenIfUnused, findLiveTokens } from './tokens.repository.server'
 
 type VerifyDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 
@@ -39,8 +40,29 @@ const mayUse = (user: User, mode: VerifyOtpInput['mode']) =>
   user.status === (mode === 'login' ? 'active' : 'guest')
 
 /**
- * Claims the user's newest unused code when it matches and has checks left, then creates a session
- * (and activates a guest on signup) in one batch. Returns the serialized session cookie.
+ * The live code the entry matches, when it has checks left. A match on a spent code, or no match
+ * while every live code is spent, is exhaustion; any other miss is a wrong code. At most one code
+ * can match, because a user's live codes have distinct hashes.
+ */
+function matchCode(
+  tokens: readonly Token[],
+  withChecksLeft: ReadonlySet<Token['id']>,
+  hash: string,
+) {
+  const match = tokens.find((token) => constantTimeEqual(hash, token.tokenHash))
+  if (match !== undefined && withChecksLeft.has(match.id)) {
+    return Result.ok(match)
+  }
+  if (match !== undefined || withChecksLeft.size === 0) {
+    return Result.err(new CodeExhaustedError())
+  }
+  return Result.err(new InvalidOtpError())
+}
+
+/**
+ * Claims the user's live code of `mode` that matches and has checks left, then creates a session
+ * (and activates a guest on signup) in one batch. Returns the serialized session cookie. Every
+ * live code is counted before any is compared, so a guess spends one check of each.
  */
 function validateOtp(deps: VerifyDeps, { email, mode, otp }: VerifyOtpInput) {
   return Result.gen(async function* validate() {
@@ -49,14 +71,14 @@ function validateOtp(deps: VerifyDeps, { email, mode, otp }: VerifyOtpInput) {
       return Result.err(new InvalidRequestError())
     }
 
-    const token = yield* Result.await(deps.db.run(findToken(user.id)))
-    if (token === null || token.mode !== mode) {
+    const [first, ...rest] = yield* Result.await(deps.db.run(findLiveTokens(user.id, mode)))
+    if (first === undefined) {
       return Result.err(new InvalidRequestError())
     }
-    yield* Result.await(checkCode(deps, token.id))
-    if (!constantTimeEqual(deps.hashToken(otp), token.tokenHash)) {
-      return Result.err(new InvalidOtpError())
-    }
+    const withChecksLeft = yield* Result.await(
+      checkCodes(deps, [first.id, ...rest.map((token) => token.id)]),
+    )
+    const token = yield* matchCode([first, ...rest], withChecksLeft, deps.hashToken(otp))
 
     // The claim is a compare-and-set, so two concurrent requests cannot both use one code.
     const claimed = yield* Result.await(deps.db.run(claimTokenIfUnused(token.id, token.tokenHash)))

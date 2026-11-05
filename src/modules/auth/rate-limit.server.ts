@@ -7,7 +7,7 @@ import { clientIp } from '#/server/client-ip.server'
 import type { Deps } from '#/server/deps.server'
 import type { InfraError } from '#/server/infra-error'
 
-import { CodeExhaustedError, RateLimitExceededError } from './auth.errors'
+import { RateLimitExceededError } from './auth.errors'
 import { recordAttempt, resetAttempts } from './rate-limits.repository.server'
 import { CODE_LIFETIME_MINUTES } from './tokens.repository.server'
 
@@ -145,20 +145,26 @@ export function resetOtpVerify(
  * Checks one code accepts from every address together, the right one included. Counting comes
  * before the comparison, so concurrent guesses cannot slip past the limit. The window opens at the
  * first check, after the code was issued, so it outlives the code and never resets during its
- * life. One code thus faces at most five guesses, however many addresses send them.
+ * life. One code thus faces at most five guesses, however many addresses send them, and a guess
+ * while several codes are live counts against each of them.
  */
 const CODE_CHECKS: Limit = { maxAttempts: 5, windowSeconds: CODE_LIFETIME_MINUTES * 60 }
 
-/** Counts a check of the code and refuses every check after its fifth. */
-export async function checkCode(
+/** Counts one check of each code, in one atomic batch, and answers the ids still under their fifth. */
+export async function checkCodes(
   deps: Pick<Deps, 'db'>,
-  tokenId: number,
-): Promise<Result<void, CodeExhaustedError | InfraError>> {
+  tokenIds: readonly [number, ...number[]],
+): Promise<Result<ReadonlySet<number>, InfraError>> {
   const { maxAttempts, windowSeconds } = CODE_CHECKS
-  const recorded = await deps.db.run(
-    recordAttempt(`code:${tokenId}`, 'otp_verify', windowSeconds, now()),
-  )
-  return recorded.andThen((row) =>
-    (row?.attemptCount ?? 1) <= maxAttempts ? Result.ok() : Result.err(new CodeExhaustedError()),
+  const currentTime = now()
+  const count = (tokenId: number) =>
+    recordAttempt(`code:${tokenId}`, 'otp_verify', windowSeconds, currentTime)
+  const [first, ...rest] = tokenIds
+  const recorded = await deps.db.batch([count(first), ...rest.map((tokenId) => count(tokenId))])
+  return recorded.map(
+    (counted) =>
+      new Set(
+        tokenIds.filter((_tokenId, index) => (counted[index]?.attemptCount ?? 1) <= maxAttempts),
+      ),
   )
 }

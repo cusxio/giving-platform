@@ -1,9 +1,11 @@
-import { and, desc, eq, gt, isNull } from 'drizzle-orm'
+import { and, eq, gt, isNull } from 'drizzle-orm'
 
 import { addMinutes, now } from '#/core/date'
-import { defineQuery, firstOrNull, nothing } from '#/server/db.server'
+import { defineQuery, nothing, rows } from '#/server/db.server'
 import type { Token, TokenInsert } from '#/server/schema.server'
 import { tokens } from '#/server/schema.server'
+
+export type { Token } from '#/server/schema.server'
 
 /** True when this call used the token; false when another request already did (lost race). */
 export const claimTokenIfUnused = defineQuery(
@@ -41,15 +43,20 @@ export const createToken = defineQuery(
   nothing,
 )
 
-/** The newest unexpired, unused token. */
-export const findToken = defineQuery(
-  'auth.findToken',
-  (db, userId: Token['userId']) =>
+/** The user's unexpired, unused codes of `mode`: every one the user may still enter. */
+export const findLiveTokens = defineQuery(
+  'auth.findLiveTokens',
+  (db, userId: Token['userId'], mode: Token['mode']) =>
     db
       .select()
       .from(tokens)
-      .where(and(eq(tokens.userId, userId), gt(tokens.expiresAt, now()), isNull(tokens.usedAt)))
-      .orderBy(desc(tokens.createdAt))
-      .limit(1),
-  firstOrNull,
+      .where(
+        and(
+          eq(tokens.userId, userId),
+          eq(tokens.mode, mode),
+          gt(tokens.expiresAt, now()),
+          isNull(tokens.usedAt),
+        ),
+      ),
+  rows,
 )
