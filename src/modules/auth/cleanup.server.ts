@@ -1,4 +1,5 @@
 import { addSeconds, now } from '#/core/date'
+import { isCronRequest } from '#/server/cron.server'
 import type { Deps } from '#/server/deps.server'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
@@ -9,8 +10,7 @@ import { deleteDeadTokens } from './tokens.repository.server'
 type CleanupDeps = Pick<Deps, 'config' | 'db' | 'logger'>
 
 async function cleanup({ config, db, logger }: CleanupDeps, request: Request) {
-  const authHeader = request.headers.get('authorization')
-  if (config.cronSecret === undefined || authHeader !== `Bearer ${config.cronSecret}`) {
+  if (!isCronRequest(config.cronSecret, request.headers.get('authorization'))) {
     logger.warn({ event: 'auth.cron.unauthorized' }, 'Unauthorized cron job attempt')
     return new Response('Unauthorized', { status: 401 })
   }

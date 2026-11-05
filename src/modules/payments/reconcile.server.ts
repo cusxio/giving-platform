@@ -1,3 +1,4 @@
+import { isCronRequest } from '#/server/cron.server'
 import type { Deps } from '#/server/deps.server'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
@@ -8,9 +9,8 @@ type ReconcileDeps = Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>
 
 async function reconcile(deps: ReconcileDeps, request: Request) {
   const { config, db, logger } = deps
-  const authHeader = request.headers.get('authorization')
 
-  if (config.cronSecret === undefined || authHeader !== `Bearer ${config.cronSecret}`) {
+  if (!isCronRequest(config.cronSecret, request.headers.get('authorization'))) {
     logger.warn({ event: 'eghl.cron.unauthorized' }, 'Unauthorized cron job attempt')
     return new Response('Unauthorized', { status: 401 })
   }

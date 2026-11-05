@@ -1,6 +1,7 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { TZDate } from '#/core/date'
+import type { Deps } from '#/server/deps.server'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { testDeps } from '#/server/testing/test-deps'
@@ -39,7 +40,13 @@ function tableDb(deleted: Record<string, number>, failing?: string) {
   return { db, statements }
 }
 
-async function run(db: ReturnType<typeof tableDb>['db'], authorization?: string) {
+const CONFIGURED: Pick<Deps['config'], 'cronSecret'> = { cronSecret: 'cron-secret' }
+
+async function run(
+  db: ReturnType<typeof tableDb>['db'],
+  authorization?: string,
+  { cronSecret } = CONFIGURED,
+) {
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
   onTestFinished(() => {
     vi.useRealTimers()
@@ -48,7 +55,7 @@ async function run(db: ReturnType<typeof tableDb>['db'], authorization?: string)
   const base = testDeps()
   const headers = new Headers(authorization === undefined ? {} : { authorization })
   const response = await handleCleanup(
-    { config: { ...base.config, cronSecret: 'cron-secret' }, db, logger },
+    { config: { ...base.config, cronSecret }, db, logger },
     new Request('https://app.give.test/api/auth/cron', { headers }),
   )
   return { body: await response.text(), events, status: response.status }
@@ -89,6 +96,19 @@ describe('the auth cleanup cron', () => {
     expect(events).toStrictEqual([
       expect.objectContaining({ event: 'auth.cron.unauthorized', level: 40 }),
     ])
+  })
+
+  it.each([
+    ['an empty secret', '', 'Bearer '],
+    ['an unset secret', undefined, 'Bearer undefined'],
+  ])('refuses every call under %s', async (_case, cronSecret, authorization) => {
+    expect.hasAssertions()
+
+    const { db, statements } = tableDb({})
+    const { body, status } = await run(db, authorization, { cronSecret })
+
+    expect({ body, status }).toStrictEqual({ body: 'Unauthorized', status: 401 })
+    expect(statements).toStrictEqual([])
   })
 
   it('still deletes the stale rate-limit rows when the token delete fails, and answers 500', async () => {

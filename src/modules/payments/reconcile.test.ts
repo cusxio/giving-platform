@@ -157,11 +157,13 @@ const notFound = () => Result.ok<PaymentOutcome>({ kind: 'notFound' })
 
 const runCron = async ({
   authorization = `Bearer ${settings.CRON_SECRET}`,
+  config = { cronSecret: settings.CRON_SECRET },
   db,
   finalize = finalizeBy(),
   replies = {},
 }: {
   authorization?: string | null
+  config?: Pick<Deps['config'], 'cronSecret'>
   db: ReturnType<typeof fakeDb>['db']
   finalize?: (outcome: Settling) => Promise<FinalizeResult>
   replies?: Record<string, QueryResult>
@@ -186,7 +188,7 @@ const runCron = async ({
     const base = testDeps()
     response = await handleReconcile(
       {
-        config: { ...base.config, cronSecret: settings.CRON_SECRET },
+        config: { ...base.config, ...config },
         db,
         eghl: { ...base.eghl, queryStatus: queryTransactionStatus },
         logger: logger as unknown as Deps['logger'],
@@ -491,6 +493,19 @@ describe('eGHL cron', () => {
 
     const { db, statements } = fakeDb([pending('txn_a', 40)])
     const run = await runCron({ authorization, db })
+
+    expect(run).toMatchObject({ body: 'Unauthorized', queried: [], status: 401 })
+    expect(statements).toStrictEqual([])
+  })
+
+  it.each([
+    ['an empty secret', '', 'Bearer '],
+    ['an unset secret', undefined, 'Bearer undefined'],
+  ])('answers 401 to every call under %s', async (_case, cronSecret, authorization) => {
+    expect.hasAssertions()
+
+    const { db, statements } = fakeDb([pending('txn_a', 40)])
+    const run = await runCron({ authorization, config: { cronSecret }, db })
 
     expect(run).toMatchObject({ body: 'Unauthorized', queried: [], status: 401 })
     expect(statements).toStrictEqual([])

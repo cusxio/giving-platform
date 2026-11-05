@@ -22,7 +22,7 @@ import { db as neonHttp, dbPool as neonPool } from '#/server/neon.server'
 
 /** Settings read from env once, here. Nothing else on the request path reads env. */
 interface ServerConfig {
-  /** Bearer token the cron route accepts. Unset means the route rejects every call. */
+  /** Bearer token the cron routes accept. Unset or empty, they reject every call (`isCronRequest`). */
   readonly cronSecret: string | undefined
   readonly eghl: EghlConfig
   readonly mail: MailConfig
