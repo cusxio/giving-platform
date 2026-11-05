@@ -58,6 +58,14 @@ An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exac
 - Policies (`src/server/authorize.server.ts`): `anyone`, `anonymousOnly` (a signed-in caller is redirected home), `requireUser`, `requireSu`. The workflow's context is the policy's narrowed one, so `user` is non-null under `requireUser`.
 - Input: `parseWith(Compile(schema), { trim, lowercase, convert })` returns a `Parser`; `noInput` takes none. The client's input type is `Parsed<typeof parser>`, exported as `<Name>Input`. Bound string inputs with `maxLength` when they reach a sized column.
 
+## Login codes
+
+A code is six digits, stored in `tokens` only as its HMAC (`deps.hashToken`) and live for `CODE_LIFETIME_MINUTES` after it is issued. A user's live codes are their unexpired, unclaimed rows of the requested mode (`findLiveTokens`): a signup code never signs in, and a login code never activates a guest. The hash is unique per user, so `request-otp.server.ts` issues a code in one batch: `deleteDeadTokensOf` removes the user's claimed and expired rows, then `createToken` inserts and, on a conflict, refreshes the live row with the same hash. That row is the same code, so it keeps its id and its check count and takes the new expiry and mode.
+
+`verify-otp.server.ts` counts the attempt against the address, the client and the email (`checkOtpVerify`), then counts one check of every live code of the mode under `code:<id>` in one batch (`checkCodes`) before comparing any of them. A guess thus spends one check of each live code, and each code faces at most five guesses in its life, however many codes are live or addresses guess. A match on a spent code is refused. The claim, `claimTokenIfUnused`, is a compare-and-set, so two requests cannot both use one code. A wrong, missing, expired, spent or other-mode code answers `INVALID_OR_EXPIRED_OTP`; only the `reason` in the log differs.
+
+The login path deletes no other user's rows. `/api/auth/cron` (`cleanup.server.ts`, daily in `vercel.json`, guarded by `CRON_SECRET` like the eGHL cron) deletes every claimed or expired code and every `rate_limit_attempts` row whose window started `LONGEST_WINDOW_SECONDS` or longer ago. Such a row counts for nothing, since `recordAttempt` would start it over. The constant is the longest window in `rate-limit.server.ts`, so a new or longer limit moves the cutoff with it.
+
 ## Payment gateway
 
 `payments/gateway.ts` is the port: `deps.eghl` takes and returns only the domain types of `payments/payment-outcome.ts` (`GatewayReply`, `PaymentOutcome`, `PaymentRecord`, amounts in cents). eGHL wire fields (PascalCase) stay in three files:
