@@ -10,8 +10,10 @@ import { cx } from '#/styles/cx'
 type ValueChange = NonNullable<CurrencyInputProps['onValueChange']>
 
 export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' | 'name'> {
-  /** The largest amount the field takes. A keystroke that would pass it is ignored. */
+  /** The largest amount the field takes. An entry past it leaves the field as it was. */
   max: number
+  /** Called instead of `onValueChange` for a typed or pasted entry past `max`. */
+  onOverMax: () => void
   onValueChange: ValueChange
 }
 
@@ -19,18 +21,17 @@ export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' 
 export const fitsMax = (value: string | undefined, max: number) =>
   !(Number.parseFloat(value ?? '') > max)
 
-/** Characters of the largest amount with its cents, such as `5000000.00`. */
-export const maxLengthFor = (max: number) => `${Math.trunc(max)}.00`.length
-
 export function InputCurrency(props: InputCurrencyProps) {
-  const { autoComplete, max, name, onValueChange } = props
+  const { autoComplete, max, name, onOverMax, onValueChange } = props
   const handleValueChange: ValueChange = useCallback(
     (value, ...rest) => {
       if (fitsMax(value, max)) {
         onValueChange(value, ...rest)
+      } else {
+        onOverMax()
       }
     },
-    [max, onValueChange],
+    [max, onOverMax, onValueChange],
   )
   const currency = useMemo(
     () =>
@@ -82,7 +83,6 @@ export function InputCurrency(props: InputCurrencyProps) {
             disableAbbreviations
             inputMode="numeric"
             max={max}
-            maxLength={maxLengthFor(max)}
             onValueChange={handleValueChange}
             placeholder="0.00"
             type="text"

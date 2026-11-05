@@ -1,16 +1,21 @@
-import { useFormValue } from '@ariakit/react'
+import { FormError, useFormValue } from '@ariakit/react'
 import { createElement, useCallback } from 'react'
 
+import { Alert } from '#/components/ui/alert'
 import type { InputCurrencyProps } from '#/components/ui/input-currency'
 import { InputCurrency } from '#/components/ui/input-currency'
 import type { funds } from '#/core/brand'
 import { FUND_COLOR_MAP, FUND_ICON_MAP } from '#/core/brand/funds'
+import { createCurrencyFormatter } from '#/core/formatters'
 import { MAX_FUND_AMOUNT } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
-import type { GivingFormFundQuickFillProps } from './giving-form-fund-quick-fill'
 import { GivingFormFundQuickFill } from './giving-form-fund-quick-fill'
 import type { GivingFormStore } from './use-giving-form'
+
+const OVER_MAX_MESSAGE = `The most you can give to one fund is ${createCurrencyFormatter({ showSymbol: true }).format(MAX_FUND_AMOUNT)}.`
+
+const alert = <Alert className="text-balance empty:hidden" />
 
 interface GivingFormFundProps {
   fund: (typeof funds)[number]
@@ -20,24 +25,31 @@ interface GivingFormFundProps {
 export function GivingFormFund(props: GivingFormFundProps) {
   const { fund, store } = props
 
-  const handleCurrencyValueChange: InputCurrencyProps['onValueChange'] = useCallback(
-    (value, name) => {
-      if (name === undefined) {
+  // The field also reports its unchanged value on blur, which must not clear the over-max message.
+  const setAmount = useCallback(
+    (value: string) => {
+      if (value === store.getValue(fund)) {
         return
       }
-      store.setValue(name, value ?? '')
-    },
-    [store],
-  )
-
-  const currentValue = useFormValue<string>(store, store.names[fund])
-
-  const handleSelect: GivingFormFundQuickFillProps['onSelect'] = useCallback(
-    (v) => {
-      store.setValue(fund, v)
+      store.setValue(fund, value)
+      store.setError(fund, undefined)
     },
     [fund, store],
   )
+
+  const handleCurrencyValueChange: InputCurrencyProps['onValueChange'] = useCallback(
+    (value) => {
+      setAmount(value ?? '')
+    },
+    [setAmount],
+  )
+
+  const handleOverMax = useCallback(() => {
+    store.setFieldTouched(fund, true)
+    store.setError(fund, OVER_MAX_MESSAGE)
+  }, [fund, store])
+
+  const currentValue = useFormValue<string>(store, store.names[fund])
 
   return (
     <div
@@ -54,14 +66,16 @@ export function GivingFormFund(props: GivingFormFundProps) {
         <span className="text-fg-1/80 capitalize">{fund}</span>
       </div>
 
-      <GivingFormFundQuickFill currentValue={currentValue} fund={fund} onSelect={handleSelect} />
+      <GivingFormFundQuickFill currentValue={currentValue} fund={fund} onSelect={setAmount} />
 
       <InputCurrency
         autoComplete="off"
         max={MAX_FUND_AMOUNT}
         name={store.names[fund]}
+        onOverMax={handleOverMax}
         onValueChange={handleCurrencyValueChange}
       />
+      <FormError name={store.names[fund]} render={alert} />
     </div>
   )
 }
