@@ -6,15 +6,23 @@ import { logout, requestOtp, verifyOtp } from './auth.functions'
 import type { RequestOtpInput, RequestOtpResponse } from './request-otp.server'
 import type { VerifyOtpInput, VerifyOtpResponse } from './verify-otp.server'
 
-export function useLogoutMutation() {
+/** Drops what the tab holds for the previous user: cached queries and cached route data. */
+function useForgetUser() {
   const queryClient = useQueryClient()
   const router = useRouter()
+  return () => {
+    queryClient.clear()
+    router.clearCache()
+  }
+}
+
+export function useLogoutMutation() {
+  const forgetUser = useForgetUser()
   const $logout = useServerFn(logout)
   return useMutation({
     mutationFn: () => $logout(),
     onSuccess() {
-      queryClient.clear()
-      router.clearCache()
+      forgetUser()
     },
   })
 }
@@ -31,13 +39,13 @@ export function useRequestOtpMutation() {
 }
 
 export function useVerifyOtpMutation() {
-  const router = useRouter()
+  const forgetUser = useForgetUser()
   const $verifyOtp = useServerFn(verifyOtp)
   return useMutation({
     mutationFn: (input: VerifyOtpInput): Answer<VerifyOtpResponse> => $verifyOtp({ data: input }),
     onSuccess(res) {
       if (res?.type === 'SUCCESS') {
-        router.clearCache()
+        forgetUser()
       }
     },
   })

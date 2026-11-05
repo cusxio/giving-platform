@@ -92,7 +92,6 @@ vi.mock<typeof History>(import('#/modules/history'), async (actual) => {
 })
 
 const { useLogoutMutation, useVerifyOtpMutation } = await import('./auth.queries')
-const { currentUserQuery } = await import('#/modules/account')
 
 function mutate(options: unknown) {
   const observer = new MutationObserver(app.router.options.context.queryClient, options as never)
@@ -152,8 +151,6 @@ describe('the overview after another donor used the tab', () => {
     })
 
     await mutate(useVerifyOtpMutation())
-    // The auth form drops the cached current user on SUCCESS.
-    router.options.context.queryClient.removeQueries({ queryKey: currentUserQuery().queryKey })
     await router.navigate({ to: '/overview' })
 
     expect(overviewShown(router)).toStrictEqual(overviewOfB)
