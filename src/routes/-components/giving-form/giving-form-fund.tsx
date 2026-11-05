@@ -3,7 +3,7 @@ import { createElement, useCallback } from 'react'
 
 import { Alert } from '#/components/ui/alert'
 import type { InputCurrencyProps } from '#/components/ui/input-currency'
-import { InputCurrency } from '#/components/ui/input-currency'
+import { InputCurrency, sameAmount } from '#/components/ui/input-currency'
 import type { funds } from '#/core/brand'
 import { FUND_COLOR_MAP, FUND_ICON_MAP } from '#/core/brand/funds'
 import { createCurrencyFormatter } from '#/core/formatters'
@@ -25,23 +25,23 @@ interface GivingFormFundProps {
 export function GivingFormFund(props: GivingFormFundProps) {
   const { fund, store } = props
 
-  // The field also reports its unchanged value on blur, which must not clear the over-max message.
-  const setAmount = useCallback(
-    (value: string) => {
-      if (value === store.getValue(fund)) {
-        return
+  const handleCurrencyValueChange: InputCurrencyProps['onValueChange'] = useCallback(
+    (value = '') => {
+      // The field reports its amount again on blur, which must not clear the over-max message.
+      if (!sameAmount(value, store.getValue(fund))) {
+        store.setError(fund, undefined)
       }
       store.setValue(fund, value)
-      store.setError(fund, undefined)
     },
     [fund, store],
   )
 
-  const handleCurrencyValueChange: InputCurrencyProps['onValueChange'] = useCallback(
-    (value) => {
-      setAmount(value ?? '')
+  const handleQuickFill = useCallback(
+    (value: string) => {
+      store.setValue(fund, value)
+      store.setError(fund, undefined)
     },
-    [setAmount],
+    [fund, store],
   )
 
   const handleOverMax = useCallback(() => {
@@ -66,7 +66,7 @@ export function GivingFormFund(props: GivingFormFundProps) {
         <span className="text-fg-1/80 capitalize">{fund}</span>
       </div>
 
-      <GivingFormFundQuickFill currentValue={currentValue} fund={fund} onSelect={setAmount} />
+      <GivingFormFundQuickFill currentValue={currentValue} fund={fund} onSelect={handleQuickFill} />
 
       <InputCurrency
         autoComplete="off"

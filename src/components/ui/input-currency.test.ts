@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { fitsMax } from './input-currency'
+import { fitsMax, sameAmount } from './input-currency'
 
 describe('the amount field limits', () => {
   it('takes every amount up to the maximum with its cents', () => {
@@ -28,5 +28,36 @@ describe('the amount field limits', () => {
       true,
       true,
     ])
+  })
+})
+
+describe('the amount comparison', () => {
+  it('matches an amount written two ways', () => {
+    expect.hasAssertions()
+
+    expect(
+      (
+        [
+          ['0100', '100'],
+          ['1.', '1'],
+          ['12.50', '12.5'],
+          ['', ''],
+        ] as const
+      ).map(([a, b]) => sameAmount(a, b)),
+    ).toStrictEqual([true, true, true, true])
+  })
+
+  it('tells different amounts apart', () => {
+    expect.hasAssertions()
+
+    expect(
+      (
+        [
+          ['100', '10'],
+          ['', '0'],
+          ['.', ''],
+        ] as const
+      ).map(([a, b]) => sameAmount(a, b)),
+    ).toStrictEqual([false, false, false])
   })
 })

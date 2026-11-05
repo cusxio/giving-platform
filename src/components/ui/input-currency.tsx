@@ -21,6 +21,10 @@ export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' 
 export const fitsMax = (value: string | undefined, max: number) =>
   !(Number.parseFloat(value ?? '') > max)
 
+/** Whether two clean values name the same amount, such as `0100` and `100`. */
+export const sameAmount = (a: string, b: string) =>
+  a === b || Number.parseFloat(a) === Number.parseFloat(b)
+
 export function InputCurrency(props: InputCurrencyProps) {
   const { autoComplete, max, name, onOverMax, onValueChange } = props
   const handleValueChange: ValueChange = useCallback(
