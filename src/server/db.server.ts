@@ -1,4 +1,5 @@
 import { Result } from 'better-result'
+import type { SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 
@@ -52,6 +53,19 @@ export interface QueryDef<A extends readonly unknown[], T> {
 
 /** The decoded type a query factory yields. */
 export type QueryResult<D> = D extends QueryDef<never, infer T> ? T : never
+
+/**
+ * A statement written as SQL. drizzle's `insert().select()` lists every insertable column, in
+ * table order (`pg-core/dialect.js`, `buildInsertQuery`), so an insert that selects its rows
+ * cannot leave a serial id to its default; such a statement is written here instead. It runs and
+ * batches like a built one, and the driver answers its RETURNING as `rows`.
+ */
+export function rawStatement(sql: Sql, text: SQL): Statement<{ rows: Record<string, unknown>[] }> {
+  const statement = sql.execute(text)
+  return Object.assign(statement, { toSQL: () => statement.getQuery() }) as Statement<{
+    rows: Record<string, unknown>[]
+  }>
+}
 
 /** The one way to write SQL. `build` receives the handle first, then the caller's arguments. */
 export function defineQuery<A extends unknown[], R, T>(

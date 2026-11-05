@@ -1,11 +1,10 @@
-import type { InferInsertModel } from 'drizzle-orm'
-import { and, asc, count, desc, eq, gt, inArray, lt, lte } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, lt, lte, sql } from 'drizzle-orm'
 
 import { addDays, addMinutes, now } from '#/core/date'
 import { sourcesOf, TRANSACTION_STATUSES } from '#/core/transaction-status'
-import { defineQuery, firstOrNull, nothing, rows } from '#/server/db.server'
-import type { PaymentInsert, Transaction, User } from '#/server/schema.server'
-import { funds, payments, transactionItems, transactions, users } from '#/server/schema.server'
+import { defineQuery, firstOrNull, nothing, rawStatement, rows } from '#/server/db.server'
+import type { PaymentInsert, Transaction, TransactionItem, User } from '#/server/schema.server'
+import { funds, payments, transactions, users } from '#/server/schema.server'
 import type { SameLength } from '#/server/sql.server'
 
 import type { TEXT_COLUMN_LENGTHS } from './eghl.outcome'
@@ -13,6 +12,8 @@ import type { Transition } from './payment-outcome'
 import { RECONCILE_MIN_AGE_MINUTES, RECONCILE_WINDOW_DAYS } from './payment-outcome'
 
 export type TransactionId = Transaction['id']
+
+export { newTransactionId } from '#/server/schema.server'
 
 /** Whether the user gave as a guest before signing up. */
 export const hasGuestTransaction = defineQuery(
@@ -51,25 +52,49 @@ export const findFundsByName = defineQuery(
   rows,
 )
 
+/** The signed-in user's pending transaction. */
 export const insertPendingTransaction = defineQuery(
   'payments.insertPendingTransaction',
-  (db, input: Pick<Transaction, 'amount' | 'createdAs' | 'userId'>) =>
+  (db, input: Pick<Transaction, 'amount' | 'id' | 'userId'>) =>
     db
       .insert(transactions)
-      .values({
-        amount: input.amount,
-        createdAs: input.createdAs,
-        status: 'pending',
-        userId: input.userId,
-      })
+      .values({ ...input, createdAs: 'user', status: 'pending' })
       .returning(),
   firstOrNull,
 )
 
+/** The pending transaction of the guest with `email`. Inserts nothing when no guest has it. */
+export const insertPendingGuestTransaction = defineQuery(
+  'payments.insertPendingGuestTransaction',
+  (db, input: Pick<Transaction, 'amount' | 'id'> & Pick<User, 'email'>) =>
+    rawStatement(
+      db,
+      sql`insert into ${transactions} ("id", "amount", "created_as", "status", "user_id")
+        select ${input.id}::varchar, ${input.amount}::integer, 'guest', 'pending', ${users.id}
+        from ${users} where ${users.email} = ${input.email} and ${users.status} = 'guest'
+        returning "id"`,
+    ),
+  ({ rows: inserted }) => firstOrNull(inserted) as Pick<Transaction, 'id'> | null,
+)
+
+/** Inserts nothing when no transaction has `transactionId`. */
 export const insertTransactionItems = defineQuery(
   'payments.insertTransactionItems',
-  (db, items: InferInsertModel<typeof transactionItems>[]) =>
-    db.insert(transactionItems).values(items),
+  (
+    db,
+    transactionId: TransactionId,
+    items: readonly Pick<TransactionItem, 'amount' | 'fundId'>[],
+  ) =>
+    rawStatement(
+      db,
+      sql`insert into "transaction_items" ("transaction_id", "fund_id", "amount")
+        select ${transactions.id}, item.fund_id, item.amount from ${transactions},
+        (values ${sql.join(
+          items.map((item) => sql`(${item.fundId}::varchar, ${item.amount}::integer)`),
+          sql`, `,
+        )}) as item (fund_id, amount)
+        where ${transactions.id} = ${transactionId}`,
+    ),
   nothing,
 )
 

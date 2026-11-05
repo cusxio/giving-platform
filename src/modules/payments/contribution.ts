@@ -55,12 +55,11 @@ export function decideDonor(
   return owner && owner.status !== 'guest' ? { kind: 'guest-email-exists' } : { kind: 'guest' }
 }
 
-/** The transaction's item rows keyed by fund id, or `Err` naming the first fund `funds` lacks. */
+/** The item rows keyed by fund id, or `Err` naming the first fund `funds` lacks. */
 export function itemsFor(
-  transactionId: string,
   items: readonly ContributionItem[],
   funds: readonly { readonly id: string; readonly name: string }[],
-): Result<{ amount: number; fundId: string; transactionId: string }[], string> {
+): Result<{ amount: number; fundId: string }[], string> {
   const fundIds = new Map(funds.map((f) => [f.name, f.id]))
   const rows = []
   for (const item of items) {
@@ -69,7 +68,7 @@ export function itemsFor(
     if (fundId === undefined) {
       return Result.err(name)
     }
-    rows.push({ amount: item.amountInCents, fundId, transactionId })
+    rows.push({ amount: item.amountInCents, fundId })
   }
   return Result.ok(rows)
 }

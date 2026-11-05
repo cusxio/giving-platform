@@ -126,7 +126,7 @@ export const transactions = pgTable(
        * requirement of 20 characters. Do not change this length.
        * @see eGHL Merchant Integration Guide v2.9w, Section 2.1, Field `PaymentID`.
        */
-      .$defaultFn(() => createId(20)),
+      .$defaultFn(newTransactionId),
     status: text({ enum: TRANSACTION_STATUSES }).default('pending').notNull(),
     updatedAt: updatedAt(),
     userId: userId()
@@ -179,6 +179,8 @@ export const transactionItems = pgTable(
     ),
   ],
 )
+
+export type TransactionItem = InferSelectModel<typeof transactionItems>
 
 export const payments = pgTable(
   'payments',
@@ -327,4 +329,8 @@ export type RateLimitAttempt = InferSelectModel<typeof rateLimitAttempts>
 
 function createId(length?: number): string {
   return customAlphabet(alphanumeric, length)()
+}
+
+export function newTransactionId(): string {
+  return createId(20)
 }

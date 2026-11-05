@@ -19,6 +19,7 @@ import { findSavedCard } from './saved-cards.repository.server'
 import { createPendingContribution, startContributionAction } from './start-contribution.server'
 import {
   findFundsByName,
+  insertPendingGuestTransaction,
   insertPendingTransaction,
   insertTransactionItems,
 } from './transactions.repository.server'
@@ -64,15 +65,20 @@ const FUNDS = [
   },
 ]
 
-const pendingRow = (amount: number, createdAs: 'guest' | 'user', userId: number) => ({
-  amount,
-  createdAs,
-  createdAt: at,
-  id: 'txn_pending_000000001',
-  status: 'pending' as const,
-  updatedAt: at,
-  userId,
-})
+/** eGHL takes the transaction id as its 20-character PaymentID. */
+const TRANSACTION_ID = /^[A-Za-z0-9]{20}$/u
+
+const READ = ['account.findUserByEmail', 'payments.findFundsByName']
+const GUEST_WRITE = [
+  'account.upsertGuestUser',
+  'payments.insertPendingGuestTransaction',
+  'payments.insertTransactionItems',
+]
+const USER_WRITE = ['payments.insertPendingTransaction', 'payments.insertTransactionItems']
+const ITEMS = [
+  { amount: 225, fundId: 'fund_mission' },
+  { amount: 1000, fundId: 'fund_general' },
+]
 
 /** Answers every query of a successful contribution. `owner` is who already has the email. */
 function contributionDb(owner: ReturnType<typeof userRow> | null) {
@@ -80,9 +86,14 @@ function contributionDb(owner: ReturnType<typeof userRow> | null) {
     .on(findUserByEmail, () => owner)
     .on(upsertGuestUser, (input) => ({ ...userRow(41, input.email, 'guest'), ...input }))
     .on(findFundsByName, (names) => FUNDS.filter((f) => names.includes(f.name)))
-    .on(insertPendingTransaction, (input) =>
-      pendingRow(input.amount, input.createdAs, input.userId),
-    )
+    .on(insertPendingTransaction, (input) => ({
+      ...input,
+      createdAs: 'user',
+      createdAt: at,
+      status: 'pending',
+      updatedAt: at,
+    }))
+    .on(insertPendingGuestTransaction, ({ id }) => ({ id }))
     .on(insertTransactionItems, () => {})
     .on(findSavedCard, (userId, token) =>
       userId === MEMBER.id && token === 'tok_own' ? { id: 7 } : null,
@@ -103,7 +114,19 @@ async function start(fake: FakeDb, user: typeof MEMBER | null, data: unknown) {
     context: testContext(user, { db: fake, logger }),
     data,
   })
-  return { calls: fake.calls.map((c) => c.name), events, outcomes: fake.transactions, response }
+  return { calls: fake.calls.map((c) => c.name), events, response, trips: fake.roundTrips }
+}
+
+function insertedId(fake: FakeDb): string {
+  const inserts = new Set([
+    insertPendingTransaction.queryName,
+    insertPendingGuestTransaction.queryName,
+  ])
+  const input: unknown = fake.calls.find((call) => inserts.has(call.name))?.args[0]
+  if (typeof input !== 'object' || input === null || !('id' in input)) {
+    throw new Error('no transaction was inserted')
+  }
+  return String(input.id)
 }
 
 function redirectParams(response: Awaited<ReturnType<typeof startContributionAction>>) {
@@ -113,23 +136,16 @@ function redirectParams(response: Awaited<ReturnType<typeof startContributionAct
   return Object.fromEntries(new URL(response.value.redirectURL).searchParams)
 }
 
-const successFor = (email: string, token?: string) => ({
+const successFor = (email: string, transactionId: string, token?: string) => ({
   Amount: '12.25',
   CustEmail: email,
   CustName: 'Ada Lovelace',
-  PaymentID: 'txn_pending_000000001',
+  PaymentID: transactionId,
   ...(token !== undefined && { Token: token, TokenType: 'OCP' }),
 })
 
-const SUCCESS_CALLS = [
-  'account.findUserByEmail',
-  'payments.findFundsByName',
-  'payments.insertPendingTransaction',
-  'payments.insertTransactionItems',
-]
-
 describe('starting a contribution as a guest', () => {
-  it('creates the guest and a pending transaction, then redirects to the gateway', async () => {
+  it('creates the guest, the transaction and its items in one batch, then redirects', async () => {
     expect.hasAssertions()
 
     expectTypeOf<Awaited<ReturnType<typeof startContribution>>>().toEqualTypeOf<
@@ -142,29 +158,23 @@ describe('starting a contribution as a guest', () => {
     >()
     const fake = contributionDb(null)
     const result = await start(fake, null, input())
+    const id = insertedId(fake)
 
-    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
-    expect(result.outcomes).toStrictEqual(['commit'])
+    expect(id).toMatch(TRANSACTION_ID)
+    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test', id))
+    expect(result.trips).toStrictEqual([READ, GUEST_WRITE])
     expect(fake.calls).toStrictEqual([
       { args: ['donor@give.test'], name: 'account.findUserByEmail' },
+      { args: [['Mission', 'Offering']], name: 'payments.findFundsByName' },
       {
         args: [{ email: 'donor@give.test', firstName: 'Ada', lastName: 'Lovelace' }],
         name: 'account.upsertGuestUser',
       },
-      { args: [['Mission', 'Offering']], name: 'payments.findFundsByName' },
       {
-        args: [{ amount: 1225, createdAs: 'guest', userId: 41 }],
-        name: 'payments.insertPendingTransaction',
+        args: [{ amount: 1225, email: 'donor@give.test', id }],
+        name: 'payments.insertPendingGuestTransaction',
       },
-      {
-        args: [
-          [
-            { amount: 225, fundId: 'fund_mission', transactionId: 'txn_pending_000000001' },
-            { amount: 1000, fundId: 'fund_general', transactionId: 'txn_pending_000000001' },
-          ],
-        ],
-        name: 'payments.insertTransactionItems',
-      },
+      { args: [id, ITEMS], name: 'payments.insertTransactionItems' },
     ])
     expect(result.events).toMatchObject([
       {
@@ -177,7 +187,7 @@ describe('starting a contribution as a guest', () => {
       {
         event: 'giving.start_contribution.redirected',
         msg: 'Success, redirecting to eGHL',
-        transaction_id: 'txn_pending_000000001',
+        transaction_id: id,
       },
     ])
   })
@@ -185,13 +195,16 @@ describe('starting a contribution as a guest', () => {
   it('reads fund amounts sent as form strings', async () => {
     expect.hasAssertions()
 
+    const fake = contributionDb(null)
     const result = await start(
-      contributionDb(null),
+      fake,
       null,
       input({ contributions: { future: '0', mission: '2.25', offering: '10', tithe: '0' } }),
     )
 
-    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
+    expect(redirectParams(result.response)).toMatchObject(
+      successFor('donor@give.test', insertedId(fake)),
+    )
   })
 
   it('accepts the most one fund may receive', async () => {
@@ -214,7 +227,7 @@ describe('starting a contribution as a guest', () => {
     const result = await start(fake, null, input({ firstName: ` ${first} `, lastName: last }))
 
     expect(redirectParams(result.response)).toMatchObject({ CustName: `${first} ${last}` })
-    expect(fake.calls[1]).toStrictEqual({
+    expect(fake.calls[2]).toStrictEqual({
       args: [{ email: 'donor@give.test', firstName: first, lastName: last }],
       name: 'account.upsertGuestUser',
     })
@@ -223,22 +236,16 @@ describe('starting a contribution as a guest', () => {
   it('upserts a guest who already gave with the email', async () => {
     expect.hasAssertions()
 
-    const result = await start(
-      contributionDb(userRow(41, 'donor@give.test', 'guest')),
-      null,
-      input(),
-    )
+    const fake = contributionDb(userRow(41, 'donor@give.test', 'guest'))
+    const result = await start(fake, null, input())
 
-    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
-    expect(result.calls).toStrictEqual([
-      'account.findUserByEmail',
-      'account.upsertGuestUser',
-      ...SUCCESS_CALLS.slice(1),
-    ])
-    expect(result.outcomes).toStrictEqual(['commit'])
+    expect(redirectParams(result.response)).toMatchObject(
+      successFor('donor@give.test', insertedId(fake)),
+    )
+    expect(result.trips).toStrictEqual([READ, GUEST_WRITE])
   })
 
-  it("refuses a registered account's email and rolls back", async () => {
+  it("refuses a registered account's email before writing anything", async () => {
     expect.hasAssertions()
 
     const result = await start(
@@ -251,8 +258,7 @@ describe('starting a contribution as a guest', () => {
       error: { code: 'EMAIL_EXISTS' },
       type: 'BUSINESS_ERROR',
     })
-    expect(result.calls).toStrictEqual(['account.findUserByEmail'])
-    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.trips).toStrictEqual([READ])
     expect(result.events.at(-1)).toMatchObject({
       email: 'donor@give.test',
       event: 'giving.start_contribution.blocked',
@@ -262,21 +268,19 @@ describe('starting a contribution as a guest', () => {
     })
   })
 
-  it('refuses an email registered after the lookup saw a guest, and rolls back', async () => {
+  it('refuses an email registered after the lookup, whose batch then writes nothing', async () => {
     expect.hasAssertions()
 
-    const fake = contributionDb(userRow(41, 'donor@give.test', 'guest')).on(
-      upsertGuestUser,
-      () => null,
-    )
+    const fake = contributionDb(userRow(41, 'donor@give.test', 'guest'))
+      .on(upsertGuestUser, () => null)
+      .on(insertPendingGuestTransaction, () => null)
     const result = await start(fake, null, input())
 
     expect(result.response).toStrictEqual({
       error: { code: 'EMAIL_EXISTS' },
       type: 'BUSINESS_ERROR',
     })
-    expect(result.calls).toStrictEqual(['account.findUserByEmail', 'account.upsertGuestUser'])
-    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.trips).toStrictEqual([READ, GUEST_WRITE])
     expect(result.events.at(-1)).toMatchObject({
       email: 'donor@give.test',
       event: 'giving.start_contribution.blocked',
@@ -313,26 +317,29 @@ describe('starting a contribution signed in', () => {
 
     const fake = contributionDb(userRow(2, 'donor@give.test', 'active'))
     const result = await start(fake, MEMBER, input())
+    const id = insertedId(fake)
 
-    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
-    expect(result.calls).toStrictEqual(SUCCESS_CALLS)
-    expect(fake.calls[2]).toStrictEqual({
-      args: [{ amount: 1225, createdAs: 'user', userId: 2 }],
-      name: 'payments.insertPendingTransaction',
-    })
-    expect(result.outcomes).toStrictEqual(['commit'])
+    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test', id))
+    expect(result.trips).toStrictEqual([READ, USER_WRITE])
+    expect(fake.calls.slice(2)).toStrictEqual([
+      { args: [{ amount: 1225, id, userId: 2 }], name: 'payments.insertPendingTransaction' },
+      { args: [id, ITEMS], name: 'payments.insertTransactionItems' },
+    ])
   })
 
   it('gives as the session user with an email nobody has', async () => {
     expect.hasAssertions()
 
-    const result = await start(contributionDb(null), MEMBER, input())
+    const fake = contributionDb(null)
+    const result = await start(fake, MEMBER, input())
 
-    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test'))
-    expect(result.calls).toStrictEqual(SUCCESS_CALLS)
+    expect(redirectParams(result.response)).toMatchObject(
+      successFor('donor@give.test', insertedId(fake)),
+    )
+    expect(result.calls).toStrictEqual([...READ, ...USER_WRITE])
   })
 
-  it("refuses another account's email, guest or not, and rolls back", async () => {
+  it("refuses another account's email, guest or not, before writing anything", async () => {
     expect.hasAssertions()
 
     for (const status of ['active', 'guest'] as const) {
@@ -347,8 +354,7 @@ describe('starting a contribution signed in', () => {
         error: { code: 'USER_MISMATCH' },
         type: 'BUSINESS_ERROR',
       })
-      expect(result.calls).toStrictEqual(['account.findUserByEmail'])
-      expect(result.outcomes).toStrictEqual(['rollback'])
+      expect(result.trips).toStrictEqual([READ])
       expect(result.events.at(-1)).toMatchObject({
         email: 'donor@give.test',
         event: 'giving.start_contribution.blocked',
@@ -362,10 +368,13 @@ describe('starting a contribution signed in', () => {
   it('charges a saved card the user owns, signing its token into the URL', async () => {
     expect.hasAssertions()
 
-    const result = await start(contributionDb(null), MEMBER, input({ token: 'tok_own' }))
+    const fake = contributionDb(null)
+    const result = await start(fake, MEMBER, input({ token: 'tok_own' }))
 
-    expect(redirectParams(result.response)).toMatchObject(successFor('donor@give.test', 'tok_own'))
-    expect(result.calls).toStrictEqual(['payments.findSavedCard', ...SUCCESS_CALLS])
+    expect(redirectParams(result.response)).toMatchObject(
+      successFor('donor@give.test', insertedId(fake), 'tok_own'),
+    )
+    expect(result.calls).toStrictEqual(['payments.findSavedCard', ...READ, ...USER_WRITE])
   })
 
   it('refuses a saved card the user does not own, before the transaction', async () => {
@@ -378,7 +387,6 @@ describe('starting a contribution signed in', () => {
       type: 'BUSINESS_ERROR',
     })
     expect(result.calls).toStrictEqual(['payments.findSavedCard'])
-    expect(result.outcomes).toStrictEqual([])
     expect(result.events).toMatchObject([
       {
         event: 'giving.start_contribution.blocked',
@@ -400,7 +408,7 @@ describe('starting a contribution signed in', () => {
     )
 
     expect(result.response).toStrictEqual({ type: 'SERVER_ERROR' })
-    expect(result.outcomes).toStrictEqual([])
+    expect(result.calls).toStrictEqual(['payments.findSavedCard'])
     expect(result.events).toMatchObject([
       {
         'error.type': 'Error',
@@ -479,7 +487,7 @@ describe('a contribution that is not recorded', () => {
     ])
   })
 
-  it('rolls back when a fund is missing from the table, inserting no items', async () => {
+  it('writes nothing when a fund is missing from the table', async () => {
     expect.hasAssertions()
 
     const result = await start(
@@ -489,13 +497,7 @@ describe('a contribution that is not recorded', () => {
     )
 
     expect(result.response).toStrictEqual({ type: 'SERVER_ERROR' })
-    expect(result.calls).toStrictEqual([
-      'account.findUserByEmail',
-      'account.upsertGuestUser',
-      'payments.findFundsByName',
-      'payments.insertPendingTransaction',
-    ])
-    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.trips).toStrictEqual([READ])
     expect(result.events.at(-1)).toMatchObject({
       'error.type': 'no-row',
       event: 'giving.start_contribution.failed',
@@ -506,24 +508,19 @@ describe('a contribution that is not recorded', () => {
     expect(result.events.at(-1)).not.toHaveProperty('err')
   })
 
-  it('rolls back when a statement fails mid-transaction', async () => {
+  it('writes the guest with the transaction in one batch, so a failed items insert leaves no guest', async () => {
     expect.hasAssertions()
 
     const result = await start(contributionDb(null).on(insertTransactionItems, fail), null, input())
 
     expect(result.response).toStrictEqual({ type: 'SERVER_ERROR' })
-    expect(result.calls).toStrictEqual([
-      'account.findUserByEmail',
-      'account.upsertGuestUser',
-      ...SUCCESS_CALLS.slice(1),
-    ])
-    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.trips).toStrictEqual([READ, GUEST_WRITE])
     expect(result.events.at(-1)).toMatchObject({
       'error.type': 'Error',
       err: { message: 'connection terminated', type: 'Error' },
       event: 'giving.start_contribution.failed',
       level: ERROR,
-      op: insertTransactionItems.queryName,
+      op: GUEST_WRITE.join(' + '),
     })
   })
 
@@ -534,58 +531,82 @@ describe('a contribution that is not recorded', () => {
     const failure = result.events.at(-1)
 
     expect(result.response).toStrictEqual({ type: 'SERVER_ERROR' })
-    expect(result.outcomes).toStrictEqual(['rollback'])
+    expect(result.trips).toStrictEqual([READ])
     expect(failure).toMatchObject({
       event: 'giving.start_contribution.failed',
-      op: findUserByEmail.queryName,
+      op: READ.join(' + '),
     })
     expect(JSON.stringify(failure)).not.toContain('donor@give.test')
   })
 })
 
-describe('the pending contribution transaction', () => {
+describe('the pending contribution batches', () => {
   const items = [{ amountInCents: 500, fund: 'offering' as const }]
   const donor = { email: 'donor@give.test', firstName: 'Ada', lastName: 'Lovelace' }
 
   it.each([
     {
-      case: 'the email lookup fails',
+      case: 'the lookup fails',
       fake: () => contributionDb(null).on(findUserByEmail, fail),
-      op: findUserByEmail.queryName,
+      op: READ.join(' + '),
       reason: 'failed',
+      trips: [READ],
+      user: null,
     },
     {
       case: 'creating the guest fails',
       fake: () => contributionDb(null).on(upsertGuestUser, fail),
-      op: upsertGuestUser.queryName,
+      op: GUEST_WRITE.join(' + '),
       reason: 'failed',
+      trips: [READ, GUEST_WRITE],
+      user: null,
     },
     {
-      case: 'inserting the transaction returns no row',
+      case: "inserting the guest's transaction returns no row",
+      fake: () => contributionDb(null).on(insertPendingGuestTransaction, () => null),
+      op: insertPendingGuestTransaction.queryName,
+      reason: 'no-row',
+      trips: [READ, GUEST_WRITE],
+      user: null,
+    },
+    {
+      case: "inserting a member's items fails",
+      fake: () => contributionDb(null).on(insertTransactionItems, fail),
+      op: USER_WRITE.join(' + '),
+      reason: 'failed',
+      trips: [READ, USER_WRITE],
+      user: MEMBER,
+    },
+    {
+      case: "inserting a member's transaction returns no row",
       fake: () => contributionDb(null).on(insertPendingTransaction, () => null),
       op: insertPendingTransaction.queryName,
       reason: 'no-row',
+      trips: [READ, USER_WRITE],
+      user: MEMBER,
     },
-  ])('rolls back with an InfraError when $case', async ({ fake, op, reason }) => {
-    expect.hasAssertions()
+  ])(
+    'is an InfraError, after whole batches, when $case',
+    async ({ fake, op, reason, trips, user }) => {
+      expect.hasAssertions()
 
-    const db = fake()
-    const error = errValue(await createPendingContribution({ db }, items, donor, null))
+      const db = fake()
+      const error = errValue(await createPendingContribution({ db }, items, donor, user))
 
-    expect(error).toBeInstanceOf(InfraError)
-    expect(error).toMatchObject({ op, reason })
-    expect(db.transactions).toStrictEqual(['rollback'])
-  })
+      expect(error).toBeInstanceOf(InfraError)
+      expect(error).toMatchObject({ op, reason })
+      expect(db.roundTrips).toStrictEqual(trips)
+    },
+  )
 
-  it('names the customer for the gateway', async () => {
+  it('names the customer and the generated transaction for the gateway', async () => {
     expect.hasAssertions()
 
     const db = contributionDb(null)
+    const recorded = okValue(await createPendingContribution({ db }, items, donor, MEMBER))
 
-    expect(okValue(await createPendingContribution({ db }, items, donor, MEMBER))).toStrictEqual({
-      customerName: 'Ada Lovelace',
-      transactionId: 'txn_pending_000000001',
-    })
-    expect(db.transactions).toStrictEqual(['commit'])
+    expect(recorded).toStrictEqual({ customerName: 'Ada Lovelace', transactionId: insertedId(db) })
+    expect(recorded.transactionId).toMatch(TRANSACTION_ID)
+    expect(db.roundTrips).toStrictEqual([READ, USER_WRITE])
   })
 })
