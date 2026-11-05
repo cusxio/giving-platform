@@ -10,7 +10,6 @@ import { cx } from '#/styles/cx'
 export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' | 'name'> {
   /** The largest amount the field takes. An entry past it leaves the field as it was. */
   max: number
-  /** Called for a typed or pasted entry past `max`, before `onValueChange` reports the kept amount. */
   onOverMax: () => void
   onValueChange: NonNullable<CurrencyInputProps['onValueChange']>
 }
@@ -23,11 +22,9 @@ const amountFormat = {
   groupSeparator: ',',
 } as const
 
-/** Whether the field's text, such as `RM 1,234.5`, is an amount of at most `max`. Empty fits. */
 export const fitsMax = (text: string | undefined, max: number) =>
   !(Number.parseFloat(cleanValue({ ...amountFormat, value: text ?? '' })) > max)
 
-/** Whether two clean values name the same amount, such as `0100` and `100`. */
 export const sameAmount = (a: string, b: string) =>
   a === b || Number.parseFloat(a) === Number.parseFloat(b)
 

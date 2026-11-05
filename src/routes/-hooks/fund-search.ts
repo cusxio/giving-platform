@@ -5,13 +5,10 @@ import { MAX_FUND_AMOUNT } from '#/modules/payments'
 export type FundSearch = Partial<Record<Fund, number>>
 
 export interface LinkedGift {
-  /** The amounts the link fills in, as the form stores them, such as `{ tithe: '50' }`. */
   readonly amounts: Partial<Record<Fund, string>>
-  /** The funds whose linked amount is past the most one fund may receive. */
   readonly overMax: readonly Fund[]
 }
 
-/** A non-negative amount in ringgit with at most two decimals, such as `50` or `12.5`. */
 function amountFrom(param: unknown): number | undefined {
   const amount =
     typeof param === 'string' && /^\d+(?:\.\d{1,2})?$/u.test(param) ? Number(param) : param
@@ -23,10 +20,7 @@ function amountFrom(param: unknown): number | undefined {
     : undefined
 }
 
-/**
- * Each fund's amount from the URL, such as `?tithe=50`, leaving out one that is not an amount.
- * Every fund is named, even as `undefined`, because the router keeps a raw param the route omits.
- */
+/** Every fund is named, even as `undefined`, because the router keeps a raw param the route omits. */
 export function parseFundSearch(search: Record<string, unknown>): FundSearch {
   return Object.fromEntries(funds.map((fund) => [fund, amountFrom(search[fund])]))
 }
@@ -48,6 +42,5 @@ export function linkedGift(search: FundSearch): LinkedGift {
   return { amounts, overMax }
 }
 
-/** Whether the link has an amount for some fund and none past the maximum. */
 export const opensOnDetails = (gift: LinkedGift) =>
   Object.keys(gift.amounts).length > 0 && gift.overMax.length === 0
