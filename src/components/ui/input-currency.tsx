@@ -79,6 +79,7 @@ export function InputCurrency(props: InputCurrencyProps) {
         render={({ onChange, defaultValue, ...rest }) => (
           <CurrencyInput
             allowNegativeValue={false}
+            disableAbbreviations
             inputMode="numeric"
             max={max}
             maxLength={maxLengthFor(max)}
