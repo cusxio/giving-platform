@@ -2,9 +2,8 @@ import { useFormStore, useFormSubmit, useStoreState } from '@ariakit/react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { toast } from '#/components/ui/toaster'
-import type { User } from '#/db/schema'
-import type { GetUserResponse } from '#/features/auth/auth.get-user.procedure'
-import { useUpdateUserMutation } from '#/features/user/user.mutations'
+import type { CurrentUserResponse, User } from '#/modules/account'
+import { currentUserQuery, useUpdateUserMutation } from '#/modules/account'
 
 export function useSettingsForm(user: Pick<User, 'email' | 'firstName' | 'lastName'>) {
   const store = useFormStore({
@@ -23,8 +22,8 @@ export function useSettingsForm(user: Pick<User, 'email' | 'firstName' | 'lastNa
         { firstName: state.values.firstName, lastName: state.values.lastName },
         {
           onSuccess(data) {
-            queryClient.setQueryData<Extract<GetUserResponse, { type: 'SUCCESS' }>>(
-              ['auth-user'],
+            queryClient.setQueryData<Extract<CurrentUserResponse, { type: 'SUCCESS' }>>(
+              currentUserQuery().queryKey,
               (prev) => {
                 if (!prev) {
                   return prev

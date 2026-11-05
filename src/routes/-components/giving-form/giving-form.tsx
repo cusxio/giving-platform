@@ -4,10 +4,9 @@ import { useCallback } from 'react'
 import { Spinner } from '#/components/ui/spinner'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
-import type { User } from '#/db/schema'
-import { useSuspenseQueryDeferred } from '#/hooks'
-
-import { createSavedPaymentMethodsQueryOptions } from '../../-index.queries'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import type { User } from '#/modules/account'
+import { savedPaymentMethodsQuery } from '#/modules/payments'
 
 import { GivingFormDetails } from './giving-form-details'
 import { GivingFormFund } from './giving-form-fund'
@@ -28,7 +27,7 @@ export function GivingForm(props: GivingFormProps) {
   const authenticated = user !== undefined
 
   const { data: savedPaymentMethods } = useSuspenseQueryDeferred(
-    createSavedPaymentMethodsQueryOptions(authenticated),
+    savedPaymentMethodsQuery(authenticated),
   )
   const { store, view, submitPayment } = useGivingForm(user, savedPaymentMethods[0]?.token, {
     initialFunds,

@@ -2,12 +2,12 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { receiptQuery } from '#/modules/payments'
 
 import { Failed } from './-components/failed'
 import { Pending } from './-components/pending'
 import { Success } from './-components/success'
-import { createTransactionQueryOptions } from './-transaction-receipt.queries'
 
 export const Route = createFileRoute('/transaction/receipt/$transactionId')({
   component: RouteComponent,
@@ -15,10 +15,7 @@ export const Route = createFileRoute('/transaction/receipt/$transactionId')({
   async loader({ params, context }) {
     const { queryClient } = context
     const { transactionId } = params
-    await queryClient.query({
-      ...createTransactionQueryOptions(transactionId),
-      staleTime: 'static',
-    })
+    await queryClient.query({ ...receiptQuery(transactionId), staleTime: 'static' })
   },
 })
 
@@ -26,7 +23,7 @@ function RouteComponent() {
   const { transactionId } = Route.useParams()
   const {
     data: { transaction, user, payment },
-  } = useSuspenseQueryDeferred(createTransactionQueryOptions(transactionId))
+  } = useSuspenseQueryDeferred(receiptQuery(transactionId))
 
   return (
     <>

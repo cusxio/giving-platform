@@ -1,24 +1,24 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 import { config } from '#/core/brand'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { insightsQuery } from '#/modules/analytics'
 import { cx } from '#/styles/cx'
 
 import { InsightsGivingBreakdown } from './-components/insights-giving-breakdown'
 import { InsightsSummary } from './-components/insights-summary'
 import { MultiLineChart } from './-components/multi-line-chart'
-import { createInsightsQueryOptions } from './-insights.queries'
 
 export const Route = createFileRoute('/(app)/(su)/insights')({
   component: RouteComponent,
   head: () => ({ meta: [{ title: `Insights · ${config.entity}` }] }),
   async loader({ context }) {
-    await context.queryClient.query({ ...createInsightsQueryOptions(), staleTime: 'static' })
+    await context.queryClient.query({ ...insightsQuery(), staleTime: 'static' })
   },
 })
 
 function RouteComponent() {
-  const { data } = useSuspenseQueryDeferred(createInsightsQueryOptions())
+  const { data } = useSuspenseQueryDeferred(insightsQuery())
 
   return (
     <div className={cx('srhink-0 mx-auto w-full grow p-4', 'max-w-120 bp-overview-2col:max-w-5xl')}>

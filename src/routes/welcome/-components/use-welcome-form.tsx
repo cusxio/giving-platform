@@ -3,10 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import type { User } from '#/db/schema'
-import { useUpdateUserMutation } from '#/features/user/user.mutations'
-
-import type { getWelcomeData } from '../-data/welcome.get-data.procedure'
+import type { User } from '#/modules/account'
+import { useUpdateUserMutation, welcomeQuery } from '#/modules/account'
 
 export function useWelcomeForm(params: {
   guestTransactionExists: boolean
@@ -48,15 +46,12 @@ export function useWelcomeForm(params: {
               return
             }
 
-            queryClient.setQueryData<Awaited<ReturnType<typeof getWelcomeData>>>(
-              ['welcome'],
-              (prev) => {
-                if (!prev) {
-                  return prev
-                }
-                return { ...prev, user: { ...prev.user, ...data.value.user } }
-              },
-            )
+            queryClient.setQueryData(welcomeQuery().queryKey, (prev) => {
+              if (!prev) {
+                return prev
+              }
+              return { ...prev, user: { ...prev.user, ...data.value.user } }
+            })
           },
         },
       )

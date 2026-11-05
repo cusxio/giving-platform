@@ -1,5 +1,68 @@
 import { defineConfig } from 'oxlint'
 
+interface ImportPattern {
+  readonly group?: string[]
+  readonly message: string
+  readonly regex?: string
+}
+
+// Import boundaries. An override replaces the rule's whole pattern list, so each zone below
+// composes these constants instead of repeating them.
+
+// Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
+// entry allow the import past every other pattern too, and its regex has no lookahead.
+const MODULE_ENTRY_ONLY: ImportPattern = {
+  message:
+    'Import another module only through #/modules/<name> (client) or #/modules/<name>/server (server).',
+  regex: String.raw`^#/modules/[^/]+/([^s]|s([^e]|$)|se([^r]|$)|ser([^v]|$)|serv([^e]|$)|serve([^r]|$)|server.)`,
+}
+const NO_RELATIVE_INTO_MODULES: ImportPattern = {
+  message: 'Reach a module through its #/modules/<name> entry, not a relative path.',
+  regex: String.raw`(^|/)\.\.?/(.*/)?modules/`,
+}
+const FLAT_MODULES: ImportPattern = {
+  message:
+    'Modules are flat: import siblings with ./ and other modules through #/modules/<name>/server.',
+  regex: String.raw`^\.\./`,
+}
+const SQL_IN_REPOSITORIES: ImportPattern = {
+  group: ['drizzle-orm', 'drizzle-orm/*', '#/server/schema.server', '#/server/sql.server'],
+  message:
+    'SQL lives in *.repository.server.ts. Export a defineQuery factory there and run it with deps.db.',
+}
+const PLATFORM_INTERNALS: ImportPattern = {
+  group: ['#/server/env.server', '#/server/logger.server', '#/server/neon.server'],
+  message:
+    'Env, the root logger and the neon clients stay in src/server/. Take them from deps (Pick<Deps, ...>).',
+}
+const SERVER_CODE_IN_CLIENT: ImportPattern = {
+  group: ['#/server/**', '#/modules/*/server'],
+  message:
+    'Client code never imports server code, even types. Import client-safe types from #/modules/<name>.',
+}
+const NO_REPOSITORY_IN_FUNCTIONS: ImportPattern = {
+  message: 'A server function calls a *.server.ts workflow, never a repository.',
+  regex: String.raw`\.repository\.server$`,
+}
+const NO_REPOSITORY_IN_CLIENT: ImportPattern = {
+  message:
+    'Client-reachable module files never import a repository, even types. Put shared types in <name>.types.ts or a pure domain file.',
+  regex: String.raw`\.repository\.server$`,
+}
+const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
+  message:
+    'Client code never imports src/server. Only entry-server.tsx and entry-start.tsx (behind import.meta.env.SSR) may.',
+  regex: String.raw`^\./server/`,
+}
+
+const restrictImports = (
+  ...patterns: ImportPattern[]
+): { 'eslint/no-restricted-imports': ['error', { patterns: ImportPattern[] }] } => ({
+  'eslint/no-restricted-imports': ['error', { patterns }],
+})
+const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
+const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS]
+
 export default defineConfig({
   categories: {
     correctness: 'error',
@@ -89,6 +152,8 @@ export default defineConfig({
     // Its fix swaps parseInt/parseFloat for Number, which parses user-entered amounts differently.
     'unicorn/prefer-number-coercion': 'off',
 
+    ...restrictImports(...OUTSIDE_PLATFORM),
+
     // Promise rules.
     'promise/always-return': ['error', { ignoreLastCallback: true }],
     'promise/avoid-new': 'off',
@@ -153,6 +218,44 @@ export default defineConfig({
           },
         ],
       },
+    },
+    { files: ['src/server/**'], rules: restrictImports(...EVERYWHERE) },
+    {
+      files: ['src/routes/**', 'src/components/**', 'src/hooks/**', 'src/core/**'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, SERVER_CODE_IN_CLIENT),
+    },
+    { files: ['src/routes/api/**'], rules: restrictImports(...OUTSIDE_PLATFORM) },
+    {
+      files: ['src/*.{ts,tsx}'],
+      rules: restrictImports(
+        ...OUTSIDE_PLATFORM,
+        SERVER_CODE_IN_CLIENT,
+        RELATIVE_SERVER_CODE_IN_CLIENT,
+      ),
+    },
+    {
+      files: ['src/entry-server.tsx', 'src/entry-start.tsx'],
+      rules: restrictImports(...OUTSIDE_PLATFORM),
+    },
+    {
+      files: ['src/modules/**'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_CLIENT),
+    },
+    {
+      files: [
+        'src/modules/**/*.server.ts',
+        'src/modules/*/server.ts',
+        'src/modules/**/*.test.{ts,tsx}',
+      ],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
+    {
+      files: ['src/modules/**/*.repository.server.ts'],
+      rules: restrictImports(...EVERYWHERE, FLAT_MODULES, PLATFORM_INTERNALS),
+    },
+    {
+      files: ['src/modules/**/*.functions.ts'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, FLAT_MODULES, NO_REPOSITORY_IN_FUNCTIONS),
     },
   ],
 })

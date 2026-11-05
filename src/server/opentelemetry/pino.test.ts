@@ -9,7 +9,7 @@ import { TracerProvider } from '@opentelemetry/sdk-trace'
 import { pino } from 'pino'
 import { describe, expect, it } from 'vitest'
 
-import { createOtelLogStream, traceContextMixin } from './pino'
+import { createOtelLogStream, traceContextMixin } from './pino.server'
 
 function setup() {
   const exporter = new InMemoryLogRecordExporter()

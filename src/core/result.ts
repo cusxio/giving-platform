@@ -18,13 +18,6 @@ export function ok<T>(value?: T): Ok<T> {
 
 export const err = <E>(error: E): Err<E> => ({ error, ok: false })
 
-export const getOrThrow = <T, E>(result: Result<T, E>): T => {
-  if (result.ok) {
-    return result.value
-  }
-  throw new Error('getOrThrow failed', { cause: result.error })
-}
-
 export const trySync = <T, const E>(fn: () => T, mapError: (error: unknown) => E): Result<T, E> => {
   try {
     return ok(fn())

@@ -11,11 +11,11 @@ import {
 } from '#/components/ui/table'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 import { centsToRinggit } from '#/core/money'
-import type { Transaction } from '#/db/schema'
+import type { TransactionRow } from '#/modules/history'
 
 interface TransactionsTableProps {
   privacyMode: boolean
-  transactions: Pick<Transaction, 'amount' | 'createdAt' | 'id' | 'status'>[]
+  transactions: TransactionRow[]
 }
 
 export function TransactionsTable(props: TransactionsTableProps) {

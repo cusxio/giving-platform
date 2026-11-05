@@ -5,13 +5,13 @@ import * as v from 'valibot'
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
 import { funds } from '#/core/brand'
-import { createUserQueryOptions, useOptionalAuthUser } from '#/features/session/session.queries'
+import { currentUserQuery, useOptionalAuthUser } from '#/modules/account'
+import { savedPaymentMethodsQuery } from '#/modules/payments'
 import { Nav } from '#/routes/-components/nav'
 import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
 import { useGivingUrl } from './-hooks/use-giving-url'
-import { createSavedPaymentMethodsQueryOptions } from './-index.queries'
 
 const searchSchema = v.object({
   future: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
@@ -33,10 +33,7 @@ export const Route = createFileRoute('/')({
       return { isAuthenticated: false, isMaintenanceMode: true }
     }
 
-    const result = await context.queryClient.query({
-      ...createUserQueryOptions(),
-      staleTime: 'static',
-    })
+    const result = await context.queryClient.query({ ...currentUserQuery(), staleTime: 'static' })
 
     if (result.type === 'SUCCESS' && result.value.user.journey === null) {
       throw redirect({ replace: true, to: '/welcome' })
@@ -55,10 +52,7 @@ export const Route = createFileRoute('/')({
 
   async loader({ context }) {
     if (context.shouldPreloadPaymentMethods === true) {
-      await context.queryClient.query({
-        ...createSavedPaymentMethodsQueryOptions(true),
-        staleTime: 'static',
-      })
+      await context.queryClient.query({ ...savedPaymentMethodsQuery(true), staleTime: 'static' })
     }
   },
 

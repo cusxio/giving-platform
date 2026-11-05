@@ -5,7 +5,7 @@
   "scripts": {
     "build": "vite build && tsc --noEmit",
     "dev": "vite dev",
-    "dev:email": "email dev --dir ./src/features/email/templates",
+    "dev:email": "email dev --dir ./src/modules/auth/emails",
     "preview": "vite preview",
     "test:watch": "vitest"
   },

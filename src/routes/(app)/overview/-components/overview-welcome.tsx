@@ -2,7 +2,7 @@ import { HandHeartIcon, SparkleIcon } from '@phosphor-icons/react/dist/ssr'
 import { Link } from '@tanstack/react-router'
 
 import { Button, buttonVariants } from '#/components/ui/button'
-import type { User } from '#/db/schema'
+import type { User } from '#/modules/account'
 import { cx } from '#/styles/cx'
 
 interface OverviewWelcomeProps {

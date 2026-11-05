@@ -1,10 +1,10 @@
 import { Spinner } from '#/components/ui/spinner'
-import type { Transaction } from '#/db/schema'
+import type { Receipt } from '#/modules/payments'
 
 import { TransactionStatusLayout } from './transaction-status-layout'
 
 interface PendingProps {
-  transaction: Pick<Transaction, 'id' | 'status'>
+  transaction: Receipt['transaction']
 }
 
 export function Pending(props: PendingProps) {

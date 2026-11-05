@@ -5,13 +5,12 @@ import * as v from 'valibot'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Pagination } from '#/components/ui/pagination'
 import { config } from '#/core/brand'
-import { useAuthUser } from '#/features/session/session.queries'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { useAuthUser } from '#/modules/account'
+import { transactionsQuery } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
 import { TransactionsTable } from '../-components/transactions-table'
-
-import { createTransactionsQueryOptions } from './-transactions.queries'
 
 const searchSchema = v.object({ page: v.optional(v.number()) })
 
@@ -40,10 +39,7 @@ export const Route = createFileRoute('/(app)/transactions')({
       queryClient,
     } = context
 
-    await queryClient.query({
-      ...createTransactionsQueryOptions(userId, journey, page),
-      staleTime: 'static',
-    })
+    await queryClient.query({ ...transactionsQuery(userId, journey, page), staleTime: 'static' })
   },
 })
 
@@ -56,7 +52,7 @@ function RouteComponent() {
 
   const {
     data: { totalCount, transactions, pageSize },
-  } = useSuspenseQueryDeferred(createTransactionsQueryOptions(userId, journey, page))
+  } = useSuspenseQueryDeferred(transactionsQuery(userId, journey, page))
 
   const pageCount = Math.ceil(totalCount / pageSize)
 

@@ -1,9 +1,9 @@
+import type { Overview } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
-import type { GetOverviewDataResponse } from '../-data/overview.get-data.procedure'
 import { AreaChart, BarChart, ChartSummary, StackedBarChart } from '../../-components/charts'
 
-interface OverviewChartsProps extends Omit<GetOverviewDataResponse, 'transactions'> {
+interface OverviewChartsProps extends Omit<Overview, 'transactions'> {
   privacyMode: boolean
 }
 

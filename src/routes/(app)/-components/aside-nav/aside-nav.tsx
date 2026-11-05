@@ -10,7 +10,7 @@ import {
 import { useMemo } from 'react'
 
 import { Logo } from '#/core/brand/logo'
-import type { User } from '#/db/schema'
+import type { User } from '#/modules/account'
 import { cx } from '#/styles/cx'
 
 import { AsideNavButton } from './aside-nav-button'

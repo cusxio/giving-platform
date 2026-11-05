@@ -7,9 +7,8 @@ import { TransactionStatus } from '#/components/transaction-status'
 import { TZDate, clientTz, formatDistanceToNow } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 import { centsToRinggit } from '#/core/money'
-import { useSuspenseQueryDeferred } from '#/hooks'
-
-import { createTransactionQueryOptions } from './-transaction.queries'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { transactionQuery } from '#/modules/history'
 
 export const Route = createFileRoute('/(app)/transaction/$transactionId')({
   component: RouteComponent,
@@ -18,16 +17,13 @@ export const Route = createFileRoute('/(app)/transaction/$transactionId')({
     const { queryClient } = context
     const { transactionId } = params
 
-    await queryClient.query({
-      ...createTransactionQueryOptions(transactionId),
-      staleTime: 'static',
-    })
+    await queryClient.query({ ...transactionQuery(transactionId), staleTime: 'static' })
   },
 })
 
 function RouteComponent() {
   const { transactionId } = Route.useParams()
-  const { data } = useSuspenseQueryDeferred(createTransactionQueryOptions(transactionId))
+  const { data } = useSuspenseQueryDeferred(transactionQuery(transactionId))
   const [transaction, transactionItems] = data
   const { id, createdAt: createdAtProp, amount: amountInCents, status } = transaction
   const createdAt = useMemo(() => new TZDate(createdAtProp, clientTz), [createdAtProp])
