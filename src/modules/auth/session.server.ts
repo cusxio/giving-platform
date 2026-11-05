@@ -38,13 +38,18 @@ interface ResolvedSession {
   /** The cookie to send back: a refreshed one when the session was extended. */
   serializedCookie: null | string
   session: SessionWithUser['session']
-  user: Pick<SessionWithUser['user'], 'id' | 'journey' | 'role'>
+  user: SessionWithUser['user']
+  userSettings: SessionWithUser['userSettings']
 }
 
-/** Who the request belongs to. An anonymous request has neither, so a null test on one narrows both. */
+/** Who the request belongs to. An anonymous request has none, so a null test on one narrows all. */
 export type SessionCheck =
-  | { readonly session: null; readonly user: null }
-  | { readonly session: ResolvedSession['session']; readonly user: ResolvedSession['user'] }
+  | { readonly session: null; readonly user: null; readonly userSettings: null }
+  | {
+      readonly session: ResolvedSession['session']
+      readonly user: ResolvedSession['user']
+      readonly userSettings: ResolvedSession['userSettings']
+    }
 
 type SessionDeps = Pick<Deps, 'db' | 'hashToken' | 'logger'>
 
@@ -110,7 +115,7 @@ async function resolveSession(
     return Result.err(new SessionNotFoundError())
   }
 
-  const { session, user } = found.value
+  const { session, user, userSettings } = found.value
 
   if (!constantTimeEqual(deps.hashToken(parsed.value.rawToken), session.tokenHash)) {
     return Result.err(new SessionInvalidError())
@@ -136,12 +141,13 @@ async function resolveSession(
   }
 
   if (daysLeft > 7) {
-    return Result.ok({ serializedCookie: null, session, user })
+    return Result.ok({ serializedCookie: null, session, user, userSettings })
   }
 
   const extended = {
     session: { ...session, expiresAt: addSeconds(now(), SESSION_MAX_AGE_SECONDS) },
     user,
+    userSettings,
   }
 
   await afterResponse(
@@ -171,11 +177,11 @@ export async function verifySessionCookie(
   const resolved = await resolveSession(deps, cookieValue)
 
   if (resolved.isOk()) {
-    const { serializedCookie, session, user } = resolved.value
+    const { serializedCookie, session, user, userSettings } = resolved.value
     if (serializedCookie !== null) {
       setResponseHeader('Set-Cookie', serializedCookie)
     }
-    return { session, user }
+    return { session, user, userSettings }
   }
 
   const { error } = resolved
@@ -198,7 +204,7 @@ export async function verifySessionCookie(
   }
   setResponseHeader('Set-Cookie', clearSessionCookie())
 
-  return { session: null, user: null }
+  return { session: null, user: null, userSettings: null }
 }
 
 /** Deletes the session row. A failure is only logged, so logout still clears the cookie. */

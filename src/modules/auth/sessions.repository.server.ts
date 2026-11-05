@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 
 import { defineQuery, firstOrNull, nothing } from '#/server/db.server'
 import type { Session } from '#/server/schema.server'
-import { sessions, users } from '#/server/schema.server'
+import { sessions, userSettings, users } from '#/server/schema.server'
 
 export type { Session } from '#/server/schema.server'
 
@@ -26,16 +26,27 @@ export const extendSession = defineQuery(
   firstOrNull,
 )
 
+/**
+ * The session with its user's row and settings. A user who never saved settings gets the
+ * defaults.
+ */
 export const findSessionByIdWithUser = defineQuery(
   'auth.findSessionByIdWithUser',
   (db, sessionId: Session['id']) =>
     db
       .select({
         session: { expiresAt: sessions.expiresAt, id: sessions.id, tokenHash: sessions.tokenHash },
-        user: { id: users.id, journey: users.journey, role: users.role, status: users.status },
+        user: users,
+        userSettings: { privacyMode: userSettings.privacyMode, userId: userSettings.userId },
       })
       .from(sessions)
       .innerJoin(users, eq(sessions.userId, users.id))
+      .leftJoin(userSettings, eq(userSettings.userId, users.id))
       .where(eq(sessions.id, sessionId)),
-  firstOrNull,
+  (found) => {
+    const row = firstOrNull(found)
+    return row === null
+      ? null
+      : { ...row, userSettings: row.userSettings ?? { privacyMode: false, userId: row.user.id } }
+  },
 )
