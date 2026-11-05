@@ -3,7 +3,7 @@ import type { Deps } from '#/server/deps.server'
 import { logDefects, logInfraFailure } from '#/server/procedure.server'
 
 import { settlePolled } from './settlement.server'
-import { countStalePending, pendingTransactionsToReconcile } from './transactions.repository.server'
+import { claimTransactionsToReconcile, countStalePending } from './transactions.repository.server'
 
 type ReconcileDeps = Pick<Deps, 'config' | 'db' | 'eghl' | 'logger'>
 
@@ -17,7 +17,7 @@ async function reconcile(deps: ReconcileDeps, request: Request) {
 
   logger.info({ event: 'eghl.cron.job_start' }, 'Starting eGHL cron job')
 
-  const pending = await db.run(pendingTransactionsToReconcile())
+  const pending = await db.run(claimTransactionsToReconcile())
   if (pending.isErr()) {
     logInfraFailure(logger, 'eghl.cron', pending.error)
     return new Response('Internal Server Error', { status: 500 })
