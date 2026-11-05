@@ -8,6 +8,8 @@ import { useAuthUser } from '#/modules/account'
 import { availableYearsQuery, overviewQuery } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
+import { charts } from '../-components/charts/load-charts'
+
 import { BibleVerse } from './-components/bible-verse'
 import { GreetUser } from './-components/greet-user'
 import { OverviewCharts } from './-components/overview-charts'
@@ -50,12 +52,11 @@ export const Route = createFileRoute('/(app)/overview')({
     const requestedYear = deps.year
     const effectiveYear = requestedYear ?? currentCalendarYear
 
-    const overview = queryClient.query({
-      ...overviewQuery(userId, journey, effectiveYear),
-      staleTime: 'static',
-    })
-    // A year the redirect below refuses may fail its read, and nothing awaits that failure.
-    overview.catch(() => {})
+    const ready = Promise.all([
+      queryClient.query({ ...overviewQuery(userId, journey, effectiveYear), staleTime: 'static' }),
+      charts.load(),
+    ])
+    ready.catch(() => {})
 
     const dataYears = await queryClient.query({
       ...availableYearsQuery(userId, journey),
@@ -72,7 +73,7 @@ export const Route = createFileRoute('/(app)/overview')({
       throw redirect({ replace: true, search: { year: undefined }, to: '/overview' })
     }
 
-    await overview
+    await ready
 
     return {
       hasZeroTransactions: dataYears.length === 0,

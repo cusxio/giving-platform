@@ -1,9 +1,13 @@
 import { QueryClient, queryOptions } from '@tanstack/react-query'
 import { isRedirect } from '@tanstack/react-router'
+import { createElement } from 'react'
+import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 
 import { clientTz, now } from '#/core/date'
 import type * as History from '#/modules/history'
+
+import type * as Charts from '../-components/charts'
 
 type Year = number | 'all'
 
@@ -26,7 +30,15 @@ vi.mock<typeof History>(import('#/modules/history'), async (actual) => {
   }
 })
 
+const chartCode = vi.hoisted(() => ({ loaded: false }))
+
+vi.mock<typeof Charts>(import('../-components/charts'), async (actual) => {
+  chartCode.loaded = true
+  return actual()
+})
+
 const { Route } = await import('./route')
+const { OverviewCharts } = await import('./-components/overview-charts')
 
 interface Search {
   readonly year?: Year
@@ -40,6 +52,20 @@ const loader = Route.options.loader as (options: {
 
 const thisYear = now(clientTz).getFullYear()
 const overview = { transactions: [] }
+const charts = {
+  cumulativeContributions: [{ cumulativeAmount: 100, day: '2026-01-05' }],
+  monthlyContributions: [{ month: 1, totalAmount: 100 }],
+  monthlyContributionsFrequency: [{ General: 1, month: 1 }],
+  privacyMode: false,
+  summary: {
+    averageAmount: 100,
+    largestAmount: 100,
+    largestAmountDate: null,
+    noOfContributions: 1,
+    totalAmount: 100,
+    totalFundsSupported: 1,
+  },
+}
 const toOverview = { replace: true, search: { year: undefined }, to: '/overview' }
 
 function given(years: () => Promise<number[]>, read: () => Promise<unknown>) {
@@ -61,6 +87,19 @@ async function redirectOf(loading: Promise<unknown>) {
 }
 
 describe('the overview loader', () => {
+  it('loads the chart code with the data, not with the route', async () => {
+    expect.hasAssertions()
+    given(
+      () => Promise.resolve([thisYear]),
+      () => Promise.resolve(overview),
+    )
+    expect(chartCode.loaded).toBe(false)
+
+    await load({})
+
+    expect(chartCode.loaded).toBe(true)
+  })
+
   it('asks for the overview before the available years answer', async () => {
     expect.hasAssertions()
     const answer: { years?: (years: number[]) => void } = {}
@@ -163,5 +202,22 @@ describe('the overview loader', () => {
     )
 
     await expect(load({ year: thisYear - 1 })).rejects.toThrow('years failed')
+  })
+})
+
+describe('the overview charts', () => {
+  it('draw in the first render once the loader has run', async () => {
+    expect.hasAssertions()
+    given(
+      () => Promise.resolve([thisYear]),
+      () => Promise.resolve(overview),
+    )
+    await load({})
+
+    const html = renderToString(createElement(OverviewCharts, charts))
+
+    expect(html).toContain('Contribution by Month')
+    expect(html).toContain('Contribution Activity')
+    expect(html).toContain('Cumulative Contribution')
   })
 })
