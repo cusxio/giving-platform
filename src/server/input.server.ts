@@ -68,12 +68,14 @@ function normalize(raw: unknown, options: ParseOptions, type: TSchema): unknown 
 /**
  * The whole parse step of a procedure. Normalization reads `unknown` and skips anything that is
  * not a string, so a malformed body is `InvalidInput` with the schema's issues, never a
- * `TypeError`.
+ * `TypeError`. typebox's `Parse` returns its input with any extra keys, so they are cleaned away
+ * after it: an action only ever sees the fields its schema declares.
  */
 export function parseWith<I>(schema: Schema<I>, options: ParseOptions = {}): Parser<I> {
   return (raw) => {
     try {
-      return Result.ok(schema.Parse(normalize(raw, options, schema.Type())))
+      const type = schema.Type()
+      return Result.ok(Value.Clean(type, schema.Parse(normalize(raw, options, type))) as I)
     } catch (error) {
       if (!hasIssues(error)) {
         throw error
