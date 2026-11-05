@@ -525,6 +525,39 @@ describe('a pending row the gateway answers refunded or reversed', () => {
     },
   )
 
+  it.each(
+    (['callback', 'return'] as const).flatMap((source) =>
+      (['failed', 'cancelled'] as const).map((claim) => [source, claim] as const),
+    ),
+  )(
+    'is held with an alert when the query confirming a %s reply that claims %s shows a partial refund',
+    async (source, claim) => {
+      expect.hasAssertions()
+
+      const row = statefulRow()
+      const { answer } = await realClientReadingSignedRefund('13.50')
+      row.queryStatus.mockResolvedValue(answer)
+      const settled = await settleReply(
+        row.deps,
+        { claim: { kind: claim, record: paid({ message: 'Card declined' }) }, kind: 'unconfirmed' },
+        source,
+      )
+
+      expect(okValue(settled)).toStrictEqual({ kind: 'held', why: 'refund_mismatch' })
+      expect([row.status(), row.paymentRows()]).toStrictEqual(['held', 0])
+      expect(row.callsSince()).toStrictEqual(['payments.findPendingAmountInCents', ...HELD_WRITES])
+      expect(row.eventsSince()).toStrictEqual([
+        expect.objectContaining({
+          event: 'payment.finalize.refund_mismatch',
+          level: 50,
+          refunded_amount_in_cents: 1350,
+          source,
+          stored_amount_in_cents: STORED_CENTS,
+        }),
+      ])
+    },
+  )
+
   it.each(['callback', 'return'] as const)(
     'stays refunded on a signed %s success replayed later, writing nothing',
     async (source) => {

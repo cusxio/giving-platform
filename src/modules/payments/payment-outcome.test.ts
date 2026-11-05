@@ -233,6 +233,11 @@ const STEPS = {
   failed: outcomeOf('failed'),
   mismatched: outcomeOf('succeeded', 'another amount'),
   otherTxnId: { card: null, kind: 'succeeded', record: { ...record, providerTxnId: 'CIVother' } },
+  partialRefund: {
+    kind: 'refunded',
+    record: { ...record, message: 'Transaction refunded' },
+    refund: { cents: 2500, kind: 'total' },
+  },
   refunded: {
     kind: 'refunded',
     record: { ...record, message: 'Transaction refunded' },
@@ -317,7 +322,8 @@ const movesInto = (to: TransactionStatus) =>
     ]),
   )
 
-const PAYING_STEPS = new Set<Step>(['mismatched', 'otherTxnId', 'succeeded'])
+/** The gateway shows the donor's money moved, so the row may leave an unpaid status. */
+const PAYING_STEPS = new Set<Step>(['mismatched', 'otherTxnId', 'partialRefund', 'succeeded'])
 const UNPAID = new Set<TransactionStatus>(['cancelled', 'failed'])
 const paid = (sequence: readonly Step[]) => sequence.some((step) => PAYING_STEPS.has(step))
 
@@ -450,7 +456,7 @@ describe('any sequence of outcomes', () => {
   it('enumerates every sequence of length 1 to 4', () => {
     expect.hasAssertions()
 
-    expect(all).toHaveLength(7 + 49 + 343 + 2401)
+    expect(all).toHaveLength(8 + 64 + 512 + 4096)
   })
 
   it.each(START_NAMES)('from %s never lowers the status rank', (start) => {
@@ -472,7 +478,7 @@ describe('any sequence of outcomes', () => {
     expect(counted).toStrictEqual([])
   })
 
-  it('never leaves held, and reaches it only through a mismatched success or a recorded TxnID', () => {
+  it('never leaves held, and reaches it only through a mismatched success, a recorded TxnID or a refund not shown whole', () => {
     expect.hasAssertions()
 
     const leftHeld = START_NAMES.filter((start) => STARTS[start].status === 'held').flatMap(
@@ -482,10 +488,14 @@ describe('any sequence of outcomes', () => {
     expect(leftHeld).toStrictEqual([])
     expect(movesInto('held')).toStrictEqual([
       ['cancelled by a cancel or timeout', 'mismatched'],
+      ['cancelled by a cancel or timeout', 'partialRefund'],
       ['failed by a gateway failure', 'mismatched'],
+      ['failed by a gateway failure', 'partialRefund'],
       ['failed by a gateway failure', 'succeeded'],
       ['failed by the cron', 'mismatched'],
+      ['failed by the cron', 'partialRefund'],
       ['pending', 'mismatched'],
+      ['pending', 'partialRefund'],
     ])
   })
 
