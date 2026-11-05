@@ -1,5 +1,3 @@
-import { EmailParams, MailerSend, Recipient, Sender } from 'mailersend'
-import { createTestAccount, createTransport, getTestMessageUrl } from 'nodemailer'
 import type { Logger } from 'pino'
 
 import { config } from '#/core/brand'
@@ -36,7 +34,11 @@ async function openMailTransport(mailConfig: MailConfig, logger: Logger): Promis
     : openMailerSendTransport(mailConfig.apiKey, mailConfig.rootDomain)
 }
 
-function openMailerSendTransport(apiKey: string, rootDomain: string | undefined): Mailer {
+async function openMailerSendTransport(
+  apiKey: string,
+  rootDomain: string | undefined,
+): Promise<Mailer> {
+  const { EmailParams, MailerSend, Recipient, Sender } = await import('mailersend')
   const mailerSend = new MailerSend({ apiKey })
   const systemEmail = rootDomain === undefined ? config.email.system : `system@${rootDomain}`
   const replyEmail = rootDomain === undefined ? config.email.finance : `finance@${rootDomain}`
@@ -57,6 +59,7 @@ function openMailerSendTransport(apiKey: string, rootDomain: string | undefined)
 }
 
 async function openTestTransport(logger: Logger): Promise<Mailer> {
+  const { createTestAccount, createTransport, getTestMessageUrl } = await import('nodemailer')
   const testAccount = await createTestAccount()
 
   const transporter = createTransport({
