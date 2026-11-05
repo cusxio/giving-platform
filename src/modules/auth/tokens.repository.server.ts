@@ -30,9 +30,9 @@ export const claimTokenIfUnused = defineQuery(
 export const CODE_LIFETIME_MINUTES = 5
 
 /**
- * Stores a code's hash. The hash is unique per user, so a repeated six digits conflict with the
- * row that holds them. Run after `deleteDeadTokensOf` in one batch, that row is live, and so it is
- * this very code: it keeps its id, and with it its check count, and takes the new expiry and mode.
+ * The hash is unique per user, so a repeated six digits conflict with the row that holds them.
+ * After `deleteDeadTokensOf` in the same batch, that row is live, and so it is this very code: it
+ * keeps its id, and with it its check count, and takes the new expiry and mode.
  */
 export const createToken = defineQuery(
   'auth.createToken',
@@ -52,24 +52,27 @@ export const createToken = defineQuery(
   nothing,
 )
 
-/** A code nobody can enter any more: claimed, or past its expiry. */
 const dead = () => or(isNotNull(tokens.usedAt), lte(tokens.expiresAt, now()))
 
-/** Removes the user's dead codes, so a new code can only conflict with a live one. */
 export const deleteDeadTokensOf = defineQuery(
   'auth.deleteDeadTokensOf',
   (db, userId: Token['userId']) => db.delete(tokens).where(and(eq(tokens.userId, userId), dead())),
   nothing,
 )
 
-/** Removes every user's dead codes and answers how many. */
+/** The one batch that issues a code: `createToken` is right only after `deleteDeadTokensOf`. */
+export const issueCode = (
+  userId: TokenInsert['userId'],
+  tokenHash: TokenInsert['tokenHash'],
+  mode: TokenInsert['mode'],
+) => [deleteDeadTokensOf(userId), createToken(userId, tokenHash, mode)] as const
+
 export const deleteDeadTokens = defineQuery(
   'auth.deleteDeadTokens',
   (db) => db.delete(tokens).where(dead()).returning({ id: tokens.id }),
   (deleted) => deleted.length,
 )
 
-/** The user's unexpired, unused codes of `mode`: every one the user may still enter. */
 export const findLiveTokens = defineQuery(
   'auth.findLiveTokens',
   (db, userId: Token['userId'], mode: Token['mode']) =>

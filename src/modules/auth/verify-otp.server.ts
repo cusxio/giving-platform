@@ -39,11 +39,7 @@ export type VerifyOtpInput = Parsed<typeof verifyOtpInput>
 const mayUse = (user: User, mode: VerifyOtpInput['mode']) =>
   user.status === (mode === 'login' ? 'active' : 'guest')
 
-/**
- * The live code the entry matches, when it has checks left. A match on a spent code, or no match
- * while every live code is spent, is exhaustion; any other miss is a wrong code. At most one code
- * can match, because a user's live codes have distinct hashes.
- */
+/** At most one code matches: a user's codes have distinct hashes (`tokens_token_hash_user_id_idx`). */
 function matchCode(
   tokens: readonly Token[],
   withChecksLeft: ReadonlySet<Token['id']>,

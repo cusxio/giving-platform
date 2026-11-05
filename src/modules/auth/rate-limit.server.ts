@@ -144,16 +144,15 @@ export function resetOtpVerify(
 /**
  * Checks one code accepts from every address together, the right one included. Counting comes
  * before the comparison, so concurrent guesses cannot slip past the limit. The window opens at the
- * first check, after the code was issued, so it outlives the code and never resets during its
- * life. One code thus faces at most five guesses, however many addresses send them, and a guess
- * while several codes are live counts against each of them.
+ * first check, after the code was issued, so it outlives the code's own lifetime. One issue of a
+ * code thus faces at most five guesses, however many addresses send them, and a guess while
+ * several codes are live counts against each of them. Only a reissue of the same digits while the
+ * code is live (`createToken`) extends it past its window, and then the reissue gets its own five,
+ * as a new code would.
  */
 const CODE_CHECKS: Limit = { maxAttempts: 5, windowSeconds: CODE_LIFETIME_MINUTES * 60 }
 
-/**
- * The longest window of any limit, the code checks included. A row whose window started this
- * long ago or longer counts for nothing under any of them.
- */
+/** A rate-limit row whose window started this long ago counts for nothing under any limit. */
 export const LONGEST_WINDOW_SECONDS = Math.max(
   CODE_CHECKS.windowSeconds,
   ...Object.values(LIMITS).flatMap((limits) =>
@@ -161,7 +160,7 @@ export const LONGEST_WINDOW_SECONDS = Math.max(
   ),
 )
 
-/** Counts one check of each code, in one atomic batch, and answers the ids still under their fifth. */
+/** Counts one check of each code in one atomic batch and answers the ids with checks left. */
 export async function checkCodes(
   deps: Pick<Deps, 'db'>,
   tokenIds: readonly [number, ...number[]],

@@ -1,5 +1,6 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
+import { TZDate } from '#/core/date'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
 import { testDeps } from '#/server/testing/test-deps'
@@ -8,8 +9,8 @@ import { handleCleanup } from './cleanup.server'
 
 const NOW = new Date('2026-11-05T19:00:00Z')
 const minutesAgo = (minutes: number) => new Date(NOW.getTime() - minutes * 60_000)
-/** How drizzle sends a timestamptz parameter. */
-const pgTimestamp = (date: Date) => date.toISOString().replace('Z', '+00:00')
+/** `now()` answers a TZDate, and drizzle sends its ISO string. */
+const param = (date: Date) => new TZDate(date, 'UTC').toISOString()
 
 const DEAD_TOKENS =
   'delete from "tokens" where ("tokens"."used_at" is not null or "tokens"."expires_at" <= $1) ' +
@@ -62,8 +63,8 @@ describe('the auth cleanup cron', () => {
 
     expect({ body, status }).toStrictEqual({ body: 'ok', status: 200 })
     expect(statements).toStrictEqual([
-      { params: [pgTimestamp(NOW)], sql: DEAD_TOKENS },
-      { params: [pgTimestamp(minutesAgo(15))], sql: STALE_ATTEMPTS },
+      { params: [param(NOW)], sql: DEAD_TOKENS },
+      { params: [param(minutesAgo(15))], sql: STALE_ATTEMPTS },
     ])
     expect(events).toStrictEqual([
       expect.objectContaining({

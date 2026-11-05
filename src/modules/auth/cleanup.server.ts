@@ -8,11 +8,6 @@ import { deleteDeadTokens } from './tokens.repository.server'
 
 type CleanupDeps = Pick<Deps, 'config' | 'db' | 'logger'>
 
-/**
- * Deletes the rows the login flow leaves behind: claimed and expired codes, and rate-limit rows
- * whose window no limit can still count. Each delete runs on its own, so one failing leaves the
- * other done.
- */
 async function cleanup({ config, db, logger }: CleanupDeps, request: Request) {
   const authHeader = request.headers.get('authorization')
   if (config.cronSecret === undefined || authHeader !== `Bearer ${config.cronSecret}`) {
