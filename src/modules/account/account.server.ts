@@ -11,19 +11,9 @@ import { noInput, parseWith } from '#/server/input.server'
 import { defineMutation, defineRead, returning, toNotFound } from '#/server/procedure.server'
 
 import { AccountNotFound } from './account.errors'
-import { findSettingsByUserId, upsertPrivacyMode } from './user-settings.repository.server'
+import { upsertPrivacyMode } from './user-settings.repository.server'
 import type { User } from './users.repository.server'
 import { findUserById, updateUserById } from './users.repository.server'
-
-/** The signed-in user's account row and settings; a user without settings gets the defaults. */
-export async function loadCurrentUser(deps: Pick<Deps, 'db'>, userId: User['id']) {
-  const read = await deps.db.batch([findUserById(userId), findSettingsByUserId(userId)])
-  return read.andThen(([user, settings]) =>
-    user === null
-      ? Result.err(new AccountNotFound({ userId }))
-      : Result.ok({ user, userSettings: settings ?? { privacyMode: false, userId: user.id } }),
-  )
-}
 
 export async function loadWelcome(deps: Pick<Deps, 'db'>, userId: User['id']) {
   const read = await deps.db.batch([findUserById(userId), hasGuestTransaction(userId)])
@@ -94,23 +84,13 @@ export const getCurrentUserAction = defineMutation({
   auth: anyone,
   event: 'auth.get_user',
   input: noInput,
-  run: ({ deps, user }) =>
-    Result.gen(async function* currentUser() {
-      if (user === null) {
-        return Result.err(new SignedOut())
-      }
-      return Result.ok(yield* Result.await(loadCurrentUser(deps, user.id)))
-    }),
+  run: (ctx) =>
+    Promise.resolve(
+      ctx.user === null
+        ? Result.err(new SignedOut())
+        : Result.ok({ user: ctx.user, userSettings: ctx.userSettings }),
+    ),
   wire: {
-    AccountNotFound: (error) =>
-      returning(
-        { type: 'AUTH_ERROR' },
-        {
-          event: 'auth.get_user.integrity_failed',
-          fields: { user_id: error.userId },
-          msg: 'Session valid but user not found in DB',
-        },
-      ),
     SignedOut: () =>
       returning(
         { type: 'AUTH_ERROR' },

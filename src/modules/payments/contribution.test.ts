@@ -68,7 +68,7 @@ describe('contribution items', () => {
     ])
   })
 
-  it('becomes rows of the transaction keyed by fund id, or names a missing fund', () => {
+  it('becomes item rows keyed by fund id, or names a missing fund', () => {
     expect.hasAssertions()
 
     const at = new Date(0)
@@ -83,13 +83,12 @@ describe('contribution items', () => {
       },
     ]
 
-    expect(
-      okValue(itemsFor('txn_1', [{ amountInCents: 300, fund: 'tithe' }], funds)),
-    ).toStrictEqual([{ amount: 300, fundId: 'fund_t', transactionId: 'txn_1' }])
+    expect(okValue(itemsFor([{ amountInCents: 300, fund: 'tithe' }], funds))).toStrictEqual([
+      { amount: 300, fundId: 'fund_t' },
+    ])
     expect(
       errValue(
         itemsFor(
-          'txn_1',
           [
             { amountInCents: 300, fund: 'tithe' },
             { amountInCents: 100, fund: 'future' },

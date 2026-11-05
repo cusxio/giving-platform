@@ -1,11 +1,9 @@
 import type { FormStore } from '@ariakit/react'
 import { useFormStore, useFormSubmit, useStoreState } from '@ariakit/react'
-import type { QueryClient } from '@tanstack/react-query'
-import { useQueryClient } from '@tanstack/react-query'
 
 import { toast } from '#/components/ui/toaster'
-import type { CurrentUserResponse, User } from '#/modules/account'
-import { currentUserQuery, useUpdateUserMutation } from '#/modules/account'
+import type { User } from '#/modules/account'
+import { useUpdateUserMutation } from '#/modules/account'
 
 interface SettingsValues {
   email: string
@@ -17,32 +15,13 @@ interface SettingsValues {
 export async function saveSettings(
   values: SettingsValues,
   updateUser: ReturnType<typeof useUpdateUserMutation>,
-  queryClient: QueryClient,
   store: FormStore<SettingsValues>,
 ) {
   try {
-    const res = await updateUser.mutateAsync(
-      { firstName: values.firstName, lastName: values.lastName },
-      {
-        onSuccess(data) {
-          queryClient.setQueryData<Extract<CurrentUserResponse, { type: 'SUCCESS' }>>(
-            currentUserQuery().queryKey,
-            (prev) => {
-              if (!prev) {
-                return prev
-              }
-              if (data?.type === 'SUCCESS') {
-                return {
-                  type: prev.type,
-                  value: { ...prev.value, user: { ...prev.value.user, ...data.value.user } },
-                }
-              }
-              return prev
-            },
-          )
-        },
-      },
-    )
+    const res = await updateUser.mutateAsync({
+      firstName: values.firstName,
+      lastName: values.lastName,
+    })
 
     if (res === undefined) {
       return
@@ -80,9 +59,8 @@ export function useSettingsForm(user: Pick<User, 'email' | 'firstName' | 'lastNa
     },
   })
 
-  const queryClient = useQueryClient()
   const updateUser = useUpdateUserMutation()
-  useFormSubmit(store, (state) => saveSettings(state.values, updateUser, queryClient, store))
+  useFormSubmit(store, (state) => saveSettings(state.values, updateUser, store))
 
   const submitting = useStoreState(store, 'submitting')
 

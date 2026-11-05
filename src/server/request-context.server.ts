@@ -10,7 +10,7 @@ import { logger } from '#/server/logger.server'
 /** What every server function and server route finds on `context`. */
 export type RequestContext = { readonly deps: Deps } & SessionCheck
 
-const ANONYMOUS: SessionCheck = { session: null, user: null }
+const ANONYMOUS: SessionCheck = { session: null, user: null, userSettings: null }
 
 /** The one global request middleware after csrf and maintenance. */
 export const requestContext = createMiddleware().server<RequestContext>(async ({ next }) => {

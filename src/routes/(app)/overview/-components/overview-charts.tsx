@@ -1,7 +1,15 @@
+import { Suspense } from 'react'
+
+import { ChartFallback } from '#/components/ui/chart'
 import type { Overview } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
-import { AreaChart, BarChart, ChartSummary, StackedBarChart } from '../../-components/charts'
+import { ChartSummary } from '../../-components/charts/chart-summary'
+import { charts } from '../../-components/charts/load-charts'
+
+const AreaChart = charts.component((m) => m.AreaChart)
+const BarChart = charts.component((m) => m.BarChart)
+const StackedBarChart = charts.component((m) => m.StackedBarChart)
 
 interface OverviewChartsProps extends Omit<Overview, 'transactions'> {
   privacyMode: boolean
@@ -26,13 +34,19 @@ export function OverviewCharts(props: OverviewChartsProps) {
     >
       <ChartSummary {...summary} privacyMode={privacyMode} />
       {monthlyContributions.length > 0 && (
-        <BarChart data={monthlyContributions} privacyMode={privacyMode} />
+        <Suspense fallback={<ChartFallback />}>
+          <BarChart data={monthlyContributions} privacyMode={privacyMode} />
+        </Suspense>
       )}
       {monthlyContributionsFrequency.length > 0 && (
-        <StackedBarChart data={monthlyContributionsFrequency} privacyMode={privacyMode} />
+        <Suspense fallback={<ChartFallback />}>
+          <StackedBarChart data={monthlyContributionsFrequency} privacyMode={privacyMode} />
+        </Suspense>
       )}
       {(monthlyContributions.length > 0 || monthlyContributionsFrequency.length > 0) && (
-        <AreaChart data={cumulativeContributions} privacyMode={privacyMode} />
+        <Suspense fallback={<ChartFallback />}>
+          <AreaChart data={cumulativeContributions} privacyMode={privacyMode} />
+        </Suspense>
       )}
     </div>
   )

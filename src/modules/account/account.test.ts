@@ -6,16 +6,14 @@ import { hasGuestTransaction } from '#/modules/payments/server'
 import { createDriverDb } from '#/server/testing/driver-db'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
-import { errValue, okValue } from '#/server/testing/result'
+import { okValue } from '#/server/testing/result'
 import { MEMBER, testContext } from '#/server/testing/test-context'
 
-import { AccountNotFound } from './account.errors'
 import type { getCurrentUser, getWelcome, updatePrivacyMode, updateUser } from './account.functions'
 import type { UpdatePrivacyModeInput, UpdateUserInput } from './account.server'
 import {
   getCurrentUserAction,
   getWelcomeAction,
-  loadCurrentUser,
   loadWelcome,
   updatePrivacy,
   updatePrivacyModeAction,
@@ -23,7 +21,7 @@ import {
   updateUserAction,
 } from './account.server'
 import type { UserSettings } from './user-settings.repository.server'
-import { findSettingsByUserId, upsertPrivacyMode } from './user-settings.repository.server'
+import { upsertPrivacyMode } from './user-settings.repository.server'
 import type { User } from './users.repository.server'
 import { findUserById, updateUserById, upsertGuestUser } from './users.repository.server'
 
@@ -52,46 +50,7 @@ const user = {
 const signedOut = { message: 'You must be logged in to continue.', type: 'AUTH_ERROR' }
 
 describe('the current user', () => {
-  it('comes with their saved settings, in one round trip', async () => {
-    expect.hasAssertions()
-
-    const db = createFakeDb()
-      .on(findUserById, () => user)
-      .on(findSettingsByUserId, (userId) => ({ privacyMode: true, userId }))
-
-    expect(okValue(await loadCurrentUser({ db }, 2))).toStrictEqual({
-      user,
-      userSettings: { privacyMode: true, userId: 2 },
-    })
-    expect(db.roundTrips).toStrictEqual([[findUserById.queryName, findSettingsByUserId.queryName]])
-  })
-
-  it('gets privacy mode off when they never saved settings', async () => {
-    expect.hasAssertions()
-
-    const db = createFakeDb()
-      .on(findUserById, () => user)
-      .on(findSettingsByUserId, () => null)
-
-    expect(okValue(await loadCurrentUser({ db }, 2))).toStrictEqual({
-      user,
-      userSettings: { privacyMode: false, userId: 2 },
-    })
-  })
-
-  it('is not found when the session outlived the account row', async () => {
-    expect.hasAssertions()
-
-    const db = createFakeDb()
-      .on(findUserById, () => null)
-      .on(findSettingsByUserId, () => null)
-
-    const error = errValue(await loadCurrentUser({ db }, 2))
-    expect(error).toBeInstanceOf(AccountNotFound)
-    expect(error).toMatchObject({ userId: 2 })
-  })
-
-  it('answers SUCCESS, or AUTH_ERROR to a guest and to a session without an account', async () => {
+  it("answers the session's user row and settings without reading the database", async () => {
     expect.hasAssertions()
 
     expectTypeOf<Awaited<ReturnType<typeof getCurrentUser>>>().toEqualTypeOf<
@@ -99,55 +58,25 @@ describe('the current user', () => {
       | { readonly type: 'AUTH_ERROR' }
       | { type: 'SUCCESS'; value: { user: User; userSettings: UserSettings } }
     >()
-    const found = createFakeDb()
-      .on(findUserById, () => user)
-      .on(findSettingsByUserId, () => null)
-    const gone = createFakeDb()
-      .on(findUserById, () => null)
-      .on(findSettingsByUserId, () => null)
+    const db = createFakeDb()
+    const userSettings = { privacyMode: true, userId: MEMBER.id }
+
+    await expect(
+      getCurrentUserAction({ context: testContext(MEMBER, { db }, userSettings) }),
+    ).resolves.toStrictEqual({ type: 'SUCCESS', value: { user: MEMBER, userSettings } })
+    expect(db.calls).toStrictEqual([])
+  })
+
+  it('answers AUTH_ERROR to a guest, and logs it at debug', async () => {
+    expect.hasAssertions()
+
     const { events, logger } = recordingLogger()
 
     await expect(
-      getCurrentUserAction({ context: testContext(MEMBER, { db: found }) }),
-    ).resolves.toStrictEqual({
-      type: 'SUCCESS',
-      value: { user, userSettings: { privacyMode: false, userId: 2 } },
-    })
-    await expect(
-      getCurrentUserAction({ context: testContext(null, { db: found, logger }) }),
-    ).resolves.toStrictEqual({ type: 'AUTH_ERROR' })
-    await expect(
-      getCurrentUserAction({ context: testContext(MEMBER, { db: gone, logger }) }),
+      getCurrentUserAction({ context: testContext(null, { logger }) }),
     ).resolves.toStrictEqual({ type: 'AUTH_ERROR' })
     expect(events).toMatchObject([
       { event: 'auth.get_user.guest', level: DEBUG, msg: 'No session found, returning AUTH_ERROR' },
-      {
-        event: 'auth.get_user.integrity_failed',
-        level: WARN,
-        msg: 'Session valid but user not found in DB',
-        user_id: 2,
-      },
-    ])
-    expect(found.roundTrips).toHaveLength(1)
-  })
-
-  it('answers SERVER_ERROR when the read fails, and logs it once', async () => {
-    expect.hasAssertions()
-
-    const db = createFakeDb()
-      .on(findUserById, () => user)
-      .on(findSettingsByUserId, fail)
-    const { events, logger } = recordingLogger()
-
-    await expect(
-      getCurrentUserAction({ context: testContext(MEMBER, { db, logger }) }),
-    ).resolves.toStrictEqual({ type: 'SERVER_ERROR' })
-    expect(events).toMatchObject([
-      {
-        event: 'auth.get_user.failed',
-        level: ERROR,
-        op: `${findUserById.queryName} + ${findSettingsByUserId.queryName}`,
-      },
     ])
   })
 })

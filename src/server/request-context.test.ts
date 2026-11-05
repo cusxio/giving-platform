@@ -7,6 +7,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { addDays, now } from '#/core/date'
 import type * as AuthServer from '#/modules/auth/server'
 import type * as Envvars from '#/server/env.server'
+import { MEMBER } from '#/server/testing/test-context'
 import { testDeps } from '#/server/testing/test-deps'
 
 import { createTokenHasher } from './crypto.server'
@@ -14,7 +15,7 @@ import type { Deps } from './deps.server'
 import type { RequestContext } from './request-context.server'
 
 const io = vi.hoisted(() => ({
-  check: { session: null, user: null } as AuthServer.SessionCheck,
+  check: { session: null, user: null, userSettings: null } as AuthServer.SessionCheck,
   cookie: undefined as string | undefined,
   logs: [] as Record<string, unknown>[],
   verified: [] as { cookie: string; logger: unknown }[],
@@ -93,9 +94,11 @@ function signedReturn() {
     HashValue2: sha256([...signed, fields.OrderNumber, fields.Param6, fields.Param7]),
   }).toString()
 }
+const ANONYMOUS: AuthServer.SessionCheck = { session: null, user: null, userSettings: null }
 const SIGNED_IN: AuthServer.SessionCheck = {
   session: { expiresAt: addDays(now(), 20), id: 'session'.padEnd(21, '0'), tokenHash: 'hash' },
-  user: { id: 42, journey: 'start_fresh', role: 'user' },
+  user: { ...MEMBER, id: 42 },
+  userSettings: { privacyMode: true, userId: 42 },
 }
 
 async function handle(cookie?: string) {
@@ -132,6 +135,8 @@ type GlobalContext = NonNullable<ReturnType<typeof getGlobalStartContext>>
 // Each compiles only because the other half of the pair is narrowed by the null test.
 const sessionIdOf = (context: GlobalContext) => (context.user === null ? null : context.session.id)
 const userIdOf = (context: RequestContext) => (context.session === null ? null : context.user.id)
+const privacyOf = (context: RequestContext) =>
+  context.user === null ? null : context.userSettings.privacyMode
 
 describe('the request context middleware', () => {
   it('treats a request without a cookie as anonymous without verifying anything', async () => {
@@ -140,7 +145,7 @@ describe('the request context middleware', () => {
     io.check = SIGNED_IN
     const { context, verified } = await handle()
 
-    expect(context).toMatchObject({ session: null, user: null })
+    expect(context).toMatchObject(ANONYMOUS)
     expect(verified).toStrictEqual([])
   })
 
@@ -159,10 +164,10 @@ describe('the request context middleware', () => {
   it('leaves a rejected cookie anonymous', async () => {
     expect.hasAssertions()
 
-    io.check = { session: null, user: null }
+    io.check = ANONYMOUS
     const { context } = await handle(COOKIE)
 
-    expect(context).toMatchObject({ session: null, user: null })
+    expect(context).toMatchObject(ANONYMOUS)
   })
 
   it('scopes the logger to the signed-in user', async () => {
@@ -219,13 +224,19 @@ describe('the request context middleware', () => {
     expect(requestContext.options.server).toBeTypeOf('function')
   })
 
-  it('pairs the session with the user, so a null test on either narrows both', () => {
+  it('pairs the session with the user and settings, so a null test on one narrows all', () => {
     expect.hasAssertions()
 
     expectTypeOf(sessionIdOf).returns.toEqualTypeOf<null | string>()
     expectTypeOf(userIdOf).returns.toEqualTypeOf<null | number>()
+    expectTypeOf(privacyOf).returns.toEqualTypeOf<boolean | null>()
     // @ts-expect-error a session without a user is not a request context
-    const unpaired: RequestContext = { deps: testDeps(), session: SIGNED_IN.session, user: null }
+    const unpaired: RequestContext = {
+      deps: testDeps(),
+      session: SIGNED_IN.session,
+      user: null,
+      userSettings: null,
+    }
 
     expect(unpaired.user).toBeNull()
   })

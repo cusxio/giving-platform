@@ -1,5 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { Suspense } from 'react'
 
+import { ChartFallback } from '#/components/ui/chart'
 import { config } from '#/core/brand'
 import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
 import { insightsQuery } from '#/modules/analytics'
@@ -7,13 +9,18 @@ import { cx } from '#/styles/cx'
 
 import { InsightsGivingBreakdown } from './-components/insights-giving-breakdown'
 import { InsightsSummary } from './-components/insights-summary'
-import { MultiLineChart } from './-components/multi-line-chart'
+import { multiLineChart } from './-components/load-multi-line-chart'
+
+const MultiLineChart = multiLineChart.component((m) => m.MultiLineChart)
 
 export const Route = createFileRoute('/(app)/(su)/insights')({
   component: RouteComponent,
   head: () => ({ meta: [{ title: `Insights · ${config.entity}` }] }),
   async loader({ context }) {
-    await context.queryClient.query({ ...insightsQuery(), staleTime: 'static' })
+    await Promise.all([
+      context.queryClient.query({ ...insightsQuery(), staleTime: 'static' }),
+      multiLineChart.load(),
+    ])
   },
 })
 
@@ -33,8 +40,12 @@ function RouteComponent() {
 
         <InsightsGivingBreakdown userGuest={data.userGuest} weekendWeekday={data.weekendWeekday} />
 
-        <MultiLineChart data={data.weeklyCumulativeTotalsByYear} metric="weekly" />
-        <MultiLineChart data={data.weeklyCumulativeTotalsByYear} metric="cumulative" />
+        <Suspense fallback={<ChartFallback legend />}>
+          <MultiLineChart data={data.weeklyCumulativeTotalsByYear} metric="weekly" />
+        </Suspense>
+        <Suspense fallback={<ChartFallback legend />}>
+          <MultiLineChart data={data.weeklyCumulativeTotalsByYear} metric="cumulative" />
+        </Suspense>
       </div>
     </div>
   )

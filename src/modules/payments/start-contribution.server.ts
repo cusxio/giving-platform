@@ -32,8 +32,10 @@ import {
 import { findSavedCard } from './saved-cards.repository.server'
 import {
   findFundsByName,
+  insertPendingGuestTransaction,
   insertPendingTransaction,
   insertTransactionItems,
+  newTransactionId,
 } from './transactions.repository.server'
 
 type SessionUser = Pick<User, 'id'>
@@ -44,20 +46,47 @@ interface DonorDetails {
   readonly lastName: string
 }
 
-/**
- * The guest's id. No row means the email was registered after the owner lookup, such as by a
- * signup finishing in between, so the guest is refused as if the lookup had seen it.
- */
-async function upsertGuest(tx: Executor, donor: DonorDetails) {
-  const guest = await tx.run(upsertGuestUser(donor))
-  return guest.andThen((row) =>
-    row === null ? Result.err(new GuestEmailExists()) : Result.ok(row.id),
+interface PendingTransaction {
+  readonly amount: number
+  readonly id: string
+}
+
+type ItemRows = Parameters<typeof insertTransactionItems>[1]
+
+async function recordForUser(
+  db: Executor,
+  transaction: PendingTransaction,
+  userId: User['id'],
+  rows: ItemRows,
+) {
+  const written = await db.batch([
+    insertPendingTransaction({ ...transaction, userId }),
+    insertTransactionItems(transaction.id, rows),
+  ])
+  return written.andThen(([inserted]) => required(inserted, insertPendingTransaction.queryName))
+}
+
+async function recordForGuest(
+  db: Executor,
+  transaction: PendingTransaction,
+  donor: DonorDetails,
+  rows: ItemRows,
+) {
+  const written = await db.batch([
+    upsertGuestUser(donor),
+    insertPendingGuestTransaction({ ...transaction, email: donor.email }),
+    insertTransactionItems(transaction.id, rows),
+  ])
+  return written.andThen(([guest, inserted]) =>
+    guest === null
+      ? Result.err(new GuestEmailExists())
+      : required(inserted, insertPendingGuestTransaction.queryName),
   )
 }
 
 /**
- * Records a pending transaction and its items in one pool transaction, creating the guest
- * account when no one is signed in. Any `Err` rolls the whole of it back.
+ * Records a pending transaction and its items, creating the guest account when no one is
+ * signed in.
  */
 export function createPendingContribution(
   deps: Pick<Deps, 'db'>,
@@ -65,51 +94,42 @@ export function createPendingContribution(
   donor: DonorDetails,
   sessionUser: null | SessionUser,
 ) {
-  return deps.db.transaction((tx) =>
-    Result.gen(async function* pendingContribution() {
-      const owner = yield* Result.await(tx.run(findUserByEmail(donor.email)))
-      const decision = decideDonor(owner, sessionUser)
-      if (decision.kind === 'email-belongs-to-another-user') {
-        return Result.err(new EmailBelongsToAnotherUser())
-      }
-      if (decision.kind === 'guest-email-exists') {
-        return Result.err(new GuestEmailExists())
-      }
-      const userId =
-        decision.kind === 'session-user'
-          ? decision.userId
-          : yield* Result.await(upsertGuest(tx, donor))
+  const { db } = deps
+  return Result.gen(async function* pendingContribution() {
+    const [owner, funds] = yield* Result.await(
+      db.batch([
+        findUserByEmail(donor.email),
+        findFundsByName(items.map((item) => fundName(item.fund))),
+      ]),
+    )
+    const decision = decideDonor(owner, sessionUser)
+    if (decision.kind === 'email-belongs-to-another-user') {
+      return Result.err(new EmailBelongsToAnotherUser())
+    }
+    if (decision.kind === 'guest-email-exists') {
+      return Result.err(new GuestEmailExists())
+    }
+    const rows = yield* itemsFor(items, funds).mapError(
+      (missing) =>
+        new InfraError({
+          cause: undefined,
+          message: `${findFundsByName.queryName} returned no row for ${missing}`,
+          op: findFundsByName.queryName,
+          reason: 'no-row',
+        }),
+    )
+    const transaction = { amount: totalInCents(items), id: newTransactionId() }
+    const recorded = yield* Result.await(
+      decision.kind === 'session-user'
+        ? recordForUser(db, transaction, decision.userId, rows)
+        : recordForGuest(db, transaction, donor, rows),
+    )
 
-      const funds = yield* Result.await(
-        tx.run(findFundsByName(items.map((item) => fundName(item.fund)))),
-      )
-      const inserted = yield* Result.await(
-        tx.run(
-          insertPendingTransaction({
-            amount: totalInCents(items),
-            createdAs: sessionUser ? 'user' : 'guest',
-            userId,
-          }),
-        ),
-      )
-      const transaction = yield* required(inserted, insertPendingTransaction.queryName)
-      const rows = yield* itemsFor(transaction.id, items, funds).mapError(
-        (missing) =>
-          new InfraError({
-            cause: undefined,
-            message: `${findFundsByName.queryName} returned no row for ${missing}`,
-            op: findFundsByName.queryName,
-            reason: 'no-row',
-          }),
-      )
-      yield* Result.await(tx.run(insertTransactionItems(rows)))
-
-      return Result.ok({
-        customerName: `${donor.firstName} ${donor.lastName}`,
-        transactionId: transaction.id,
-      })
-    }),
-  )
+    return Result.ok({
+      customerName: `${donor.firstName} ${donor.lastName}`,
+      transactionId: recorded.id,
+    })
+  })
 }
 
 const startContributionInput = parseWith(

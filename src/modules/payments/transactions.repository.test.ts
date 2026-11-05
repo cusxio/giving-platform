@@ -10,6 +10,8 @@ import { planTransition } from './payment-outcome'
 import {
   findProviderTxnIds,
   findReceipt,
+  insertPendingGuestTransaction,
+  insertTransactionItems,
   lockTransaction,
   moveTransaction,
 } from './transactions.repository.server'
@@ -29,7 +31,7 @@ const record: PaymentRecord = {
 async function sent(run: (db: ReturnType<typeof createDriverDb>) => Promise<unknown>) {
   const statements: { params: unknown[]; sql: string }[] = []
   const db = createDriverDb((sql, params) => {
-    statements.push({ params, sql })
+    statements.push({ params, sql: sql.replaceAll(/\s+/gu, ' ') })
     return Promise.resolve({ rows: [] })
   })
   await run(db)
@@ -214,3 +216,61 @@ describe('the transition moveTransaction takes', () => {
   })
 })
 // oxlint-enable typescript/no-misused-spread
+
+describe('the pending contribution statements', () => {
+  const GUEST = { amount: 1225, email: 'donor@give.test', id: TRANSACTION_ID }
+
+  it("inserts the guest's transaction by selecting the guest row, so a registered email inserts nothing", async () => {
+    expect.hasAssertions()
+
+    const statements = await sent((db) => db.run(insertPendingGuestTransaction(GUEST)))
+
+    expect(statements).toStrictEqual([
+      {
+        params: [TRANSACTION_ID, 1225, 'donor@give.test'],
+        sql:
+          'insert into "transactions" ("id", "amount", "created_as", "status", "user_id") ' +
+          'select $1::varchar, $2::integer, \'guest\', \'pending\', "users"."id" from "users" ' +
+          'where "users"."email" = $3 and "users"."status" = \'guest\' returning "id"',
+      },
+    ])
+  })
+
+  it("reads the guest transaction's id, or null when nothing was inserted", async () => {
+    expect.hasAssertions()
+
+    const inserted = createDriverDb(() =>
+      Promise.resolve({ rowCount: 1, rows: [{ id: TRANSACTION_ID }] }),
+    )
+    const skipped = createDriverDb(() => Promise.resolve({ rowCount: 0, rows: [] }))
+
+    expect(okValue(await inserted.run(insertPendingGuestTransaction(GUEST)))).toStrictEqual({
+      id: TRANSACTION_ID,
+    })
+    expect(okValue(await skipped.run(insertPendingGuestTransaction(GUEST)))).toBeNull()
+  })
+
+  it('inserts the items by selecting the transaction row, so a missing transaction inserts nothing', async () => {
+    expect.hasAssertions()
+
+    const statements = await sent((db) =>
+      db.run(
+        insertTransactionItems(TRANSACTION_ID, [
+          { amount: 225, fundId: 'fund_mission' },
+          { amount: 1000, fundId: 'fund_general' },
+        ]),
+      ),
+    )
+
+    expect(statements).toStrictEqual([
+      {
+        params: ['fund_mission', 225, 'fund_general', 1000, TRANSACTION_ID],
+        sql:
+          'insert into "transaction_items" ("transaction_id", "fund_id", "amount") ' +
+          'select "transactions"."id", item.fund_id, item.amount from "transactions", ' +
+          '(values ($1::varchar, $2::integer), ($3::varchar, $4::integer)) as item (fund_id, amount) ' +
+          'where "transactions"."id" = $5',
+      },
+    ])
+  })
+})

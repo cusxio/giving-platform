@@ -12,9 +12,6 @@ vi.mock<typeof Toaster>(import('#/components/ui/toaster'), () => ({
   toast: toast as unknown as typeof Toaster.toast,
 }))
 vi.mock<typeof Account>(import('#/modules/account'), () => ({
-  currentUserQuery: (() => ({
-    queryKey: ['auth-user'],
-  })) as unknown as typeof Account.currentUserQuery,
   useUpdateUserMutation: vi.fn<typeof Account.useUpdateUserMutation>(),
 }))
 
@@ -29,8 +26,7 @@ async function save(respond: () => Promise<unknown>) {
   await saveSettings(
     { email: 'donor@example.test', firstName: 'Ada', lastName: 'Lovelace' },
     { mutateAsync: respond } as unknown as Save[1],
-    { setQueryData: vi.fn<() => void>() } as unknown as Save[2],
-    store as unknown as Save[3],
+    store as unknown as Save[2],
   )
 
   return {

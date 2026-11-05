@@ -8,16 +8,13 @@ export const maintenanceMiddleware = createMiddleware().server(async ({ next, re
 
   const { pathname } = new URL(request.url)
 
-  // Allow index page
   if (pathname === '/') {
     return next()
   }
 
-  // Return 503 for API routes
   if (pathname.startsWith('/api/')) {
     return Response.json({ message: 'Service temporarily unavailable' }, { status: 503 })
   }
 
-  // Redirect all other routes to index
-  throw redirect({ replace: true, to: '/' })
+  throw redirect({ reloadDocument: true, replace: true, to: '/' })
 })

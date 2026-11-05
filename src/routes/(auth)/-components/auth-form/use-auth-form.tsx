@@ -1,11 +1,9 @@
 import { useFormStore, useFormSubmit, useStoreState } from '@ariakit/react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 
 import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import { currentUserQuery } from '#/modules/account'
 import type { RequestOtpResponse, VerifyOtpResponse } from '#/modules/auth'
 import { useRequestOtpMutation, useVerifyOtpMutation } from '#/modules/auth'
 
@@ -25,7 +23,6 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
   const requestOtp = useRequestOtpMutation()
   const verifyOtp = useVerifyOtpMutation()
 
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
 
   useFormSubmit(store, async (state) => {
@@ -85,7 +82,6 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
           break
         }
         case 'SUCCESS': {
-          queryClient.removeQueries({ queryKey: currentUserQuery().queryKey })
           await navigate({ to: mode === 'signup' ? '/welcome' : '/' })
           break
         }

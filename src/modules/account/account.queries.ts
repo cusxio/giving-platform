@@ -95,6 +95,7 @@ export function useUpdatePrivacyModeMutation() {
 
 /** A signed-out caller is sent to login, and the call resolves `undefined`. */
 export function useUpdateUserMutation() {
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   return useMutation({
     async mutationFn(input: UpdateUserInput) {
@@ -103,6 +104,21 @@ export function useUpdateUserMutation() {
         await navigate({ to: '/auth/login' })
       }
       return res.type === 'AUTH_ERROR' ? undefined : res
+    },
+    onSuccess(res) {
+      if (res?.type !== 'SUCCESS') {
+        return
+      }
+      const { user } = res.value
+      queryClient.setQueryData(currentUserQuery().queryKey, (prev) =>
+        prev?.type === 'SUCCESS'
+          ? { ...prev, value: { ...prev.value, user: { ...prev.value.user, ...user } } }
+          : prev,
+      )
+      queryClient.setQueryData(
+        welcomeQuery().queryKey,
+        (prev) => prev && { ...prev, user: { ...prev.user, ...user } },
+      )
     },
   })
 }
