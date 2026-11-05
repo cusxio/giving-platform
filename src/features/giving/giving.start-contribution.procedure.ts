@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start'
-import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
@@ -28,7 +27,7 @@ const schema = Compile(
   }),
 )
 
-export type StartContributionInput = Static<typeof schema>
+export type StartContributionInput = ReturnType<typeof schema.Parse>
 
 export type StartContributionResponse =
   | BusinessErrorResponse<StartContributionBusinessErrorCode>
@@ -40,7 +39,7 @@ type StartContributionBusinessErrorCode = 'EMAIL_EXISTS' | 'INVALID_REQUEST' | '
 
 export const startContribution = createServerFn({ method: 'POST' })
   .middleware([contributionServiceMiddleware, eghlServiceMiddleware])
-  .inputValidator((v: StartContributionInput) => v)
+  .validator((v: StartContributionInput) => v)
   .handler(async ({ data, context }): Promise<StartContributionResponse> => {
     const { contributionService, user, eghlService, logger } = context
 

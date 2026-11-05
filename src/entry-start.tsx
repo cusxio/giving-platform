@@ -1,4 +1,4 @@
-import { createStart } from '@tanstack/react-start'
+import { createCsrfMiddleware, createStart } from '@tanstack/react-start'
 
 export const startInstance = createStart(async () => {
   if (!import.meta.env.SSR) {
@@ -12,5 +12,14 @@ export const startInstance = createStart(async () => {
       import('./server/middleware/session-middleware'),
     ])
 
-  return { requestMiddleware: [maintenanceMiddleware, sessionMiddleware, loggingMiddleware] }
+  const csrfMiddleware = createCsrfMiddleware({ filter: (ctx) => ctx.handlerType === 'serverFn' })
+
+  return {
+    requestMiddleware: [
+      csrfMiddleware,
+      maintenanceMiddleware,
+      sessionMiddleware,
+      loggingMiddleware,
+    ],
+  }
 })

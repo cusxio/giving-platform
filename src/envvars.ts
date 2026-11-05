@@ -22,7 +22,6 @@ const schema = Type.Object({
   OTEL_LOG_LEVEL: Type.Optional(Type.String()),
   OTEL_TRACES_EXPORTER: exporter,
   OTEL_LOGS_EXPORTER: exporter,
-  OTEL_METRICS_EXPORTER: exporter,
 })
 
 const config = envSchema<Static<typeof schema>>({ schema })
@@ -44,7 +43,6 @@ export const {
   //
   OTEL_LOG_LEVEL,
   OTEL_LOGS_EXPORTER,
-  OTEL_METRICS_EXPORTER,
   OTEL_TRACES_EXPORTER,
 } = config
 

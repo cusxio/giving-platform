@@ -14,7 +14,7 @@ interface Input {
 
 export const getReportsData = createServerFn()
   .middleware([dbMiddleware])
-  .inputValidator((v: Input) => v)
+  .validator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { startDateUTC, endDateUTCExclusive } = data
     const { db, user } = context

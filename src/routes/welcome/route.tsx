@@ -16,7 +16,10 @@ export const Route = createFileRoute('/welcome')({
   head: () => ({ meta: [{ title: `Welcome · ${config.entity}` }] }),
 
   async loader({ context }) {
-    const { user } = await context.queryClient.ensureQueryData(createWelcomeQueryOptions())
+    const { user } = await context.queryClient.query({
+      ...createWelcomeQueryOptions(),
+      staleTime: 'static',
+    })
 
     if (user.journey !== null) {
       throw redirect({ replace: true, to: '/' })

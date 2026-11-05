@@ -1,4 +1,4 @@
-import { useFormStore, useStoreState } from '@ariakit/react'
+import { useFormStore, useFormSubmit, useStoreState } from '@ariakit/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
@@ -28,7 +28,7 @@ export function useAuthForm(mode: 'login' | 'signup', defaultEmail?: string) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
-  store.useSubmit(async (state) => {
+  useFormSubmit(store, async (state) => {
     const { otp, email } = state.values
 
     // Enter-email flow

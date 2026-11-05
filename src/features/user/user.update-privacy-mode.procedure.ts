@@ -22,7 +22,7 @@ export type UpdatePrivacyModeResponse =
 
 export const updatePrivacyMode = createServerFn({ method: 'POST' })
   .middleware([dbMiddleware])
-  .inputValidator((v: UpdatePrivacyModeInput) => v)
+  .validator((v: UpdatePrivacyModeInput) => v)
   .handler(async ({ context, data }): Promise<UpdatePrivacyModeResponse> => {
     const { db, user, logger } = context
     const { privacyMode } = data

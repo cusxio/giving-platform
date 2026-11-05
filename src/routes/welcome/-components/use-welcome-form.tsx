@@ -1,4 +1,4 @@
-import { useFormStore, useStoreState } from '@ariakit/react'
+import { useFormStore, useFormSubmit, useFormValidate, useStoreState } from '@ariakit/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
@@ -23,7 +23,7 @@ export function useWelcomeForm(params: {
   })
 
   const [status, setStatus] = useState<'done' | 'idle' | 'migrate'>('idle')
-  store.useValidate(() => {
+  useFormValidate(store, () => {
     store.setError(store.names.__error, undefined)
   })
 
@@ -33,7 +33,7 @@ export function useWelcomeForm(params: {
 
   const updateUser = useUpdateUserMutation()
   const queryClient = useQueryClient()
-  store.useSubmit(async (state) => {
+  useFormSubmit(store, async (state) => {
     try {
       const res = await updateUser.mutateAsync(
         {

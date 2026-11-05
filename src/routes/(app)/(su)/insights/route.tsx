@@ -13,7 +13,7 @@ export const Route = createFileRoute('/(app)/(su)/insights')({
   component: RouteComponent,
   head: () => ({ meta: [{ title: `Insights · ${config.entity}` }] }),
   async loader({ context }) {
-    await context.queryClient.ensureQueryData(createInsightsQueryOptions())
+    await context.queryClient.query({ ...createInsightsQueryOptions(), staleTime: 'static' })
   },
 })
 

@@ -1,6 +1,5 @@
 import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
@@ -22,7 +21,7 @@ const schema = Compile(
   }),
 )
 
-export type UpdateUserInput = Static<typeof schema>
+export type UpdateUserInput = ReturnType<typeof schema.Parse>
 
 export type UpdateUserResponse =
   | ServerErrorResponse
@@ -31,7 +30,7 @@ export type UpdateUserResponse =
 
 export const updateUser = createServerFn({ method: 'POST' })
   .middleware([userRepositoryMiddleware])
-  .inputValidator((v: UpdateUserInput) => v)
+  .validator((v: UpdateUserInput) => v)
   .handler(async ({ data, context }): Promise<undefined | UpdateUserResponse> => {
     const { logger, user, userRepository } = context
 

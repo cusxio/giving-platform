@@ -38,9 +38,10 @@ export const Route = createFileRoute('/(app)/overview')({
 
     const currentCalendarYear = now(clientTz).getFullYear()
 
-    const dataYears = await queryClient.ensureQueryData(
-      createAvailableTransactionYearsQuery(userId, journey),
-    )
+    const dataYears = await queryClient.query({
+      ...createAvailableTransactionYearsQuery(userId, journey),
+      staleTime: 'static',
+    })
 
     const sortedYears = [...new Set([currentCalendarYear, ...dataYears])]
     sortedYears.sort((a, b) => b - a)
@@ -72,7 +73,10 @@ export const Route = createFileRoute('/(app)/overview')({
       queryClient,
     } = context
 
-    await queryClient.ensureQueryData(createOverviewQueryOptions(userId, journey, year))
+    await queryClient.query({
+      ...createOverviewQueryOptions(userId, journey, year),
+      staleTime: 'static',
+    })
   },
 })
 

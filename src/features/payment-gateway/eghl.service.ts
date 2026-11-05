@@ -1,8 +1,8 @@
-import { sha256 } from '@oslojs/crypto/sha2'
-import { constantTimeEqual } from '@oslojs/crypto/subtle'
-import { encodeHexLowerCase } from '@oslojs/encoding'
+import { createHash } from 'node:crypto'
+
 import queryString from 'query-string'
 
+import { constantTimeEqual } from '#/core/constant-time-equal'
 import { createParseError } from '#/core/errors'
 import { centsToRinggit } from '#/core/money'
 import type { Result } from '#/core/result'
@@ -177,14 +177,10 @@ export class EghlService {
 
     const calculatedHash = this.#generateHashValue(hashKeyFields)
 
-    const encoder = new TextEncoder()
-
-    return constantTimeEqual(encoder.encode(calculatedHash), encoder.encode(HashValue2))
+    return constantTimeEqual(calculatedHash, HashValue2)
   }
 
   #generateHashValue(value: string): string {
-    const data = new TextEncoder().encode(value)
-    const hash = sha256(data)
-    return encodeHexLowerCase(hash)
+    return createHash('sha256').update(value).digest('hex')
   }
 }

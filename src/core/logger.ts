@@ -1,25 +1,21 @@
-import { createRequire } from 'node:module'
+import { pino } from 'pino'
 
-import type pinoModule from 'pino'
+import { createOtelLogStream, traceContextMixin } from '#/server/opentelemetry/pino'
 
-const require = createRequire(import.meta.url)
-const pino = require('pino') as typeof pinoModule
+async function createStdoutStream() {
+  if (import.meta.env.MODE === 'development') {
+    const { default: pretty } = await import('pino-pretty')
+    return pretty({ colorize: true })
+  }
 
-// Do not set `NITRO_TRACE_PINO` in any environment.
-//
-// This branch is intentionally never enabled at runtime. It is a build-time hint
-// for Nitro's dependency tracer: the static `import('pino')` makes Nitro include
-// pino in `.vercel/output/functions/__server.func/node_modules`, while the real logger still uses
-// `createRequire(...)("pino")` so OpenTelemetry's pino instrumentation can patch
-// the CommonJS require path correctly.
-if (process.env.NITRO_TRACE_PINO === 'true') {
-  void import('pino')
+  return pino.destination(1)
 }
 
-const options: pinoModule.LoggerOptions = {}
-
-if (import.meta.env.MODE === 'development') {
-  options.transport = { target: 'pino-pretty', options: { colorize: true } }
-}
-
-export const logger = pino(options)
+// Multistream entries default to `info`, so open them fully and let the logger's level filter.
+export const logger = pino(
+  { mixin: traceContextMixin },
+  pino.multistream([
+    { level: 'trace', stream: await createStdoutStream() },
+    { level: 'trace', stream: createOtelLogStream() },
+  ]),
+)

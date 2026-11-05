@@ -11,7 +11,7 @@ interface Input {
 
 export const getTransactionReceiptData = createServerFn()
   .middleware([dbMiddleware, transactionRepositoryMiddleware])
-  .inputValidator((v: Input) => v)
+  .validator((v: Input) => v)
   .handler(async ({ context, data }) => {
     const { transactionId } = data
     const { db, transactionRepository, logger } = context

@@ -1,7 +1,6 @@
 import { redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { setResponseHeader } from '@tanstack/react-start/server'
-import type { Static } from 'typebox'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
@@ -24,7 +23,7 @@ const schema = Compile(
   }),
 )
 
-export type VerifyOtpInput = Static<typeof schema>
+export type VerifyOtpInput = ReturnType<typeof schema.Parse>
 
 export type VerifyOtpResponse =
   | BusinessErrorResponse<VerifyOtpBusinessErrorCode>
@@ -36,7 +35,7 @@ type VerifyOtpBusinessErrorCode = 'INVALID_OR_EXPIRED_OTP' | 'RATE_LIMIT_EXCEEDE
 
 export const verifyOtp = createServerFn({ method: 'POST' })
   .middleware([authServiceMiddleware])
-  .inputValidator((v: VerifyOtpInput) => v)
+  .validator((v: VerifyOtpInput) => v)
   .handler(async ({ context, data }): Promise<undefined | VerifyOtpResponse> => {
     const { user, authService, rateLimitService, logger } = context
 

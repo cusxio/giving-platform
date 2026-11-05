@@ -1,5 +1,4 @@
-import { constantTimeEqual } from '@oslojs/crypto/subtle'
-
+import { constantTimeEqual } from '#/core/constant-time-equal'
 import { addSeconds, differenceInDays, now } from '#/core/date'
 import { createParseError } from '#/core/errors'
 import { hashToken } from '#/core/hash-token'
@@ -58,12 +57,7 @@ export class SessionService {
 
     const { session, user } = sessionWithUser
 
-    const encoder = new TextEncoder()
-    const expectedTokenHash = hashToken(rawToken)
-    const isValid = constantTimeEqual(
-      encoder.encode(expectedTokenHash),
-      encoder.encode(session.tokenHash),
-    )
+    const isValid = constantTimeEqual(hashToken(rawToken), session.tokenHash)
 
     if (!isValid) {
       return err({ serializedCookie: clearSessionCookie(), type: 'SessionInvalidError' })
