@@ -62,6 +62,13 @@ export const deleteDeadTokensOf = defineQuery(
   nothing,
 )
 
+/** Removes every user's dead codes and answers how many. */
+export const deleteDeadTokens = defineQuery(
+  'auth.deleteDeadTokens',
+  (db) => db.delete(tokens).where(dead()).returning({ id: tokens.id }),
+  (deleted) => deleted.length,
+)
+
 /** The user's unexpired, unused codes of `mode`: every one the user may still enter. */
 export const findLiveTokens = defineQuery(
   'auth.findLiveTokens',

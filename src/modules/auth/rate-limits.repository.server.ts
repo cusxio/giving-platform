@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, eq, lte, sql } from 'drizzle-orm'
 
 import { addSeconds } from '#/core/date'
 import { defineQuery, firstOrNull, nothing } from '#/server/db.server'
@@ -45,6 +45,20 @@ export const recordAttempt = defineQuery(
       .returning()
   },
   firstOrNull,
+)
+
+/**
+ * Removes the rows whose window started at or before `windowStart` and answers how many. Such a
+ * row counts for nothing: `recordAttempt` would start it over, as its CASE does.
+ */
+export const deleteStaleAttempts = defineQuery(
+  'auth.deleteStaleAttempts',
+  (db, windowStart: Date) =>
+    db
+      .delete(rateLimitAttempts)
+      .where(lte(rateLimitAttempts.windowStartedAt, windowStart))
+      .returning({ id: rateLimitAttempts.id }),
+  (deleted) => deleted.length,
 )
 
 export const resetAttempts = defineQuery(

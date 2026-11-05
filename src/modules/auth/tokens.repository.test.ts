@@ -41,7 +41,7 @@ describe('storing a code', () => {
     ])
   })
 
-  it("deletes only the user's claimed and expired codes", async () => {
+  it("deletes only the user's claimed and expired codes when issuing one", async () => {
     expect.hasAssertions()
 
     const statements = await sent(deleteDeadTokensOf(7))

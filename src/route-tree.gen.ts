@@ -23,6 +23,7 @@ import { Route as appsuReportsRouteRouteImport } from './routes/(app)/(su)/repor
 import { Route as appTransactionTransactionIdRouteImport } from './routes/(app)/transaction/$transactionId'
 import { Route as authAuthLoginRouteImport } from './routes/(auth)/auth.login'
 import { Route as authWelcomeSignupRouteImport } from './routes/(auth)/welcome.signup'
+import { Route as ApiAuthCronRouteImport } from './routes/api/auth.cron'
 import { Route as ApiEghlCallbackRouteImport } from './routes/api/eghl.callback'
 import { Route as ApiEghlCronRouteImport } from './routes/api/eghl.cron'
 import { Route as ApiEghlReturnRouteImport } from './routes/api/eghl.return'
@@ -96,6 +97,11 @@ const authWelcomeSignupRoute = authWelcomeSignupRouteImport.update({
   path: '/welcome/signup',
   getParentRoute: () => authRouteRoute,
 } as any)
+const ApiAuthCronRoute = ApiAuthCronRouteImport.update({
+  id: '/api/auth/cron',
+  path: '/api/auth/cron',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiEghlCallbackRoute = ApiEghlCallbackRouteImport.update({
   id: '/api/eghl/callback',
   path: '/api/eghl/callback',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
+  '/api/auth/cron': typeof ApiAuthCronRoute
   '/api/eghl/callback': typeof ApiEghlCallbackRoute
   '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
@@ -147,6 +154,7 @@ export interface FileRoutesByTo {
   '/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
+  '/api/auth/cron': typeof ApiAuthCronRoute
   '/api/eghl/callback': typeof ApiEghlCallbackRoute
   '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
@@ -168,6 +176,7 @@ export interface FileRoutesById {
   '/(app)/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/(auth)/auth/login': typeof authAuthLoginRoute
   '/(auth)/welcome/signup': typeof authWelcomeSignupRoute
+  '/api/auth/cron': typeof ApiAuthCronRoute
   '/api/eghl/callback': typeof ApiEghlCallbackRoute
   '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
@@ -187,6 +196,7 @@ export interface FileRouteTypes {
     | '/transaction/$transactionId'
     | '/auth/login'
     | '/welcome/signup'
+    | '/api/auth/cron'
     | '/api/eghl/callback'
     | '/api/eghl/cron'
     | '/api/eghl/return'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
     | '/transaction/$transactionId'
     | '/auth/login'
     | '/welcome/signup'
+    | '/api/auth/cron'
     | '/api/eghl/callback'
     | '/api/eghl/cron'
     | '/api/eghl/return'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/(app)/transaction/$transactionId'
     | '/(auth)/auth/login'
     | '/(auth)/welcome/signup'
+    | '/api/auth/cron'
     | '/api/eghl/callback'
     | '/api/eghl/cron'
     | '/api/eghl/return'
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   authRouteRoute: typeof authRouteRouteWithChildren
   WelcomeRouteRoute: typeof WelcomeRouteRoute
   UhOhRoute: typeof UhOhRoute
+  ApiAuthCronRoute: typeof ApiAuthCronRoute
   ApiEghlCallbackRoute: typeof ApiEghlCallbackRoute
   ApiEghlCronRoute: typeof ApiEghlCronRoute
   ApiEghlReturnRoute: typeof ApiEghlReturnRoute
@@ -342,6 +355,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authWelcomeSignupRouteImport
       parentRoute: typeof authRouteRoute
     }
+    '/api/auth/cron': {
+      id: '/api/auth/cron'
+      path: '/api/auth/cron'
+      fullPath: '/api/auth/cron'
+      preLoaderRoute: typeof ApiAuthCronRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/eghl/callback': {
       id: '/api/eghl/callback'
       path: '/api/eghl/callback'
@@ -427,6 +447,7 @@ const rootRouteChildren: RootRouteChildren = {
   authRouteRoute: authRouteRouteWithChildren,
   WelcomeRouteRoute: WelcomeRouteRoute,
   UhOhRoute: UhOhRoute,
+  ApiAuthCronRoute: ApiAuthCronRoute,
   ApiEghlCallbackRoute: ApiEghlCallbackRoute,
   ApiEghlCronRoute: ApiEghlCronRoute,
   ApiEghlReturnRoute: ApiEghlReturnRoute,

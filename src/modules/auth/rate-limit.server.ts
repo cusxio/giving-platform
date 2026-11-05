@@ -150,6 +150,17 @@ export function resetOtpVerify(
  */
 const CODE_CHECKS: Limit = { maxAttempts: 5, windowSeconds: CODE_LIFETIME_MINUTES * 60 }
 
+/**
+ * The longest window of any limit, the code checks included. A row whose window started this
+ * long ago or longer counts for nothing under any of them.
+ */
+export const LONGEST_WINDOW_SECONDS = Math.max(
+  CODE_CHECKS.windowSeconds,
+  ...Object.values(LIMITS).flatMap((limits) =>
+    Object.values(limits).map((limit) => limit.windowSeconds),
+  ),
+)
+
 /** Counts one check of each code, in one atomic batch, and answers the ids still under their fifth. */
 export async function checkCodes(
   deps: Pick<Deps, 'db'>,
