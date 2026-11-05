@@ -29,7 +29,7 @@ To add a feature, copy the nearest module in `src/modules/`. The table below is 
 - A file named `*.server.ts` never reaches the browser. `vite build` fails with `Import denied in client environment` when client code imports one.
 - SQL lives only in `*.repository.server.ts`. The module that owns a table is its only writer. `history` and `analytics` read other modules' tables and write nothing.
 - Client-reachable module files never import a repository, even for types. Client-reachable means every module file except `*.server.ts`, `server.ts`, and tests.
-- Workflows get infrastructure from `deps` as `Pick<Deps, ...>`. Only `src/server/` imports env, the root logger, and the neon clients.
+- Workflows get infrastructure from `deps` as `Pick<Deps, ...>`. Only `src/server/` imports env, the root logger, and the neon clients. In production, `env.server.ts` refuses to load without `MAILERSEND_API_KEY` and `CRON_SECRET`, or with a `SESSION_SECRET` under 32 characters (`env-rules.ts`); development needs none of them.
 - A `defineQuery` name is `<module>.<factory name>`, such as `history.transactionItemsOf`.
 - Don't export a name that only its own file uses.
 - Never name a server file `*.client.*`. TanStack Start import protection denies those files on the server.
@@ -56,7 +56,7 @@ Write a workflow as `Result.gen` and `yield* Result.await(...)` each step. Never
 An action's spec has `auth`, `event`, `input`, `run` and `wire`. `wire` has exactly one row per domain error `run` can return; tsc names a missing or extra row. The wire type is derived from the spec, so `<m>.types.ts` reads it with `Awaited<ReturnType<typeof fn>>`. `src/server/procedure-bindings.test.ts` fails on a `*.functions.ts` export of any other shape than the one-line binding.
 
 - Policies (`src/server/authorize.server.ts`): `anyone`, `anonymousOnly` (a signed-in caller is redirected home), `requireUser`, `requireSu`. The workflow's context is the policy's narrowed one, so `user` is non-null under `requireUser`.
-- Input: `parseWith(Compile(schema), { trim, lowercase, convert })` returns a `Parser`; `noInput` takes none. The client's input type is `Parsed<typeof parser>`, exported as `<Name>Input`. Bound string inputs with `maxLength` when they reach a sized column.
+- Input: `parseWith(Compile(schema), { trim, lowercase, convert })` returns a `Parser`; `noInput` takes none. The client's input type is `Parsed<typeof parser>`, exported as `<Name>Input`. Bound string inputs with `maxLength` when they reach a sized column. `parseWith` cleans away every key the schema does not declare (typebox `Parse` alone keeps them), so an action sees only declared fields. Still pass a repository write only the columns it may change, never a client-shaped object.
 
 ## Login codes
 

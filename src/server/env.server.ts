@@ -2,6 +2,8 @@ import { envSchema } from 'env-schema'
 import type { Static } from 'typebox'
 import { Type } from 'typebox'
 
+import { productionEnvProblems } from './env-rules'
+
 const exporter = Type.String({ pattern: '^(otlp|console|none)(,(otlp|console|none))*$' })
 
 const schema = Type.Object({
@@ -25,6 +27,11 @@ const schema = Type.Object({
 })
 
 const config = envSchema<Static<typeof schema>>({ schema })
+
+const problems = productionEnvProblems(config)
+if (problems.length > 0) {
+  throw new Error(`Invalid environment: ${problems.join('; ')}`)
+}
 
 export const {
   BASE_URL: BASE_URL_ENV,
