@@ -64,7 +64,7 @@ describe('storing a code', () => {
 })
 
 describe('reading and claiming a code', () => {
-  it("reads only the user's unexpired, unclaimed codes of the requested mode", async () => {
+  it("reads only the user's unexpired, unclaimed codes of the requested mode, in id order", async () => {
     expect.hasAssertions()
 
     const statements = await sent(findLiveTokens(7, 'login'))
@@ -75,7 +75,7 @@ describe('reading and claiming a code', () => {
         sql:
           'select "created_at", "expires_at", "id", "mode", "token_hash", "used_at", "user_id" ' +
           'from "tokens" where ("tokens"."user_id" = $1 and "tokens"."mode" = $2 and ' +
-          '"tokens"."expires_at" > $3 and "tokens"."used_at" is null)',
+          '"tokens"."expires_at" > $3 and "tokens"."used_at" is null) order by "tokens"."id"',
       },
     ])
   })

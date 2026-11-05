@@ -73,6 +73,10 @@ export const deleteDeadTokens = defineQuery(
   (deleted) => deleted.length,
 )
 
+/**
+ * In id order, so concurrent `checkCodes` batches lock their `code:<id>` rows in one order. An
+ * unordered scan can change order when a refresh moves `expires_at`, and then two batches deadlock.
+ */
 export const findLiveTokens = defineQuery(
   'auth.findLiveTokens',
   (db, userId: Token['userId'], mode: Token['mode']) =>
@@ -86,6 +90,7 @@ export const findLiveTokens = defineQuery(
           gt(tokens.expiresAt, now()),
           isNull(tokens.usedAt),
         ),
-      ),
+      )
+      .orderBy(tokens.id),
   rows,
 )
