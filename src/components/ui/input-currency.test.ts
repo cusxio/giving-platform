@@ -19,6 +19,16 @@ describe('the amount field limits', () => {
     ).toStrictEqual([false, false, false, false])
   })
 
+  it('reads the field text as the field shows it', () => {
+    expect.hasAssertions()
+
+    expect(
+      ['5,000,000', 'RM 5,000,000.00', '1,234.5', '5,000,0001', 'RM 10,000,000.00'].map((v) =>
+        fitsMax(v, 5_000_000),
+      ),
+    ).toStrictEqual([true, true, true, false, false])
+  })
+
   it('accepts a cleared or half-typed field', () => {
     expect.hasAssertions()
 
