@@ -10,15 +10,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
 
 defaults:
   run:
     shell: bash
-
-env:
-  NODE_VERSION: 26
 
 jobs:
   static-analysis:
@@ -26,65 +23,36 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: ./.github/actions/setup-repo
+      - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: |
+          dir=$(pnpm store path --silent)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          path: ${{ steps.pnpm-store.outputs.dir }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .moon/cache/hashes
+            .moon/cache/outputs
+            .moon/cache/states
+          key: ${{ runner.os }}-moon-${{ hashFiles('moon.yml', '.moon/**/*.yml', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-moon-${{ hashFiles('moon.yml', '.moon/**/*.yml', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}-
 
       - name: Run moon tasks
-        env:
-          MOON_TOOLCHAIN_FORCE_GLOBALS: true
         run: pnpm exec moon ci :lint :format-check :typecheck :test :bundle :knip
-
-  deploy:
-    name: Deploy to Vercel
-    needs: static-analysis
-    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
-    environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
-      url: ${{ steps.vercel-deploy.outputs.url }}
-
-    env:
-      DEPLOY_ENV: ${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }}
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-repo
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Pull Vercel Environment Information
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: pnpm exec vercel pull --yes --environment="$DEPLOY_ENV"
-
-      - name: Build Project Artifacts
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          prod=()
-          if [ "$DEPLOY_ENV" = production ]; then prod=(--prod); fi
-          pnpm exec moon run app:build -- "${prod[@]}"
-
-      - name: Deploy Project Artifacts
-        id: vercel-deploy
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: |
-          prod=()
-          if [ "$DEPLOY_ENV" = production ]; then prod=(--prod); fi
-          url=$(pnpm exec vercel deploy --prebuilt "${prod[@]}")
-          echo "Deployed to: $url"
-          echo "url=$url" >> "$GITHUB_OUTPUT"

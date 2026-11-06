@@ -120,10 +120,8 @@ tasks:
   # ── Build ──────────────────────────────────────────────────
 
   build:
-    command: pnpm
+    command: vercel
     args:
-      - exec
-      - vercel
       - build
     inputs:
       - group: sources
