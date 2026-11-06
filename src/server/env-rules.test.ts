@@ -37,7 +37,9 @@ describe('the environment', () => {
   it('is accepted when complete, ignoring variables the schema does not name', () => {
     expect.hasAssertions()
 
-    expect(parseEnv({ ...COMPLETE, PATH: '/usr/bin' })).toMatchObject(COMPLETE)
+    const { MAILERSEND_API_KEY, ...rest } = COMPLETE
+
+    expect(parseEnv({ ...COMPLETE, PATH: '/usr/bin' })).toMatchObject(rest)
   })
 
   it('names every missing variable', () => {
@@ -75,8 +77,12 @@ describe('the environment', () => {
 
 describe('the production environment', () => {
   it.each([
-    ['MAILERSEND_API_KEY', without('MAILERSEND_API_KEY')],
-    ['MAILERSEND_API_KEY', { ...COMPLETE, MAILERSEND_API_KEY: '' }],
+    ['MAILERSEND_API_KEY or BREVO_API_KEY', without('MAILERSEND_API_KEY')],
+    ['MAILERSEND_API_KEY or BREVO_API_KEY', { ...COMPLETE, MAILERSEND_API_KEY: '' }],
+    [
+      'MAILERSEND_API_KEY or BREVO_API_KEY',
+      { ...COMPLETE, BREVO_API_KEY: '', MAILERSEND_API_KEY: '' },
+    ],
     ['CRON_SECRET', without('CRON_SECRET')],
     ['CRON_SECRET', { ...COMPLETE, CRON_SECRET: '' }],
     ['SESSION_SECRET', { ...COMPLETE, SESSION_SECRET: 's'.repeat(31) }],
@@ -96,5 +102,106 @@ describe('the production environment', () => {
     }
 
     expect(parseEnv(development)).toMatchObject(development)
+  })
+})
+
+describe('the mail settings', () => {
+  const DEVELOPMENT = { ...without('MAILERSEND_API_KEY'), NODE_ENV: 'development' }
+
+  it.each([
+    ['MailerSend', { MAILERSEND_API_KEY: 'mailersend-key' }, 'mailersend', 'mailersend-key'],
+    ['Brevo', { BREVO_API_KEY: 'brevo-key' }, 'brevo', 'brevo-key'],
+  ])('send through %s when only its key is set', (_name, keys, provider, apiKey) => {
+    expect.hasAssertions()
+
+    expect(parseEnv({ ...DEVELOPMENT, ...keys, MAIL_ROOT_DOMAIN: 'demo.test' }).mail).toStrictEqual(
+      { apiKey, provider, rootDomain: 'demo.test' },
+    )
+  })
+
+  it.each([
+    ['no key', {}],
+    ['empty keys', { BREVO_API_KEY: '', MAILERSEND_API_KEY: '' }],
+  ])('send to the test inbox in development with %s', (_name, keys) => {
+    expect.hasAssertions()
+
+    expect(parseEnv({ ...DEVELOPMENT, ...keys }).mail).toStrictEqual({
+      provider: 'test',
+      rootDomain: undefined,
+    })
+  })
+
+  it('fall back to the brand addresses when the root domain is empty', () => {
+    expect.hasAssertions()
+
+    expect(parseEnv({ ...COMPLETE, MAIL_ROOT_DOMAIN: '' }).mail.rootDomain).toBeUndefined()
+  })
+
+  it.each([
+    ['MailerSend', COMPLETE],
+    ['Brevo', { ...without('MAILERSEND_API_KEY'), BREVO_API_KEY: 'brevo-key' }],
+  ])('keep the raw keys out of the parsed environment with %s', (_name, source) => {
+    expect.hasAssertions()
+
+    const keys = Object.keys(parseEnv({ ...source, MAIL_ROOT_DOMAIN: 'demo.test' }))
+
+    expect(keys).not.toContain('MAILERSEND_API_KEY')
+    expect(keys).not.toContain('BREVO_API_KEY')
+    expect(keys).not.toContain('MAIL_ROOT_DOMAIN')
+  })
+
+  it.each(['production', 'development'])(
+    'refuse the old MAILERSEND_ROOT_DOMAIN in %s, naming its new name but not its value',
+    (nodeEnv) => {
+      expect.hasAssertions()
+
+      const message = failure({
+        ...COMPLETE,
+        MAILERSEND_ROOT_DOMAIN: 'old-domain-value',
+        NODE_ENV: nodeEnv,
+      })
+
+      expect(message).toBe(
+        'Invalid environment: MAILERSEND_ROOT_DOMAIN was renamed to MAIL_ROOT_DOMAIN',
+      )
+    },
+  )
+
+  it.each(['production', 'development'])(
+    'refuse both keys in %s, naming the variables but not their values',
+    (nodeEnv) => {
+      expect.hasAssertions()
+
+      const message = failure({
+        ...COMPLETE,
+        BREVO_API_KEY: 'brevo-secret-value',
+        MAILERSEND_API_KEY: 'mailersend-secret-value',
+        NODE_ENV: nodeEnv,
+      })
+
+      expect(message).toBe(
+        'Invalid environment: MAILERSEND_API_KEY and BREVO_API_KEY are both set; set only one',
+      )
+      expect(message).not.toContain('secret-value')
+    },
+  )
+
+  it('name the missing keys in production without any other value', () => {
+    expect.hasAssertions()
+
+    const message = failure({ ...without('MAILERSEND_API_KEY'), MAIL_ROOT_DOMAIN: 'demo.test' })
+
+    expect(message).toBe(
+      'Invalid environment: MAILERSEND_API_KEY or BREVO_API_KEY is required in production',
+    )
+    expect(message).not.toContain('demo.test')
+  })
+
+  it('accept Brevo alone in production', () => {
+    expect.hasAssertions()
+
+    expect(
+      parseEnv({ ...without('MAILERSEND_API_KEY'), BREVO_API_KEY: 'brevo-key' }).mail,
+    ).toStrictEqual({ apiKey: 'brevo-key', provider: 'brevo', rootDomain: undefined })
   })
 })

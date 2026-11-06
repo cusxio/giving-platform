@@ -11,8 +11,7 @@ import {
   EGHL_PASSWORD,
   EGHL_SERVICE_ID,
   EGHL_URL,
-  MAILERSEND_API_KEY,
-  MAILERSEND_ROOT_DOMAIN,
+  MAIL,
   SESSION_SECRET,
 } from '#/server/env.server'
 import { logger as rootLogger } from '#/server/logger.server'
@@ -47,7 +46,7 @@ export interface Deps {
 const config: ServerConfig = {
   cronSecret: CRON_SECRET,
   eghl: { baseUrl: BASE_URL, password: EGHL_PASSWORD, serviceId: EGHL_SERVICE_ID, url: EGHL_URL },
-  mail: { apiKey: MAILERSEND_API_KEY, rootDomain: MAILERSEND_ROOT_DOMAIN },
+  mail: MAIL,
 }
 const db = createDb(neonHttp, neonPool)
 const mailer = createMailer(config.mail, rootLogger)

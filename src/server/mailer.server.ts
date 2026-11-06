@@ -1,12 +1,13 @@
 import type { Logger } from 'pino'
 
+import { assertExhaustive } from '#/core/assert-exhaustive'
 import { config } from '#/core/brand'
 
-export interface MailConfig {
-  /** Without a key, mail goes to a throwaway Ethereal inbox and the log carries its URL. */
-  readonly apiKey: string | undefined
-  readonly rootDomain: string | undefined
-}
+type MailProvider =
+  | { readonly apiKey: string; readonly provider: 'brevo' | 'mailersend' }
+  | { readonly provider: 'test' }
+
+export type MailConfig = MailProvider & { readonly rootDomain: string | undefined }
 
 export interface MailMessage {
   readonly html: string
@@ -19,19 +20,81 @@ export interface Mailer {
   readonly send: (message: MailMessage) => Promise<void>
 }
 
-export function createMailer(mailConfig: MailConfig, logger: Logger): Mailer {
+const BREVO_SEND_URL = 'https://api.brevo.com/v3/smtp/email'
+const BREVO_TIMEOUT_MS = 10_000
+
+export function createMailer(
+  mailConfig: MailConfig,
+  logger: Logger,
+  { brevoTimeoutMs = BREVO_TIMEOUT_MS }: { readonly brevoTimeoutMs?: number } = {},
+): Mailer {
   return {
     send: async (message) => {
-      const transport = await openMailTransport(mailConfig, logger)
+      const transport = await openMailTransport(mailConfig, logger, brevoTimeoutMs)
       await transport.send(message)
     },
   }
 }
 
-async function openMailTransport(mailConfig: MailConfig, logger: Logger): Promise<Mailer> {
-  return mailConfig.apiKey === undefined
-    ? openTestTransport(logger)
-    : openMailerSendTransport(mailConfig.apiKey, mailConfig.rootDomain)
+async function openMailTransport(
+  mailConfig: MailConfig,
+  logger: Logger,
+  brevoTimeoutMs: number,
+): Promise<Mailer> {
+  switch (mailConfig.provider) {
+    case 'brevo': {
+      return brevoTransport(mailConfig.apiKey, mailConfig.rootDomain, brevoTimeoutMs)
+    }
+    case 'mailersend': {
+      return openMailerSendTransport(mailConfig.apiKey, mailConfig.rootDomain)
+    }
+    case 'test': {
+      return openTestTransport(logger)
+    }
+    default: {
+      return assertExhaustive(mailConfig)
+    }
+  }
+}
+
+function senderAddresses(rootDomain: string | undefined) {
+  return rootDomain === undefined
+    ? { replyEmail: config.email.finance, systemEmail: config.email.system }
+    : { replyEmail: `finance@${rootDomain}`, systemEmail: `system@${rootDomain}` }
+}
+
+function brevoTransport(
+  apiKey: string,
+  rootDomain: string | undefined,
+  brevoTimeoutMs: number,
+): Mailer {
+  const { replyEmail, systemEmail } = senderAddresses(rootDomain)
+
+  return {
+    send: async ({ to, subject, html, text }) => {
+      const response = await fetch(BREVO_SEND_URL, {
+        body: JSON.stringify({
+          htmlContent: html,
+          replyTo: { email: replyEmail, name: config.name },
+          sender: { email: systemEmail, name: config.name },
+          subject,
+          textContent: text,
+          to: [{ email: to }],
+        }),
+        headers: {
+          accept: 'application/json',
+          'api-key': apiKey,
+          'content-type': 'application/json',
+        },
+        method: 'POST',
+        signal: AbortSignal.timeout(brevoTimeoutMs),
+      })
+      await response.body?.cancel()
+      if (!response.ok) {
+        throw new Error(`Brevo refused the email with HTTP ${response.status}`)
+      }
+    },
+  }
 }
 
 async function openMailerSendTransport(
@@ -40,8 +103,7 @@ async function openMailerSendTransport(
 ): Promise<Mailer> {
   const { EmailParams, MailerSend, Recipient, Sender } = await import('mailersend')
   const mailerSend = new MailerSend({ apiKey })
-  const systemEmail = rootDomain === undefined ? config.email.system : `system@${rootDomain}`
-  const replyEmail = rootDomain === undefined ? config.email.finance : `finance@${rootDomain}`
+  const { replyEmail, systemEmail } = senderAddresses(rootDomain)
 
   return {
     send: async ({ to, subject, html, text }) => {

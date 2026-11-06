@@ -29,7 +29,7 @@ To add a feature, copy the nearest module in `src/modules/`. The table below is 
 - A file named `*.server.ts` never reaches the browser. `vite build` fails with `Import denied in client environment` when client code imports one.
 - SQL lives only in `*.repository.server.ts`. The module that owns a table is its only writer. `history` and `analytics` read other modules' tables and write nothing.
 - Client-reachable module files never import a repository, even for types. Client-reachable means every module file except `*.server.ts`, `server.ts`, and tests.
-- Workflows get infrastructure from `deps` as `Pick<Deps, ...>`. Only `src/server/` imports env, the root logger, and the neon clients. In production, `env.server.ts` refuses to load without `MAILERSEND_API_KEY` and `CRON_SECRET`, or with a `SESSION_SECRET` under 32 characters (`env-rules.ts`); development needs none of them.
+- Workflows get infrastructure from `deps` as `Pick<Deps, ...>`. Only `src/server/` imports env, the root logger, and the neon clients. In production, `env.server.ts` refuses to load without exactly one of `MAILERSEND_API_KEY` and `BREVO_API_KEY`, without `CRON_SECRET`, or with a `SESSION_SECRET` under 32 characters (`env-rules.ts`); development needs none of them. The key that is set picks the mail provider, and no key sends to a test inbox. No environment may set both keys. `MAIL_ROOT_DOMAIN` names the sender domain for either provider.
 - A `defineQuery` name is `<module>.<factory name>`, such as `history.transactionItemsOf`.
 - Don't export a name that only its own file uses.
 - Never name a server file `*.client.*`. TanStack Start import protection denies those files on the server.
