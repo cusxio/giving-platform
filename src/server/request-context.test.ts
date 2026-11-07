@@ -28,8 +28,7 @@ vi.mock<typeof Envvars>(import('#/server/env.server'), () => ({
   EGHL_PASSWORD: 'secret-password',
   EGHL_SERVICE_ID: 'service-123',
   EGHL_URL: 'https://eghl.test/pay',
-  MAILERSEND_API_KEY: undefined,
-  MAILERSEND_ROOT_DOMAIN: undefined,
+  MAIL: { provider: 'test', rootDomain: undefined },
   SESSION_SECRET: 'test-session-secret',
 }))
 
@@ -209,7 +208,7 @@ describe('the request context middleware', () => {
         serviceId: 'service-123',
         url: 'https://eghl.test/pay',
       },
-      mail: { apiKey: undefined, rootDomain: undefined },
+      mail: { provider: 'test', rootDomain: undefined },
     })
     expect(context.deps.hashToken('raw')).toBe(createTokenHasher('test-session-secret')('raw'))
   })

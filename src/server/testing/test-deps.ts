@@ -19,7 +19,7 @@ export function testDeps(overrides: Partial<Deps> = {}): Deps {
     config: {
       cronSecret: 'test-cron-secret',
       eghl,
-      mail: { apiKey: undefined, rootDomain: undefined },
+      mail: { provider: 'test', rootDomain: undefined },
     },
     db: createFakeDb(),
     eghl: createEghlClient(eghl, logger),

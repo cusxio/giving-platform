@@ -8,9 +8,9 @@ NODE_ENV = "development"
 DATABASE_URL = ""
 DATABASE_AUTH_TOKEN = ""
 
-# Mailersend
-# MAILERSEND_ROOT_DOMAIN           = ""
-# MAILERSEND_API_KEY               = ""
+MAIL_ROOT_DOMAIN = ""
+MAILERSEND_API_KEY = ""
+BREVO_API_KEY = ""
 
 # EGHL
 EGHL_SERVICE_ID = ""
