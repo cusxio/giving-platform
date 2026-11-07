@@ -55,4 +55,4 @@ jobs:
             ${{ runner.os }}-moon-${{ hashFiles('moon.yml', '.moon/**/*.yml', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml') }}-
 
       - name: Run moon tasks
-        run: pnpm exec moon ci :lint :format-check :typecheck :test :bundle :knip
+        run: pnpm exec moon ci :lint :format-check :typecheck :test :knip

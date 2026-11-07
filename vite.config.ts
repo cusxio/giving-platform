@@ -5,7 +5,7 @@ import { nitro } from 'nitro/vite'
 import { bundleStats } from 'rollup-plugin-bundle-stats'
 import { defineConfig } from 'vite'
 
-export default defineConfig(({ mode, command }) => {
+export default defineConfig(({ mode }) => {
   const baseConfig = { resolve: { tsconfigPaths: true } }
 
   if (mode === 'test') {
@@ -33,7 +33,7 @@ export default defineConfig(({ mode, command }) => {
         // Nitro's Vercel preset only recognizes Node 22 and 24 and otherwise falls back to 24.
         vercel: { functions: { runtime: 'nodejs26.x' } },
       }),
-      command === 'build' && mode === 'production' && process.env.CI !== 'true' && bundleStats(),
+      process.env.BUNDLE_STATS === 'true' && bundleStats(),
     ],
     server: { port: 3003, allowedHosts: mode === 'development' ? true : undefined },
   }

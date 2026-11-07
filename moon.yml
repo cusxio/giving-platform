@@ -98,16 +98,6 @@ tasks:
 
   # ── Verify ─────────────────────────────────────────────────
 
-  # TanStack Start's import protection fails this build when client code reaches a *.server.ts file.
-  bundle:
-    command: vite
-    args:
-      - build
-    inputs:
-      - group: sources
-      - /vite.config.ts
-      - /tsconfig.json
-
   knip:
     command: knip
     inputs:
@@ -116,18 +106,3 @@ tasks:
       - /package.json
       - /moon.yml
       - /.moon/**/*
-
-  # ── Build ──────────────────────────────────────────────────
-
-  build:
-    command: vercel
-    args:
-      - build
-    inputs:
-      - group: sources
-      - /vite.config.ts
-      - /tsconfig.json
-    outputs:
-      - .vercel/output
-    options:
-      cache: false

@@ -128,4 +128,4 @@ The cron's summary, `eghl.cron.complete`, carries `stale_pending`: the count of 
 
 ## Checks
 
-CI runs `moon ci :lint :format-check :typecheck :test :bundle :knip`. `bundle` is `vite build`, the only check that catches server code reaching the client.
+CI runs `moon ci :lint :format-check :typecheck :test :knip`. Vercel builds every push with `vite build`, the only check that catches server code reaching the client. Run `pnpm build` to check it locally, with `BUNDLE_STATS=true` to also write `bundle-stats.html`.
