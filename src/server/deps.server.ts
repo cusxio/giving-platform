@@ -3,6 +3,7 @@ import type { Logger } from 'pino'
 import type { EghlConfig, PaymentGateway } from '#/modules/payments/server'
 import { createEghlClient } from '#/modules/payments/server'
 import { createTokenHasher } from '#/server/crypto.server'
+import { db as httpDb, dbPool as poolDb } from '#/server/db-connection.server'
 import type { Db } from '#/server/db.server'
 import { createDb } from '#/server/db.server'
 import {
@@ -17,7 +18,6 @@ import {
 import { logger as rootLogger } from '#/server/logger.server'
 import type { MailConfig, Mailer } from '#/server/mailer.server'
 import { createMailer } from '#/server/mailer.server'
-import { db as neonHttp, dbPool as neonPool } from '#/server/neon.server'
 
 /** Settings read from env once, here. Nothing else on the request path reads env. */
 interface ServerConfig {
@@ -48,7 +48,7 @@ const config: ServerConfig = {
   eghl: { baseUrl: BASE_URL, password: EGHL_PASSWORD, serviceId: EGHL_SERVICE_ID, url: EGHL_URL },
   mail: MAIL,
 }
-const db = createDb(neonHttp, neonPool)
+const db = createDb(httpDb, poolDb)
 const mailer = createMailer(config.mail, rootLogger)
 const hashToken = createTokenHasher(SESSION_SECRET)
 

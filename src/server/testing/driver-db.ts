@@ -1,8 +1,8 @@
 import { drizzle } from 'drizzle-orm/neon-http'
 
+import type { DBPool } from '#/server/db-connection.server'
 import type { Db } from '#/server/db.server'
 import { createDb } from '#/server/db.server'
-import type { DBPool } from '#/server/neon.server'
 
 /** Stands in for the neon-http driver: receives each statement's SQL text and params. */
 type Driver = (sql: string, params: unknown[]) => Promise<unknown>

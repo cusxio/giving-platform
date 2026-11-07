@@ -39,7 +39,7 @@ const SQL_IN_REPOSITORIES: ImportPattern = {
     'SQL lives in *.repository.server.ts. Export a defineQuery factory there and run it with deps.db.',
 }
 const PLATFORM_INTERNALS: ImportPattern = {
-  group: ['#/server/env.server', '#/server/logger.server', '#/server/neon.server'],
+  group: ['#/server/env.server', '#/server/logger.server', '#/server/db-connection.server'],
   message:
     'Env, the root logger and the neon clients stay in src/server/. Take them from deps (Pick<Deps, ...>).',
 }

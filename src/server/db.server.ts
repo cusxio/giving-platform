@@ -3,8 +3,8 @@ import type { SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 
+import type { DB, DBPool, DBPoolTransaction } from '#/server/db-connection.server'
 import { InfraError, infra } from '#/server/infra-error'
-import type { DB, DBPool, DBPoolTransaction } from '#/server/neon.server'
 
 /**
  * The drizzle handle a statement is built against: neon-http for run and batch, a pool
