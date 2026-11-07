@@ -4,27 +4,14 @@ import { drizzle as drizzlePool } from 'drizzle-orm/neon-serverless'
 
 import { DATABASE_URL } from '#/server/env.server'
 
-// Required for PlanetScale Postgres connections
-// https://planetscale.com/docs/postgres/connecting/neon-serverless-driver
+import { LOCAL_DATABASE_HOST, sqlEndpoint, websocketProxy } from './db-endpoints'
 
-// Http
-const DATABASE_LOCAL_URL = 'db.localtest.me'
-neonConfig.fetchEndpoint = (host) => {
-  if (host === DATABASE_LOCAL_URL) {
-    return `http://${host}:4444/sql`
-  }
-  return `https://${host}/sql`
-}
-
-// Ws
+// Neon's serverless driver, connecting to PlanetScale Postgres, Neon or the local proxy.
+// PlanetScale needs SCRAM-SHA-256, which rules out a pipelined connect.
+neonConfig.fetchEndpoint = sqlEndpoint
 neonConfig.pipelineConnect = false
-neonConfig.useSecureWebSocket = new URL(DATABASE_URL).hostname !== DATABASE_LOCAL_URL
-neonConfig.wsProxy = (host, port) => {
-  if (host === DATABASE_LOCAL_URL) {
-    return `${host}:4444/v1`
-  }
-  return `${host}/v2?address=${host}:${port}`
-}
+neonConfig.useSecureWebSocket = new URL(DATABASE_URL).hostname !== LOCAL_DATABASE_HOST
+neonConfig.wsProxy = websocketProxy
 
 const pool = new Pool({ connectionString: DATABASE_URL })
 export const dbPool = drizzlePool({ casing: 'snake_case', client: pool })
