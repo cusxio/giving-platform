@@ -1,14 +1,7 @@
 import type { KnipConfig } from 'knip'
 
 export default {
-  // The drizzle plugin loads drizzle.config.ts, which needs the database env; CI has none.
-  drizzle: false,
-  entry: [
-    './src/entry-server.tsx',
-    './src/entry-client.tsx',
-    './src/route-tree.gen.ts',
-    './drizzle.config.ts',
-  ],
+  entry: ['./src/entry-server.tsx', './src/entry-client.tsx', './src/route-tree.gen.ts'],
   // moon's built-in command for tasks that only run their deps.
   ignoreBinaries: ['noop'],
   ignoreDependencies: [

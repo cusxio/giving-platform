@@ -126,6 +126,33 @@ The cron's summary, `eghl.cron.complete`, carries `stale_pending`: the count of 
 - `db.calls` lists every query with its arguments. `db.roundTrips` lists the query names each database round trip carried. Assert `roundTrips` for every workflow that batches, so a lost `db.batch` fails a test. `db.transactions` lists each transaction's `commit` or `rollback`.
 - Pin exact SQL with `createDriverDb` when the statement's text matters, such as an `ORDER BY`.
 
+## Database changes
+
+`src/server/schema.server.ts` is the schema. `drizzle/` holds the migrations that build it, applied in order and recorded in `drizzle.__drizzle_migrations`. A database is set up by migrating it: `0000_baseline` creates the tables and `0001_seed_funds` adds the four funds.
+
+- **Change the schema.** Edit `schema.server.ts`, run `pnpm db:generate`, read the SQL it writes, and commit `drizzle/` with the change. Never edit a migration that has shipped. Add a new one.
+- **Change data.** Run `pnpm drizzle-kit generate --custom --name <what>` and write the SQL. It runs once on every database, so it must also be correct on a new, empty one.
+- **Migrate.** `pnpm db:migrate` applies what the database in `DATABASE_URL` has not run, in one transaction and under a lock, so concurrent runs apply each migration once. The build runs it after `vite build` when `MIGRATE_ON_BUILD` is `true`. Set that variable only in a Vercel environment with its own database: Production, and Preview only when each preview gets its own database branch. A failed migration fails the deploy, and the live site keeps running.
+- **What migrate refuses.** Each refusal fails the deploy and names the migration.
+  - A statement that waits more than 5 seconds for a table lock. While it waits, every app query on that table waits behind it. Deploy again when traffic is lower, or split the migration. The limit is per statement: locks that earlier statements took stay held until the whole run commits, so keep a data migration small.
+  - A build that isn't a preview, comes from a branch other than `main`, and has migrations to apply. Promoting a preview rebuilds it with production's settings, so its unmerged migrations would reach the production database. A build without Vercel's system environment variables counts as production.
+  - A migration older than the last one applied that never ran, such as one generated on a branch that merged late. Regenerate it.
+  - A migration whose file changed after it ran.
+- **Stay compatible with the running code.** A migration runs before its deploy goes live, and an instant rollback runs old code on the new schema. Rolling back never undoes a migration. So every migration must work with the code before it and the code after it.
+  - **Safe in one deploy:** a new table, a nullable column, or a column whose default is a constant.
+  - **Removing a column takes two deploys.** Drizzle names every schema column in its queries, so the code stops using a column only when it leaves `schema.server.ts`, and `pnpm db:generate` then writes the `DROP COLUMN` into the same migration.
+    1. Remove the column from the schema and run `pnpm db:generate`. Delete the `DROP COLUMN` statement from the generated SQL, and keep the rest and the snapshot. If the column is `NOT NULL` with no default, the migration drops `NOT NULL` instead, so the new code's inserts succeed.
+    2. In a later deploy, drop the column with `pnpm drizzle-kit generate --custom --name drop_<column>`.
+  - **Renaming a column takes three deploys.** Add the new column and write to both, then read from the new one, then drop the old one as above. Never accept drizzle-kit's rename prompt: its `RENAME COLUMN` breaks the running code.
+  - **A new constraint on a large table** goes in as `NOT VALID`, then `VALIDATE CONSTRAINT` in a later migration, so the table isn't locked while it is checked. That works for a foreign key or a `CHECK`. For `NOT NULL` before Postgres 18, add `CHECK (<column> IS NOT NULL) NOT VALID`, validate it, then `SET NOT NULL`.
+  - **An index on a large table.** Migrations run in a transaction, so `CREATE INDEX CONCURRENTLY` is unavailable. Create the index by hand first, and write the migration as `CREATE INDEX IF NOT EXISTS`. Every table is small today, so a plain `CREATE INDEX` is fine.
+- **A preview database** made from a branch copies the main database's history. If a branch's migration changes after its preview applied it, the next preview build refuses it. Delete that preview's database branch and deploy again.
+- **A database that predates migrations,** such as production or a local database built by hand, has tables and no history, so migrate refuses it.
+  1. Run `scripts/baseline/schema-fingerprint.sql` on it, and on a new database after `pnpm db:migrate`.
+  2. When the fingerprints match, run `scripts/baseline/record-baseline.sql` on it once.
+  3. Check that its funds are named as in `0001_seed_funds.sql`. The fingerprint doesn't compare data.
+     The next migrate applies only the migrations after the baseline.
+
 ## Checks
 
-CI runs `moon ci :lint :format-check :typecheck :test :knip`. Vercel builds every push with `vite build`, the only check that catches server code reaching the client. Run `pnpm build` to check it locally, with `BUNDLE_STATS=true` to also write `bundle-stats.html`.
+CI runs `moon ci :lint :format-check :typecheck :test :knip :migrations-check`. `migrations-check` fails when `schema.server.ts` changed without a migration. Vercel builds every push with `vite build`, the only check that catches server code reaching the client. Run `pnpm build` to check it locally, with `BUNDLE_STATS=true` to also write `bundle-stats.html`.

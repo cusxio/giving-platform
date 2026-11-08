@@ -279,6 +279,11 @@ export default defineConfig({
     },
     { files: ['src/server/**'], rules: restrictServerImports(...EVERYWHERE) },
     {
+      // Database tooling that runs outside the app. Migrations are SQL and must run in order.
+      files: ['scripts/**'],
+      rules: { ...restrictImports(...EVERYWHERE), 'eslint/no-await-in-loop': 'off' },
+    },
+    {
       files: ['src/routes/**', 'src/components/**', 'src/hooks/**', 'src/core/**'],
       rules: restrictImports(...OUTSIDE_PLATFORM, SERVER_CODE_IN_CLIENT),
     },

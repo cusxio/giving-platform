@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/migrate.ts --build",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node scripts/migrate.ts",
     "dev": "vite dev",
     "dev:email": "email dev --dir ./src/modules/auth/emails",
     "preview": "vite preview",
