@@ -29,9 +29,10 @@ const schema = Type.Object({
 
 type RawEnv = Static<typeof schema>
 
-export type Env = Omit<RawEnv, 'BREVO_API_KEY' | 'MAIL_ROOT_DOMAIN' | 'MAILERSEND_API_KEY'> & {
-  readonly mail: MailConfig
-}
+export type Env = Omit<
+  RawEnv,
+  'BASE_URL' | 'BREVO_API_KEY' | 'MAIL_ROOT_DOMAIN' | 'MAILERSEND_API_KEY'
+> & { readonly BASE_URL: string; readonly mail: MailConfig }
 
 const envType = Compile(schema)
 
@@ -76,6 +77,29 @@ function parseMail(env: RawEnv): { config: MailConfig; problems: string[] } {
 }
 
 /**
+ * The address the payment gateway sends payers back to. On Vercel, a preview uses its branch
+ * address and production its production domain. VERCEL_URL is only the fallback: it names one
+ * deployment, which is not where the payer started and sits behind Vercel's login, and that login
+ * drops the gateway's posted reply.
+ */
+function baseUrlOf(source: Record<string, string | undefined>, env: RawEnv): string | undefined {
+  if (isSet(env.BASE_URL)) {
+    return env.BASE_URL
+  }
+  const host =
+    source.VERCEL_ENV === 'production'
+      ? source.VERCEL_PROJECT_PRODUCTION_URL
+      : source.VERCEL_BRANCH_URL
+  if (isSet(host)) {
+    return `https://${host}`
+  }
+  if (isSet(source.VERCEL_URL)) {
+    return `https://${source.VERCEL_URL}`
+  }
+  return env.NODE_ENV === 'development' ? 'http://localhost:3003' : undefined
+}
+
+/**
  * What a production deployment is missing. Without a cron secret, both crons refuse every run; a
  * short session secret weakens the hash that stores login codes. Development may run without them.
  */
@@ -110,10 +134,16 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
     source.MAILERSEND_ROOT_DOMAIN === undefined
       ? []
       : ['MAILERSEND_ROOT_DOMAIN was renamed to MAIL_ROOT_DOMAIN']
-  const problems = [...renamed, ...mail.problems, ...productionEnvProblems(raw)]
-  if (problems.length > 0) {
+  const baseUrl = baseUrlOf(source, raw)
+  const problems = [
+    ...renamed,
+    ...(baseUrl === undefined ? ['BASE_URL is required outside Vercel'] : []),
+    ...mail.problems,
+    ...productionEnvProblems(raw),
+  ]
+  if (baseUrl === undefined || problems.length > 0) {
     throw new Error(`Invalid environment: ${problems.join('; ')}`)
   }
-  const { BREVO_API_KEY, MAIL_ROOT_DOMAIN, MAILERSEND_API_KEY, ...env } = raw
-  return { ...env, mail: mail.config }
+  const { BASE_URL, BREVO_API_KEY, MAIL_ROOT_DOMAIN, MAILERSEND_API_KEY, ...env } = raw
+  return { ...env, BASE_URL: baseUrl, mail: mail.config }
 }

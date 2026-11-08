@@ -4,6 +4,7 @@ import { parseEnv } from './env-rules'
 
 const SECRET_32 = 's'.repeat(32)
 const COMPLETE = {
+  BASE_URL: 'https://give.test',
   CRON_SECRET: 'cron-secret',
   DATABASE_URL: 'postgres://db.give.test/db',
   EGHL_PASSWORD: 'eghl-password',
@@ -102,6 +103,61 @@ describe('the production environment', () => {
     }
 
     expect(parseEnv(development)).toMatchObject(development)
+  })
+})
+
+describe('the address payers return to', () => {
+  const VERCEL = {
+    VERCEL_BRANCH_URL: 'app-git-feature-team.vercel.app',
+    VERCEL_PROJECT_PRODUCTION_URL: 'give.test',
+    VERCEL_URL: 'app-abc123-team.vercel.app',
+  }
+
+  it.each([
+    ['a preview', 'preview', 'https://app-git-feature-team.vercel.app'],
+    ['production', 'production', 'https://give.test'],
+  ])('is the address people use on %s, not the one deployment', (_name, vercelEnv, expected) => {
+    expect.hasAssertions()
+
+    const env = parseEnv({ ...without('BASE_URL'), ...VERCEL, VERCEL_ENV: vercelEnv })
+
+    expect(env.BASE_URL).toBe(expected)
+  })
+
+  it('is BASE_URL when it is set', () => {
+    expect.hasAssertions()
+
+    expect(parseEnv({ ...COMPLETE, ...VERCEL, VERCEL_ENV: 'preview' }).BASE_URL).toBe(
+      'https://give.test',
+    )
+  })
+
+  it('falls back to the deployment address when Vercel names no other', () => {
+    expect.hasAssertions()
+
+    const env = parseEnv({
+      ...without('BASE_URL'),
+      VERCEL_ENV: 'preview',
+      VERCEL_URL: VERCEL.VERCEL_URL,
+    })
+
+    expect(env.BASE_URL).toBe('https://app-abc123-team.vercel.app')
+  })
+
+  it('is localhost in development', () => {
+    expect.hasAssertions()
+
+    expect(parseEnv({ ...without('BASE_URL'), NODE_ENV: 'development' }).BASE_URL).toBe(
+      'http://localhost:3003',
+    )
+  })
+
+  it('is required in production outside Vercel', () => {
+    expect.hasAssertions()
+
+    expect(failure(without('BASE_URL'))).toBe(
+      'Invalid environment: BASE_URL is required outside Vercel',
+    )
   })
 })
 
