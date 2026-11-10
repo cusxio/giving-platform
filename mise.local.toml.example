@@ -1,30 +1,43 @@
+# Copy to mise.local.toml (git ignores it) and fill in. src/server/env-rules.ts checks these
+# at startup and names any that are missing.
 [env]
-MOON_TOOLCHAIN_FORCE_GLOBALS = true
-
-BASE_URL = ""
-SESSION_SECRET = ""
 NODE_ENV = "development"
 
-DATABASE_URL = ""
-DATABASE_AUTH_TOKEN = ""
+# Any string in development. Production needs 32 characters or more: openssl rand -hex 32
+SESSION_SECRET = ""
 
-MAIL_ROOT_DOMAIN = ""
-MAILERSEND_API_KEY = ""
-BREVO_API_KEY = ""
+# The local database, through the local Neon proxy. See "Run the local database" in README.md.
+DATABASE_URL = "postgres://postgres:<password>@db.localtest.me:5432/giving_platform"
 
-# EGHL
+# eGHL's test merchant account. Never point local development at the live endpoint.
 EGHL_SERVICE_ID = ""
 EGHL_URL = ""
 EGHL_PASSWORD = ""
 
-# this just makes life easier tbh, the world runs on UTC
+# Set at most one key. With neither, login codes go to a test inbox and the dev server logs
+# each "Test email sent" with a link to view it. MAIL_ROOT_DOMAIN is the sender's domain.
+MAILERSEND_API_KEY = ""
+BREVO_API_KEY = ""
+MAIL_ROOT_DOMAIN = ""
+
+# Optional. The crons refuse every call without it. Set it to call /api/eghl/cron or
+# /api/auth/cron by hand with "Authorization: Bearer <secret>".
+CRON_SECRET = ""
+
+# Optional. Where eGHL sends the payer back. Development defaults to http://localhost:3003.
+# BASE_URL = ""
+
+# Optional. "true" shows the maintenance page on every route.
+# MAINTENANCE_MODE = "true"
+
+# Vercel runs in UTC. This keeps local dates the same.
 TZ = "UTC"
 
+# OpenTelemetry. Each exporter is otlp, console or none, or a comma-separated mix.
 # https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/
 OTEL_LOG_LEVEL = "NONE"
-
-# https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
-OTEL_EXPORTER_OTLP_ENDPOINT = ""
-OTEL_EXPORTER_OTLP_HEADERS = ""
 OTEL_TRACES_EXPORTER = "none"
 OTEL_LOGS_EXPORTER = "none"
+# Needed only for otlp. https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
+OTEL_EXPORTER_OTLP_ENDPOINT = ""
+OTEL_EXPORTER_OTLP_HEADERS = ""
