@@ -1,6 +1,6 @@
-# Collective giving platform
+# Giving platform
 
-The donation site for Collective Central. Donors give to a fund (Offering, Tithe, Mission or Future), pay through the eGHL payment gateway, and sign in with an emailed code to see their history and receipts.
+A donation site. Donors give to a fund (Offering, Tithe, Mission or Future), pay through the eGHL payment gateway, and sign in with an emailed code to see their history and receipts.
 
 It is a TanStack Start app on Vite and React, deployed to Vercel. It reads and writes Postgres through Drizzle ORM and Neon's serverless driver: PlanetScale Postgres in production, Neon for the demo, and a local Postgres in development.
 
