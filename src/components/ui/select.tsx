@@ -1,16 +1,12 @@
-import type { SelectItemProps, SelectPopoverProps, SelectProps } from '@ariakit/react'
-import {
-  Select as AriakitSelect,
-  SelectItem as AriakitSelectItem,
-  SelectPopover as AriakitSelectPopover,
-} from '@ariakit/react'
+import type { ComboboxItemProps, ComboboxPopoverProps, ComboboxSelectProps } from '@ariakit/react'
+import { ComboboxItem, ComboboxPopover, ComboboxSelect } from '@ariakit/react'
 
 import { cx } from '#/styles/cx'
 
-export function Select(props: SelectProps) {
+export function Select(props: ComboboxSelectProps) {
   const { className, ...rest } = props
   return (
-    <AriakitSelect
+    <ComboboxSelect
       className={cx(
         'inline-flex h-9 items-center justify-between gap-2 border border-border px-3 text-sm select-none',
         className,
@@ -20,11 +16,11 @@ export function Select(props: SelectProps) {
   )
 }
 
-export function SelectItem(props: SelectItemProps) {
+export function SelectItem(props: ComboboxItemProps) {
   const { className, ...rest } = props
 
   return (
-    <AriakitSelectItem
+    <ComboboxItem
       className={cx(
         'inline-flex h-9 items-center justify-between',
         'px-2 text-sm',
@@ -40,10 +36,10 @@ export function SelectItem(props: SelectItemProps) {
   )
 }
 
-export function SelectPopover(props: SelectPopoverProps) {
+export function SelectPopover(props: ComboboxPopoverProps) {
   const { className, ...rest } = props
   return (
-    <AriakitSelectPopover
+    <ComboboxPopover
       className={cx(
         'flex flex-col',
         'mt-1 p-1',

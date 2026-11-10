@@ -1,6 +1,6 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 
-import { createUserQueryOptions, useAuthUser } from '#/features/session/session.queries'
+import { currentUserQuery, useAuthUser } from '#/modules/account'
 
 import { AsideNav } from './-components/aside-nav'
 import { Header } from './-components/header'
@@ -9,7 +9,7 @@ export const Route = createFileRoute('/(app)')({
   async beforeLoad({ context }) {
     const { queryClient } = context
 
-    const result = await queryClient.ensureQueryData(createUserQueryOptions())
+    const result = await queryClient.query({ ...currentUserQuery(), staleTime: 'static' })
 
     if (result.type === 'AUTH_ERROR') {
       throw redirect({ to: '/auth/login' })

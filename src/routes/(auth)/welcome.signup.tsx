@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import * as v from 'valibot'
 
 import { config } from '#/core/brand/config'
-import { AuthForm } from '#/features/auth/components/auth-form'
+
+import { AuthForm } from './-components/auth-form'
 
 const searchSchema = v.object({ email: v.optional(v.pipe(v.string(), v.toLowerCase(), v.email())) })
 

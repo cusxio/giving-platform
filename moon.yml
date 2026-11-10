@@ -5,6 +5,7 @@ $schema: .moon/cache/schemas/tasks.json
 fileGroups:
   sources:
     - src/**/*
+    - scripts/**/*
     - '*.ts'
     - '*.tsx'
     - '*.json'
@@ -23,6 +24,7 @@ tasks:
       - group: sources
       - /.gitignore
       - /oxlint.config.ts
+      - /lint/**/*
     options:
       affectedFiles: args
       shell: false
@@ -95,19 +97,29 @@ tasks:
       - /vite.config.ts
       - /tsconfig.json
 
-  # ── Build ──────────────────────────────────────────────────
+  # ── Verify ─────────────────────────────────────────────────
 
-  build:
-    command: pnpm
-    args:
-      - exec
-      - vercel
-      - build
+  knip:
+    command: knip
     inputs:
       - group: sources
-      - /vite.config.ts
-      - /tsconfig.json
-    outputs:
-      - .vercel/output
-    options:
-      cache: false
+      - /knip.config.ts
+      - /package.json
+      - /moon.yml
+      - /.moon/**/*
+
+  # Fails when drizzle/ is out of step with the schema: a migration is missing, uncommitted, or
+  # listed in the journal without its SQL file. It also loads scripts/migrate.ts, which every
+  # build runs, so a broken import fails here instead of in a deploy.
+  migrations-check:
+    script: >-
+      node_modules/.bin/drizzle-kit generate &&
+      git diff --quiet -- drizzle &&
+      test -z "$(git ls-files --others --exclude-standard -- drizzle)" &&
+      node -e "require('drizzle-orm/migrator').readMigrationFiles({ migrationsFolder: 'drizzle' })" &&
+      env -u MIGRATE_ON_BUILD node scripts/migrate.ts --build ||
+      { echo 'migrations-check failed: drizzle/ is out of step with the schema (run pnpm db:generate and commit drizzle/), or scripts/migrate.ts failed to load.'; exit 1; }
+    inputs:
+      - group: sources
+      - /pnpm-lock.yaml
+      - /drizzle/**/*

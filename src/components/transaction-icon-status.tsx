@@ -1,20 +1,29 @@
 import type { Icon } from '@phosphor-icons/react'
-import { CheckCircleIcon, HourglassIcon, WarningCircleIcon } from '@phosphor-icons/react/dist/ssr'
+import {
+  ArrowCounterClockwiseIcon,
+  CheckCircleIcon,
+  HourglassIcon,
+  WarningCircleIcon,
+  XCircleIcon,
+} from '@phosphor-icons/react/dist/ssr'
 import { createElement } from 'react'
 
-import type { Transaction } from '#/db/schema'
+import type { TransactionStatus } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 import { transactionStatusStyles } from './transaction-status'
 
 interface TransactionIconStatusProps {
   className?: string
-  status: Transaction['status']
+  status: TransactionStatus
 }
 
-const transactionStatusIcon: Record<Transaction['status'], Icon> = {
+const transactionStatusIcon: Record<TransactionStatus, Icon> = {
+  cancelled: XCircleIcon,
   failed: WarningCircleIcon,
+  held: HourglassIcon,
   pending: HourglassIcon,
+  refunded: ArrowCounterClockwiseIcon,
   success: CheckCircleIcon,
 }
 

@@ -10,9 +10,9 @@ import { toast } from '#/components/ui/toaster'
 import { assertExhaustive } from '#/core/assert-exhaustive'
 import { funds } from '#/core/brand'
 import type { Fund } from '#/core/brand/funds'
-import type { SavedPaymentMethod, User } from '#/db/schema'
-import type { StartContributionResponse } from '#/features/giving/contribution.mutations'
-import { useStartContributionMutation } from '#/features/giving/contribution.mutations'
+import type { User } from '#/modules/account'
+import type { SavedPaymentMethod, StartContributionResponse } from '#/modules/payments'
+import { useStartContributionMutation } from '#/modules/payments'
 
 export type GivingFormStore = ReturnType<typeof useGivingForm>['store']
 export type GivingFormView = 'amounts' | 'details' | 'redirecting'
@@ -23,6 +23,7 @@ interface UseGivingFormInput {
 }
 
 interface UseGivingFormOptions {
+  initialErrors: Partial<Record<Fund, string>>
   initialFunds: Partial<Record<Fund, string>>
   initialView: GivingFormView
 }
@@ -37,9 +38,11 @@ export function useGivingForm(
   savedPaymentToken: UseGivingFormInput['savedPaymentToken'],
   options: UseGivingFormOptions,
 ) {
-  const { initialFunds, initialView } = options
+  const { initialErrors, initialFunds, initialView } = options
 
-  const store = useFormStore({
+  const store = useFormStore<ReturnType<typeof getInitialFormValues>>({
+    defaultErrors: initialErrors,
+    defaultTouched: Object.fromEntries(Object.keys(initialErrors).map((fund) => [fund, true])),
     defaultValues: getInitialFormValues(user, savedPaymentToken, initialFunds),
   })
   const [isRedirecting, setIsRedirecting] = useState(false)
@@ -72,8 +75,14 @@ export function useGivingForm(
 
   const submitPayment = useCallback(async () => {
     const { values } = store.getState()
-    await handleFormSubmission(values, startContribution, store, setIsRedirecting)
-  }, [store, startContribution])
+    await handleFormSubmission(
+      values,
+      startContribution,
+      store,
+      setIsRedirecting,
+      user !== undefined,
+    )
+  }, [store, startContribution, user])
 
   return { store, submitPayment, view }
 }
@@ -101,6 +110,9 @@ function getInitialFormValues(
   >
   return { ...fundValues, ...getFormValues(user, savedPaymentToken) }
 }
+
+// Signed-in donors see a read-only summary instead of these inputs, so no inline error can show.
+const GUEST_DETAIL_FIELDS: ReadonlySet<string> = new Set(['email', 'firstName', 'lastName'])
 
 function handleBusinessError(
   error: Extract<StartContributionResponse, { type: 'BUSINESS_ERROR' }>['error'],
@@ -131,6 +143,13 @@ function handleBusinessError(
       break
     }
 
+    case 'PAYMENT_METHOD_UNAVAILABLE': {
+      toast.error('Saved Card Unavailable', {
+        description: 'This card can’t be used right now. Please choose another payment method.',
+      })
+      break
+    }
+
     case 'USER_MISMATCH': {
       store.setError(store.names.email, 'This email cannot be used while you’re logged in.')
       break
@@ -142,11 +161,12 @@ function handleBusinessError(
   }
 }
 
-async function handleFormSubmission(
+export async function handleFormSubmission(
   values: ReturnType<typeof getInitialFormValues>,
   startContribution: ReturnType<typeof useStartContributionMutation>,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
   setIsRedirecting: Dispatch<SetStateAction<boolean>>,
+  authenticated: boolean,
 ) {
   const { email, firstName, lastName, token, ...contributionAmounts } = values
 
@@ -159,12 +179,8 @@ async function handleFormSubmission(
       token: token === __NORMAL_CHECKOUT__ ? undefined : token,
     })
 
-    const success = handleSubmissionResponse(res, email, store)
-
-    if (success) {
+    if (handleSubmissionResponse(res, email, store, authenticated)) {
       setIsRedirecting(true)
-    } else {
-      toast.unexpected()
     }
   } catch {
     toast.unexpected()
@@ -175,6 +191,7 @@ function handleSubmissionResponse(
   res: StartContributionResponse,
   email: string,
   store: FormStore<ReturnType<typeof getInitialFormValues>>,
+  authenticated: boolean,
 ): boolean {
   switch (res.type) {
     case 'BUSINESS_ERROR': {
@@ -193,7 +210,7 @@ function handleSubmissionResponse(
     }
 
     case 'VALIDATION_ERROR': {
-      handleValidationErrors(res.errors, store)
+      handleValidationErrors(res.errors, store, authenticated)
       break
     }
 
@@ -208,9 +225,21 @@ function handleSubmissionResponse(
 function handleValidationErrors(
   errors: { message: string; path: string }[],
   store: ReturnType<typeof useFormStore>,
+  authenticated: boolean,
 ) {
+  let hasUnrenderedError = false
+
   for (const error of errors) {
     const key = error.path.slice(1)
-    store.setError(key, error.message)
+
+    if (!authenticated && GUEST_DETAIL_FIELDS.has(key)) {
+      store.setError(key, error.message)
+    } else {
+      hasUnrenderedError = true
+    }
+  }
+
+  if (hasUnrenderedError) {
+    toast.error('Invalid Details', { description: 'Please check your details and try again.' })
   }
 }

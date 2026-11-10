@@ -5,15 +5,14 @@ import * as v from 'valibot'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Pagination } from '#/components/ui/pagination'
 import { config } from '#/core/brand'
-import { useAuthUser } from '#/features/session/session.queries'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { useAuthUser } from '#/modules/account'
+import { transactionsQuery } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
 import { TransactionsTable } from '../-components/transactions-table'
 
-import { createTransactionsQueryOptions } from './-transactions.queries'
-
-const searchSchema = v.object({ page: v.optional(v.number()) })
+const searchSchema = v.object({ page: v.optional(v.pipe(v.number(), v.safeInteger())) })
 
 export const Route = createFileRoute('/(app)/transactions')({
   validateSearch(search): v.InferOutput<typeof searchSchema> {
@@ -25,27 +24,24 @@ export const Route = createFileRoute('/(app)/transactions')({
 
     return { page: parseResult.output.page }
   },
-  beforeLoad({ search }) {
-    return { page: search.page ?? 1 }
-  },
+  loaderDeps: ({ search }) => ({ page: Math.max(1, search.page ?? 1) }),
 
   component: RouteComponent,
 
   head: () => ({ meta: [{ title: `Transactions · ${config.entity}` }] }),
 
-  async loader({ context }) {
+  async loader({ context, deps: { page } }) {
     const {
       user: { id: userId, journey },
-      page,
       queryClient,
     } = context
 
-    await queryClient.ensureQueryData(createTransactionsQueryOptions(userId, journey, page))
+    await queryClient.query({ ...transactionsQuery(userId, journey, page), staleTime: 'static' })
   },
 })
 
 function RouteComponent() {
-  const { page } = Route.useRouteContext()
+  const { page } = Route.useLoaderDeps()
   const {
     user: { id: userId, journey },
     userSettings: { privacyMode },
@@ -53,7 +49,7 @@ function RouteComponent() {
 
   const {
     data: { totalCount, transactions, pageSize },
-  } = useSuspenseQueryDeferred(createTransactionsQueryOptions(userId, journey, page))
+  } = useSuspenseQueryDeferred(transactionsQuery(userId, journey, page))
 
   const pageCount = Math.ceil(totalCount / pageSize)
 

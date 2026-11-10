@@ -1,13 +1,13 @@
 import type { ReactNode } from 'react'
 
 import { TransactionIconStatus } from '#/components/transaction-icon-status'
-import type { Transaction } from '#/db/schema'
+import type { Receipt } from '#/modules/payments'
 
 interface TransactionStatusLayoutProps {
   children?: ReactNode
   h1: ReactNode
   p: ReactNode
-  status: Transaction['status']
+  status: Receipt['transaction']['status']
 }
 export function TransactionStatusLayout(props: TransactionStatusLayoutProps) {
   const { status, h1, p, children } = props

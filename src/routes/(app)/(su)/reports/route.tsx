@@ -7,17 +7,16 @@ import { Error } from '#/components/error'
 import type { DateRangePickerProps } from '#/components/ui/date-range-picker'
 import { DateRangePicker } from '#/components/ui/date-range-picker'
 import { config } from '#/core/brand'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { normalizeDateRangeToServerTimezone, reportsQuery } from '#/modules/analytics'
 
 import { ReportBreakdown } from './-components/report-breakdown'
 import { ReportEmpty } from './-components/report-empty'
-import { normalizeDateRangeToServerTimezone } from './-data/reports.helpers'
-import { createReportsQueryOptions } from './-reports.queries'
 
-const searchSchema = v.object({
-  end_date: v.optional(v.pipe(v.string(), v.isoDate())),
-  start_date: v.optional(v.pipe(v.string(), v.isoDate())),
-})
+const isoDate = v.pipe(v.string(), v.isoDate())
+
+/** The router keeps any search key this leaves out, so every key is named, even when undefined. */
+const dateOf = (value: unknown) => (v.is(isoDate, value) ? value : undefined)
 
 export const Route = createFileRoute('/(app)/(su)/reports')({
   component: RouteComponent,
@@ -26,15 +25,8 @@ export const Route = createFileRoute('/(app)/(su)/reports')({
 
   head: () => ({ meta: [{ title: `Reports · ${config.entity}` }] }),
 
-  validateSearch(search) {
-    const parseResult = v.safeParse(searchSchema, search)
-
-    if (!parseResult.success) {
-      return {}
-    }
-
-    const { start_date, end_date } = parseResult.output
-    return { end_date, start_date }
+  validateSearch(search): { end_date: string | undefined; start_date: string | undefined } {
+    return { end_date: dateOf(search.end_date), start_date: dateOf(search.start_date) }
   },
 
   loaderDeps({ search }) {
@@ -47,7 +39,7 @@ export const Route = createFileRoute('/(app)/(su)/reports')({
       deps.end_date,
     )
 
-    await context.queryClient.ensureQueryData(createReportsQueryOptions(startDate, endDate))
+    await context.queryClient.query({ ...reportsQuery(startDate, endDate), staleTime: 'static' })
   },
 })
 
@@ -78,7 +70,7 @@ function RouteComponent() {
 
   const { startDate, endDate } = normalizeDateRangeToServerTimezone(start_date, end_date)
 
-  const { data } = useSuspenseQueryDeferred(createReportsQueryOptions(startDate, endDate))
+  const { data } = useSuspenseQueryDeferred(reportsQuery(startDate, endDate))
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-y-4 p-4">

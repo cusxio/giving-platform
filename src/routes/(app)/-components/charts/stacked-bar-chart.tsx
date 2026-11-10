@@ -6,8 +6,7 @@ import type { CartesianChartProps } from 'recharts/types/util/types'
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'
 import { funds } from '#/core/brand'
 import { FUND_CHART_COLOR_MAP } from '#/core/brand/funds'
-import { clientTz, now } from '#/core/date'
-import { REDACTED_VALUE, createDateFormatter } from '#/core/formatters'
+import { REDACTED_VALUE, monthLabel } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
 import { CartesianGrid } from './cartesian-grid'
@@ -29,11 +28,7 @@ type StackedBarTooltipPayload = readonly { payload: Data }[]
 export function StackedBarChart(props: StackedBarChartProps) {
   const { privacyMode, ...rest } = props
 
-  const xTickFormatter = useCallback(
-    (value: number) =>
-      createDateFormatter({ month: 'short' }).format(now(clientTz).setMonth(value - 1)),
-    [],
-  )
+  const xTickFormatter = useCallback((value: number) => monthLabel(value, 'short'), [])
 
   const yTickFormatter = useCallback(
     (value: number) => {
@@ -82,11 +77,7 @@ function TooltipContent(props: TooltipContentProps) {
       {current && (
         <>
           <div className="border-b border-border px-4 py-2">
-            <span className="text-sm">
-              {createDateFormatter({ month: 'long' }).format(
-                now(clientTz).setMonth(current.month - 1),
-              )}
-            </span>
+            <span className="text-sm">{monthLabel(current.month, 'long')}</span>
           </div>
           <div className="grid-y-1 grid px-4 py-2">
             {funds.map((fund) => (

@@ -1,39 +1,24 @@
 import { BarricadeIcon } from '@phosphor-icons/react/dist/ssr'
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import * as v from 'valibot'
 
 import { FooterCopyright } from '#/components/footer-copyright'
 import { HeaderLogo } from '#/components/header-logo'
-import { funds } from '#/core/brand'
-import { createUserQueryOptions, useOptionalAuthUser } from '#/features/session/session.queries'
+import { currentUserQuery, useOptionalAuthUser } from '#/modules/account'
+import { savedPaymentMethodsQuery } from '#/modules/payments'
 import { Nav } from '#/routes/-components/nav'
 import { cx } from '#/styles/cx'
 
 import { GivingForm } from './-components/giving-form/giving-form'
+import { linkedGift, opensOnDetails, parseFundSearch } from './-hooks/fund-search'
 import { useGivingUrl } from './-hooks/use-giving-url'
-import { createSavedPaymentMethodsQueryOptions } from './-index.queries'
-
-const searchSchema = v.object({
-  future: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
-  mission: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
-  offering: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
-  tithe: v.optional(v.pipe(v.string(), v.transform(Number), v.number(), v.minValue(0))),
-})
-
-function hasFundParams(search: v.InferOutput<typeof searchSchema>) {
-  return funds.some((fund) => {
-    const val = search[fund]
-    return val !== undefined && val > 0
-  })
-}
 
 export const Route = createFileRoute('/')({
   async beforeLoad({ context, search }) {
-    if (process.env.MAINTENANCE_MODE === 'true') {
+    if (context.isMaintenanceMode) {
       return { isAuthenticated: false, isMaintenanceMode: true }
     }
 
-    const result = await context.queryClient.ensureQueryData(createUserQueryOptions())
+    const result = await context.queryClient.query({ ...currentUserQuery(), staleTime: 'static' })
 
     if (result.type === 'SUCCESS' && result.value.user.journey === null) {
       throw redirect({ replace: true, to: '/welcome' })
@@ -44,7 +29,7 @@ export const Route = createFileRoute('/')({
     return {
       isAuthenticated,
       isMaintenanceMode: false,
-      shouldPreloadPaymentMethods: isAuthenticated && hasFundParams(search),
+      shouldPreloadPaymentMethods: isAuthenticated && opensOnDetails(linkedGift(search)),
     }
   },
 
@@ -52,23 +37,17 @@ export const Route = createFileRoute('/')({
 
   async loader({ context }) {
     if (context.shouldPreloadPaymentMethods === true) {
-      await context.queryClient.ensureQueryData(createSavedPaymentMethodsQueryOptions(true))
+      await context.queryClient.query({ ...savedPaymentMethodsQuery(true), staleTime: 'static' })
     }
   },
 
-  validateSearch(search) {
-    const result = v.safeParse(searchSchema, search)
-    if (!result.success) {
-      return {}
-    }
-    return result.output
-  },
+  validateSearch: parseFundSearch,
 })
 
 function IndexContent() {
   const authUser = useOptionalAuthUser()
   const user = authUser?.user
-  const { initialFunds, hasFundParams, setFundsInUrl, clearUrl } = useGivingUrl()
+  const { gift, setFundsInUrl, clearUrl } = useGivingUrl()
 
   return (
     <>
@@ -81,8 +60,8 @@ function IndexContent() {
       <main className="flex shrink-0 grow flex-col items-center justify-center px-4">
         <div className="w-full max-w-118 pt-12 pb-24">
           <GivingForm
-            initialFunds={initialFunds}
-            initialView={hasFundParams ? 'details' : 'amounts'}
+            gift={gift}
+            initialView={opensOnDetails(gift) ? 'details' : 'amounts'}
             onBack={clearUrl}
             onContinue={setFundsInUrl}
             user={user}

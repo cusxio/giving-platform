@@ -4,8 +4,7 @@ import { Bar, BarChart as RechartBarChart, Tooltip } from 'recharts'
 import type { CartesianChartProps } from 'recharts/types/util/types'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'
-import { clientTz, now } from '#/core/date'
-import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
+import { createCurrencyFormatter, monthLabel } from '#/core/formatters'
 
 import { CartesianGrid } from './cartesian-grid'
 import { XAxis } from './x-axis'
@@ -25,11 +24,7 @@ type BarTooltipPayload = readonly { payload: Data }[]
 
 export function BarChart(props: BarChartProps) {
   const { privacyMode, ...rest } = props
-  const xTickFormatter = useCallback(
-    (value: number) =>
-      createDateFormatter({ month: 'short' }).format(now(clientTz).setMonth(value - 1)),
-    [],
-  )
+  const xTickFormatter = useCallback((value: number) => monthLabel(value, 'short'), [])
 
   const yTickFormatter = useCallback(
     (value: number) => createCurrencyFormatter({ notation: 'compact' }).format(value, privacyMode),
@@ -63,11 +58,7 @@ function TooltipContent(props: TooltipContentProps) {
     <div className="border border-border bg-base-1 px-4 py-2">
       {current && (
         <div className="flex items-center justify-between gap-x-4">
-          <span className="text-sm text-fg-muted">
-            {createDateFormatter({ month: 'long' }).format(
-              now(clientTz).setMonth(current.month - 1),
-            )}
-          </span>
+          <span className="text-sm text-fg-muted">{monthLabel(current.month, 'long')}</span>
 
           <span className="font-mono text-sm">
             {createCurrencyFormatter({ showSymbol: true }).format(current.totalAmount)}

@@ -5,6 +5,7 @@ export default defineConfig({
     '.moon/**',
     '.agents/**',
     '.claude/**',
+    'drizzle/**',
     '.output/**',
     '.vercel/**',
     'node_modules/**',

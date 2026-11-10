@@ -1,14 +1,14 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 
 import { config } from '#/core/brand'
-import { useSuspenseQueryDeferred } from '#/hooks'
+import { useSuspenseQueryDeferred } from '#/hooks/use-suspense-query-deferred'
+import { welcomeQuery } from '#/modules/account'
 
 import { useWelcomeViewStore } from './-components/use-welcome-view-store'
 import { WelcomeDone } from './-components/welcome-done'
 import { WelcomeForm } from './-components/welcome-form'
 import { WelcomeIntro } from './-components/welcome-intro'
 import { WelcomeMigrate } from './-components/welcome-migrate'
-import { createWelcomeQueryOptions } from './-welcome.queries'
 
 export const Route = createFileRoute('/welcome')({
   component: RouteComponent,
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/welcome')({
   head: () => ({ meta: [{ title: `Welcome · ${config.entity}` }] }),
 
   async loader({ context }) {
-    const { user } = await context.queryClient.ensureQueryData(createWelcomeQueryOptions())
+    const { user } = await context.queryClient.query({ ...welcomeQuery(), staleTime: 'static' })
 
     if (user.journey !== null) {
       throw redirect({ replace: true, to: '/' })
@@ -25,7 +25,7 @@ export const Route = createFileRoute('/welcome')({
 })
 
 function RouteComponent() {
-  const { data } = useSuspenseQueryDeferred(createWelcomeQueryOptions())
+  const { data } = useSuspenseQueryDeferred(welcomeQuery())
   const { user, guestTransactionExists } = data
   const view = useWelcomeViewStore((state) => state.view)
 

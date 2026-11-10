@@ -1,14 +1,17 @@
-import type { Transaction } from '#/db/schema'
+import type { TransactionStatus as Status } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 interface TransactionStatusProps {
   className?: string
-  status: Transaction['status']
+  status: Status
 }
 
-export const transactionStatusStyles: Record<Transaction['status'], string> = {
+export const transactionStatusStyles: Record<Status, string> = {
+  cancelled: cx('bg-elevated text-fg-muted'),
   failed: cx('bg-base-error text-fg-error'),
+  held: cx('bg-base-warning text-fg-warning'),
   pending: cx('bg-base-warning text-fg-warning'),
+  refunded: cx('bg-elevated text-fg-muted'),
   success: cx('bg-base-success text-fg-success'),
 }
 

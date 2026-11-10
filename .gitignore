@@ -6,3 +6,12 @@
 .output/
 
 .vercel
+
+# local secrets
+mise.local.toml
+.env*
+!.env.example
+
+# Migrations and baseline SQL are source, whatever a local exclude says.
+!/drizzle/*.sql
+!/scripts/baseline/*.sql

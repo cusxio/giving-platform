@@ -3,15 +3,15 @@ import { Link } from '@tanstack/react-router'
 import { Suspense } from 'react'
 
 import { Button, buttonVariants } from '#/components/ui/button'
-import type { Transaction, User } from '#/db/schema'
+import type { Receipt } from '#/modules/payments'
 import { cx } from '#/styles/cx'
 
 import { Confetti } from './confetti'
 import { TransactionStatusLayout } from './transaction-status-layout'
 
 interface SuccessProps {
-  transaction: Pick<Transaction, 'id' | 'status'>
-  user: Pick<User, 'email' | 'firstName' | 'status'>
+  transaction: Receipt['transaction']
+  user: Receipt['user']
 }
 
 export function Success(props: SuccessProps) {

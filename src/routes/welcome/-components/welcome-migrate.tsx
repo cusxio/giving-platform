@@ -6,8 +6,9 @@ import { TransactionIconStatus } from '#/components/transaction-icon-status'
 import { Alert } from '#/components/ui/alert'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Spinner } from '#/components/ui/spinner'
-import type { User } from '#/db/schema'
-import { useUpdateUserMutation } from '#/features/user/user.mutations'
+import { assertExhaustive } from '#/core/assert-exhaustive'
+import type { User } from '#/modules/account'
+import { useUpdateUserMutation } from '#/modules/account'
 import { cx } from '#/styles/cx'
 
 import { useWelcomeViewStore } from './use-welcome-view-store'
@@ -30,8 +31,26 @@ export function WelcomeMigrate() {
         }),
         mutateAsync({ journey }),
       ])
-        .then(() => {
-          setView('done')
+        .then(([, res]) => {
+          // A signed-out caller is already on its way to login
+          if (!res) {
+            return
+          }
+
+          switch (res.type) {
+            case 'SERVER_ERROR':
+            case 'VALIDATION_ERROR': {
+              setStatus('error')
+              break
+            }
+            case 'SUCCESS': {
+              setView('done')
+              break
+            }
+            default: {
+              assertExhaustive(res)
+            }
+          }
         })
         .catch(() => {
           setStatus('error')

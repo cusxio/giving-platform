@@ -1,12 +1,9 @@
-import { useFormStore, useStoreState } from '@ariakit/react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useFormStore, useFormSubmit, useFormValidate, useStoreState } from '@ariakit/react'
 import { useCallback, useState } from 'react'
 
 import { assertExhaustive } from '#/core/assert-exhaustive'
-import type { User } from '#/db/schema'
-import { useUpdateUserMutation } from '#/features/user/user.mutations'
-
-import type { getWelcomeData } from '../-data/welcome.get-data.procedure'
+import type { User } from '#/modules/account'
+import { useUpdateUserMutation } from '#/modules/account'
 
 export function useWelcomeForm(params: {
   guestTransactionExists: boolean
@@ -23,7 +20,7 @@ export function useWelcomeForm(params: {
   })
 
   const [status, setStatus] = useState<'done' | 'idle' | 'migrate'>('idle')
-  store.useValidate(() => {
+  useFormValidate(store, () => {
     store.setError(store.names.__error, undefined)
   })
 
@@ -32,34 +29,14 @@ export function useWelcomeForm(params: {
   }, [store])
 
   const updateUser = useUpdateUserMutation()
-  const queryClient = useQueryClient()
-  store.useSubmit(async (state) => {
+  useFormSubmit(store, async (state) => {
     try {
-      const res = await updateUser.mutateAsync(
-        {
-          firstName: state.values.firstName,
-          lastName: state.values.lastName,
-          // Undefined because it will be handled in the following flow
-          journey: guestTransactionExists ? undefined : 'start_fresh',
-        },
-        {
-          onSuccess(data) {
-            if (data?.type !== 'SUCCESS') {
-              return
-            }
-
-            queryClient.setQueryData<Awaited<ReturnType<typeof getWelcomeData>>>(
-              ['welcome'],
-              (prev) => {
-                if (!prev) {
-                  return prev
-                }
-                return { ...prev, user: { ...prev.user, ...data.value.user } }
-              },
-            )
-          },
-        },
-      )
+      const res = await updateUser.mutateAsync({
+        firstName: state.values.firstName,
+        lastName: state.values.lastName,
+        // Undefined because it will be handled in the following flow
+        journey: guestTransactionExists ? undefined : 'start_fresh',
+      })
 
       if (!res) {
         return

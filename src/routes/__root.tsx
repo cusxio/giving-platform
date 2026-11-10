@@ -14,7 +14,10 @@ import css from '#/styles/globals.css?url'
 
 const Toaster = lazy(() => import('../components/ui/toaster/toaster'))
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRouteWithContext<{
+  isMaintenanceMode: boolean
+  queryClient: QueryClient
+}>()({
   errorComponent: Error,
   head: () => ({
     links: [

@@ -8,9 +8,9 @@ NODE_ENV = "development"
 DATABASE_URL = ""
 DATABASE_AUTH_TOKEN = ""
 
-# Mailersend
-# MAILERSEND_ROOT_DOMAIN           = ""
-# MAILERSEND_API_KEY               = ""
+MAIL_ROOT_DOMAIN = ""
+MAILERSEND_API_KEY = ""
+BREVO_API_KEY = ""
 
 # EGHL
 EGHL_SERVICE_ID = ""
@@ -26,7 +26,5 @@ OTEL_LOG_LEVEL = "NONE"
 # https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/
 OTEL_EXPORTER_OTLP_ENDPOINT = ""
 OTEL_EXPORTER_OTLP_HEADERS = ""
-OTEL_EXPORTER_OTLP_METRICS_HEADERS = ""
 OTEL_TRACES_EXPORTER = "none"
 OTEL_LOGS_EXPORTER = "none"
-OTEL_METRICS_EXPORTER = "none"

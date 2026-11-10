@@ -2,17 +2,34 @@ import type { FormInputProps } from '@ariakit/react'
 import { FormInput } from '@ariakit/react'
 import { useMemo } from 'react'
 import type { CurrencyInputProps } from 'react-currency-input-field'
-import { CurrencyInput } from 'react-currency-input-field'
+import { CurrencyInput, cleanValue } from 'react-currency-input-field'
 
 import { createCurrencyFormatter } from '#/core/formatters'
 import { cx } from '#/styles/cx'
 
 export interface InputCurrencyProps extends Pick<FormInputProps, 'autoComplete' | 'name'> {
+  /** The largest amount the field takes. An entry past it leaves the field as it was. */
+  max: number
+  onOverMax: () => void
   onValueChange: NonNullable<CurrencyInputProps['onValueChange']>
 }
 
+const amountFormat = {
+  allowNegativeValue: false,
+  decimalSeparator: '.',
+  decimalsLimit: 2,
+  disableAbbreviations: true,
+  groupSeparator: ',',
+} as const
+
+export const fitsMax = (text: string | undefined, max: number) =>
+  !(Number.parseFloat(cleanValue({ ...amountFormat, value: text ?? '' })) > max)
+
+export const sameAmount = (a: string, b: string) =>
+  a === b || Number.parseFloat(a) === Number.parseFloat(b)
+
 export function InputCurrency(props: InputCurrencyProps) {
-  const { name, onValueChange, autoComplete } = props
+  const { autoComplete, max, name, onOverMax, onValueChange } = props
   const currency = useMemo(
     () =>
       createCurrencyFormatter({ showSymbol: true })
@@ -59,12 +76,20 @@ export function InputCurrency(props: InputCurrencyProps) {
          */
         render={({ onChange, defaultValue, ...rest }) => (
           <CurrencyInput
-            allowNegativeValue={false}
+            {...amountFormat}
             inputMode="numeric"
-            max={10_000_000}
-            maxLength={8}
+            max={max}
             onValueChange={onValueChange}
             placeholder="0.00"
+            // The library keeps its own copy of the text and edits the next keystroke against it, so
+            // an entry past `max` is swapped for the kept amount before the library stores it.
+            transformRawValue={(text) => {
+              if (fitsMax(text, max)) {
+                return text
+              }
+              onOverMax()
+              return 'value' in rest && typeof rest.value === 'string' ? rest.value : ''
+            }}
             type="text"
             {...rest}
           />

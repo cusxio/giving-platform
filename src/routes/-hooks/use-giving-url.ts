@@ -6,28 +6,18 @@ import type { Fund } from '#/core/brand/funds'
 
 import { Route } from '../index'
 
-type FundAmountSearchParams = Partial<Record<Fund, number>>
+import type { FundSearch } from './fund-search'
+import { linkedGift } from './fund-search'
 
 export function useGivingUrl() {
-  const search = Route.useSearch() as FundAmountSearchParams
+  const search = Route.useSearch()
   const navigate = useNavigate()
 
-  const initialFunds = useMemo(() => {
-    const result: Partial<Record<Fund, string>> = {}
-    for (const fund of funds) {
-      const val = search[fund]
-      if (val !== undefined && val > 0) {
-        result[fund] = String(val)
-      }
-    }
-    return result
-  }, [search])
-
-  const hasFundParams = Object.keys(initialFunds).length > 0
+  const gift = useMemo(() => linkedGift(search), [search])
 
   const setFundsInUrl = useCallback(
     (fundAmounts: Record<Fund, string>) => {
-      const params: FundAmountSearchParams = {}
+      const params: FundSearch = {}
       for (const fund of funds) {
         const num = Number.parseFloat(fundAmounts[fund])
         if (num > 0) {
@@ -43,5 +33,5 @@ export function useGivingUrl() {
     void navigate({ search: {}, to: '/' })
   }, [navigate])
 
-  return { clearUrl, hasFundParams, initialFunds, setFundsInUrl }
+  return { clearUrl, gift, setFundsInUrl }
 }

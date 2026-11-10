@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router'
 
-import type { GetOverviewDataResponse } from '../-data/overview.get-data.procedure'
+import type { Overview } from '#/modules/history'
+
 import { TransactionsTable } from '../../-components/transactions-table'
 
-interface OverviewTransactionsProps extends Pick<GetOverviewDataResponse, 'transactions'> {
+interface OverviewTransactionsProps extends Pick<Overview, 'transactions'> {
   privacyMode: boolean
   year: 'all' | number
 }

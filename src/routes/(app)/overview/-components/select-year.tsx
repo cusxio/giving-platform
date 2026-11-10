@@ -1,4 +1,4 @@
-import { useSelectStore, useStoreState } from '@ariakit/react'
+import { useComboboxStore, useStoreState } from '@ariakit/react'
 import { CaretDownIcon, CheckIcon } from '@phosphor-icons/react/dist/ssr'
 import { Link } from '@tanstack/react-router'
 import { useMemo } from 'react'
@@ -14,8 +14,8 @@ interface SelectYearProps {
 export function SelectYear(props: SelectYearProps) {
   const { values, defaultValue } = props
 
-  const store = useSelectStore({ defaultValue })
-  const currentValue = useStoreState(store, 'value')
+  const store = useComboboxStore({ defaultSelectedValue: defaultValue })
+  const currentValue = useStoreState(store, 'selectedValue')
 
   const currentCalendarYear = useMemo(() => now(clientTz).getFullYear(), [])
 

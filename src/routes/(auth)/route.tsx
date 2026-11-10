@@ -1,14 +1,12 @@
 import { Link, Outlet, createFileRoute, redirect, useMatch } from '@tanstack/react-router'
 
 import { HeaderLogo } from '#/components/header-logo'
-import { getSession } from '#/server/functions'
+import { hasSession } from '#/modules/auth'
 import { cx } from '#/styles/cx'
 
 export const Route = createFileRoute('/(auth)')({
   async beforeLoad() {
-    const session = await getSession()
-
-    if (session !== null) {
+    if (await hasSession()) {
       throw redirect({ replace: true, to: '/' })
     }
   },

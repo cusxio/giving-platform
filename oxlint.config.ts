@@ -1,5 +1,111 @@
 import { defineConfig } from 'oxlint'
 
+interface ImportPattern {
+  readonly group?: string[]
+  readonly message: string
+  readonly regex?: string
+}
+
+interface ImportPath {
+  readonly importNames: string[]
+  readonly message: string
+  readonly name: string
+}
+
+// Import boundaries. An override replaces the rule's whole pattern and path lists, so each zone
+// below composes these constants instead of repeating them.
+
+const SOURCE_SUFFIX = String.raw`(\.[jt]s)?`
+
+// Any path below a module except exactly `server`. Spelled out because oxlint lets a `!` group
+// entry allow the import past every other pattern too, and its regex has no lookahead.
+const MODULE_ENTRY_ONLY: ImportPattern = {
+  message:
+    'Import another module only through #/modules/<name> (client) or #/modules/<name>/server (server).',
+  regex: String.raw`^#/modules/[^/]+/([^s]|s([^e]|$)|se([^r]|$)|ser([^v]|$)|serv([^e]|$)|serve([^r]|$)|server.)`,
+}
+const NO_RELATIVE_INTO_MODULES: ImportPattern = {
+  message: 'Reach a module through its #/modules/<name> entry, not a relative path.',
+  regex: String.raw`(^|/)\.\.?/(.*/)?modules/`,
+}
+const FLAT_MODULES: ImportPattern = {
+  message:
+    'Modules are flat: import siblings with ./ and other modules through #/modules/<name>/server.',
+  regex: String.raw`^\.\./`,
+}
+const SQL_IN_REPOSITORIES: ImportPattern = {
+  group: ['drizzle-orm', 'drizzle-orm/*', '#/server/schema.server', '#/server/sql.server'],
+  message:
+    'SQL lives in *.repository.server.ts. Export a defineQuery factory there and run it with deps.db.',
+}
+const PLATFORM_INTERNALS: ImportPattern = {
+  group: ['#/server/env.server', '#/server/logger.server', '#/server/db-connection.server'],
+  message:
+    'Env, the root logger and the neon clients stay in src/server/. Take them from deps (Pick<Deps, ...>).',
+}
+const SERVER_CODE_IN_CLIENT: ImportPattern = {
+  group: ['#/server/**', '#/modules/*/server'],
+  message:
+    'Client code never imports server code, even types. Import client-safe types from #/modules/<name>.',
+}
+const NO_REPOSITORY_IN_FUNCTIONS: ImportPattern = {
+  message: 'A server function calls a *.server.ts workflow, never a repository.',
+  regex: String.raw`\.repository\.server${SOURCE_SUFFIX}$`,
+}
+const NO_REPOSITORY_IN_CLIENT: ImportPattern = {
+  message:
+    'Client-reachable module files never import a repository, even types. Put shared types in <name>.types.ts or a pure domain file.',
+  regex: String.raw`\.repository\.server${SOURCE_SUFFIX}$`,
+}
+const RELATIVE_SERVER_CODE_IN_CLIENT: ImportPattern = {
+  message:
+    'Client code never imports src/server. Only entry-server.tsx and entry-start.tsx (behind import.meta.env.SSR) may.',
+  regex: String.raw`^\./server/`,
+}
+
+const ONE_SETTLEMENT_PATH: ImportPattern = {
+  message:
+    'Only payments/settlement.server.ts calls recordOutcome. Settle through settleReply or settlePolled.',
+  regex: String.raw`(^|/)record-outcome\.server${SOURCE_SUFFIX}$`,
+}
+const ONE_STATUS_WRITER: ImportPath[] = ['', '.js', '.ts'].map((suffix) => ({
+  importNames: ['lockTransaction', 'moveTransaction'],
+  message:
+    'Only payments/record-outcome.server.ts locks or moves a transaction. Settle through settlement.server.ts.',
+  name: `./transactions.repository.server${suffix}`,
+}))
+
+// Lessons of the Result migration. Inside Result.gen a throw becomes a Panic, so a thrown
+// redirect or notFound reaches the browser as a 500; and a Panic is a defect, never an Err.
+const NO_PANIC: ImportPath = {
+  importNames: ['Panic', 'panic'],
+  message:
+    'Only the runner, src/server/procedure.server.ts, handles a Panic: a defect stays a throw and is never turned into an Err.',
+  name: 'better-result',
+}
+const NO_THROWN_CONTROL_FLOW: ImportPath = {
+  importNames: ['notFound', 'redirect'],
+  message:
+    'Inside Result.gen a throw becomes a Panic and reaches the browser as a 500. Return a domain error and answer it with a wire row (toNotFound) or a policy (redirects to login).',
+  name: '@tanstack/react-router',
+}
+
+type RestrictImports = (...patterns: ImportPattern[]) => {
+  'eslint/no-restricted-imports': ['error', { paths: ImportPath[]; patterns: ImportPattern[] }]
+}
+const restrict =
+  (...paths: ImportPath[]): RestrictImports =>
+  (...patterns) => ({ 'eslint/no-restricted-imports': ['error', { paths, patterns }] })
+const restrictImports = restrict(NO_PANIC)
+/** Server code that may run inside a workflow. */
+const restrictServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW)
+const restrictModuleImports = restrict(NO_PANIC, ...ONE_STATUS_WRITER)
+const restrictModuleServerImports = restrict(NO_PANIC, NO_THROWN_CONTROL_FLOW, ...ONE_STATUS_WRITER)
+/** The runner, and tests, which build Panics to prove the runner. */
+const restrictImportsAllowingPanic = restrict()
+const EVERYWHERE = [MODULE_ENTRY_ONLY, NO_RELATIVE_INTO_MODULES]
+const OUTSIDE_PLATFORM = [...EVERYWHERE, SQL_IN_REPOSITORIES, PLATFORM_INTERNALS]
+
 export default defineConfig({
   categories: {
     correctness: 'error',
@@ -20,13 +126,17 @@ export default defineConfig({
   ],
   options: { typeAware: true },
   plugins: ['unicorn', 'oxc', 'import', 'promise', 'eslint'],
+  jsPlugins: ['./lint/payments-plugin.ts'],
   rules: {
+    'payments/no-verified-cast': 'error',
+
     // Formatting and style opinions handled by the project/codebase conventions.
     'eslint/func-style': 'off',
     'eslint/no-continue': 'off',
     'eslint/no-inline-comments': 'off',
     'eslint/no-magic-numbers': 'off',
     'eslint/no-ternary': 'off',
+    'eslint/one-var': 'off',
     'eslint/sort-imports': 'off',
     'eslint/sort-keys': 'off',
 
@@ -36,12 +146,14 @@ export default defineConfig({
     'eslint/max-lines-per-function': 'off',
     'eslint/max-params': 'off',
     'eslint/max-statements': 'off',
+    'unicorn/max-nested-calls': 'off',
 
     // Naming and comments.
     'eslint/capitalized-comments': 'off',
     'eslint/id-length': 'off',
     'eslint/new-cap': 'off',
-    'eslint/no-underscore-dangle': ['error', { allow: ['__error'] }],
+    // `_tag` is the discriminant of better-result's tagged errors.
+    'eslint/no-underscore-dangle': ['error', { allow: ['__error', '_tag'] }],
 
     // JavaScript/ESLint correctness tweaks.
     'eslint/init-declarations': 'off',
@@ -79,8 +191,15 @@ export default defineConfig({
     'import/no-nodejs-modules': 'off',
 
     // Unicorn.
-    'unicorn/filename-case': ['error', { ignore: '^\\$[A-Za-z][A-Za-z0-9]*\\.(?:ts|tsx|js|jsx)$' }],
+    'unicorn/filename-case': [
+      'error',
+      { ignore: [String.raw`^\$[A-Za-z][A-Za-z0-9]*\.(?:ts|tsx|js|jsx)$`] },
+    ],
     'unicorn/no-null': 'off',
+    // Its fix swaps parseInt/parseFloat for Number, which parses user-entered amounts differently.
+    'unicorn/prefer-number-coercion': 'off',
+
+    ...restrictImports(...OUTSIDE_PLATFORM),
 
     // Promise rules.
     'promise/always-return': ['error', { ignoreLastCallback: true }],
@@ -109,6 +228,8 @@ export default defineConfig({
 
         // React preferences.
         'react/jsx-max-depth': 'off',
+        // Recharts takes render functions as props (`<Tooltip content={...}>`).
+        'react/no-unstable-nested-components': ['error', { allowAsProps: true }],
         'react/jsx-props-no-spreading': 'off',
         'react/react-in-jsx-scope': 'off',
 
@@ -144,6 +265,104 @@ export default defineConfig({
           },
         ],
       },
+    },
+    {
+      // `class X extends TaggedError('X')` calls a class factory, which the rule reads as `Error()`.
+      files: [
+        'src/modules/**/*.errors.ts',
+        'src/server/authorize.server.ts',
+        'src/server/infra-error.ts',
+        'src/server/input.server.ts',
+        '**/*.test.ts',
+      ],
+      rules: { 'unicorn/throw-new-error': 'off' },
+    },
+    { files: ['src/server/**'], rules: restrictServerImports(...EVERYWHERE) },
+    {
+      // Database tooling that runs outside the app. Migrations are SQL and must run in order.
+      files: ['scripts/**'],
+      rules: { ...restrictImports(...EVERYWHERE), 'eslint/no-await-in-loop': 'off' },
+    },
+    {
+      files: ['src/routes/**', 'src/components/**', 'src/hooks/**', 'src/core/**'],
+      rules: restrictImports(...OUTSIDE_PLATFORM, SERVER_CODE_IN_CLIENT),
+    },
+    { files: ['src/routes/api/**'], rules: restrictImports(...OUTSIDE_PLATFORM) },
+    {
+      files: ['src/*.{ts,tsx}'],
+      rules: restrictImports(
+        ...OUTSIDE_PLATFORM,
+        SERVER_CODE_IN_CLIENT,
+        RELATIVE_SERVER_CODE_IN_CLIENT,
+      ),
+    },
+    {
+      files: ['src/entry-server.tsx', 'src/entry-start.tsx'],
+      rules: restrictImports(...OUTSIDE_PLATFORM),
+    },
+    {
+      files: ['src/modules/**'],
+      rules: restrictModuleImports(
+        ...OUTSIDE_PLATFORM,
+        FLAT_MODULES,
+        NO_REPOSITORY_IN_CLIENT,
+        ONE_SETTLEMENT_PATH,
+      ),
+    },
+    {
+      files: ['src/modules/**/*.server.ts', 'src/modules/*/server.ts'],
+      rules: restrictModuleServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    {
+      files: ['src/modules/**/*.test.{ts,tsx}'],
+      rules: restrictImportsAllowingPanic(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
+    {
+      files: ['src/modules/**/*.repository.server.ts'],
+      rules: restrictModuleServerImports(
+        ...EVERYWHERE,
+        FLAT_MODULES,
+        PLATFORM_INTERNALS,
+        ONE_SETTLEMENT_PATH,
+      ),
+    },
+    {
+      files: ['src/modules/**/*.functions.ts'],
+      rules: restrictModuleImports(
+        ...OUTSIDE_PLATFORM,
+        FLAT_MODULES,
+        NO_REPOSITORY_IN_FUNCTIONS,
+        ONE_SETTLEMENT_PATH,
+      ),
+    },
+    // These throw a redirect or notFound outside any workflow: the runner answers policies and
+    // rows with them, the eGHL routes redirect the browser, logout ends with one, and the
+    // maintenance middleware sends every page home.
+    {
+      files: ['src/server/procedure.server.ts', 'src/server/**/*.test.ts'],
+      rules: restrictImportsAllowingPanic(...EVERYWHERE),
+    },
+    { files: ['src/server/maintenance.server.ts'], rules: restrictImports(...EVERYWHERE) },
+    {
+      files: ['src/modules/payments/eghl.http.server.ts', 'src/modules/auth/session.server.ts'],
+      rules: restrictModuleImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    {
+      files: ['src/modules/payments/settlement.server.ts'],
+      rules: restrictModuleServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES),
+    },
+    {
+      files: ['src/modules/payments/record-outcome.server.ts'],
+      rules: restrictServerImports(...OUTSIDE_PLATFORM, FLAT_MODULES, ONE_SETTLEMENT_PATH),
+    },
+    { files: ['src/modules/payments/**'], rules: { 'payments/no-never-or-any-cast': 'error' } },
+    {
+      files: [
+        'src/modules/payments/eghl.gateway.server.ts',
+        'src/modules/payments/eghl.live-replies.test.ts',
+        'src/modules/payments/eghl.outcome.test.ts',
+      ],
+      rules: { 'payments/no-never-or-any-cast': 'off', 'payments/no-verified-cast': 'off' },
     },
   ],
 })
