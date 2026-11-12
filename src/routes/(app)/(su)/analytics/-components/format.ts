@@ -1,13 +1,14 @@
 import { FUND_CHART_COLOR_MAP } from '#/core/brand/funds'
 import { TZDate, clientTz } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
-import type { Range, Rate } from '#/modules/analytics'
+import type { Change, Range, Rate } from '#/modules/analytics'
 
 const MIN_FOR_PERCENT = 10
 
-const NO_VALUE = '—'
+export const NO_VALUE = '—'
 
 export const currency = createCurrencyFormatter({ showSymbol: true })
+export const wholeCurrency = createCurrencyFormatter({ maximumFractionDigits: 0, showSymbol: true })
 export const compactCurrency = createCurrencyFormatter({ notation: 'compact', showSymbol: true })
 export const count = new Intl.NumberFormat('en-MY')
 
@@ -51,6 +52,25 @@ export function changeText(value: number, prior: number): { text: string; tone: 
     text: `${arrow} ${Math.abs(change * 100).toFixed(1)}%`,
     tone: change > 0 ? 'up' : 'down',
   }
+}
+
+const FIRST_YEARS: Record<Exclude<Change['kind'], 'against'>, string> = {
+  'first-full-year': 'First full year',
+  'first-year': 'First year',
+}
+
+export function yearChangeText(value: number, change: Change): { text: string; tone: Tone } {
+  return change.kind === 'against'
+    ? changeText(value, change.prior)
+    : { text: FIRST_YEARS[change.kind], tone: 'flat' }
+}
+
+export function growthText(rate: number) {
+  const points = Math.round(rate * 100)
+  if (points === 0) {
+    return '0%'
+  }
+  return `${points > 0 ? '+' : '−'}${Math.abs(points)}%`
 }
 
 export function rateChangeText(
@@ -101,6 +121,9 @@ export function rangeText(range: Range) {
       : dayMonthYear.format(start)
   return `${startText} to ${dayMonthYear.format(end)}`
 }
+
+export const weekStartText = (year: number, week: number) =>
+  dayMonth.format(new TZDate(year, 0, 1 + (week - 1) * 7, clientTz))
 
 const monthShort = createDateFormatter({ month: 'short' })
 const monthYear = createDateFormatter({ month: 'short', year: '2-digit' })

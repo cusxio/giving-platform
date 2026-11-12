@@ -4,7 +4,7 @@ import type { DonorRow, Rate } from './donors'
 import { REGULAR_MIN_MONTHS, classifyDonors } from './donors'
 import { giftSizes } from './gift-bands'
 import type { Period, Range, Windows } from './period'
-import { shiftYears, trailingYear, weekOfYear, yearOf } from './period'
+import { shiftYears, trailingYear } from './period'
 
 export type { Rate } from './donors'
 export type { GiftBand } from './gift-bands'
@@ -73,15 +73,6 @@ export interface Analytics {
   }[]
   /** The compare span's months, moved one year on so each lines up with its month in the period. */
   readonly monthlyLastYear: readonly { readonly amount: number; readonly month: string }[]
-  readonly pace: {
-    /** The week of the period's last day, in the newest year. */
-    readonly lastWeek: number
-    readonly points: readonly {
-      readonly cumulative: number
-      readonly week: number
-      readonly year: number
-    }[]
-  }
   readonly payments: readonly {
     readonly cancelled: number
     readonly failed: number
@@ -144,20 +135,10 @@ export interface AnalyticsReads {
     readonly weekday: number
   }[]
   readonly monthly: readonly MonthRow[]
-  readonly pace: readonly {
-    readonly cumulative: number
-    readonly week: number
-    readonly year: number
-  }[]
   readonly payments: Analytics['payments']
   readonly stalePending: number
   readonly totals: TotalsRow | null
 }
-
-export const paceRange = (period: Range): Range => ({
-  end: period.end,
-  start: `${yearOf(period.end) - 2}-01-01`,
-})
 
 const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const
 const BLOCKS = [0, 1, 2, 3, 4, 5, 6, 7] as const
@@ -229,10 +210,6 @@ export function toAnalytics(
     },
     monthly: reads.monthly.map((row) => ({ ...row, amount: centsToRinggit(row.amount) })),
     monthlyLastYear: monthlyLastYear(reads.compareMonthly),
-    pace: {
-      lastWeek: weekOfYear(period.end),
-      points: reads.pace.map((row) => ({ ...row, cumulative: centsToRinggit(row.cumulative) })),
-    },
     payments: reads.payments,
     period,
     signedInGuest: {

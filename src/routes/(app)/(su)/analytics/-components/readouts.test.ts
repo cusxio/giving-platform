@@ -4,15 +4,19 @@ import type { Analytics } from '#/modules/analytics'
 
 import {
   changeText,
+  growthText,
   monthText,
   monthsOf,
   rangeText,
   rateChangeText,
   rateText,
   shareText,
+  weekStartText,
+  yearChangeText,
 } from './format'
 import { fundsCsv, fundsCsvName } from './funds-csv'
-import { paceSummary } from './pace-summary'
+import { runningTakeaway, weeklyTakeaway } from './pace-summary'
+import { shownYears, yearColor } from './pace-view'
 
 describe('a gave-again rate', () => {
   it('reads as a percentage over ten donors or more, with its counts', () => {
@@ -79,6 +83,35 @@ describe('a change against last year', () => {
   })
 })
 
+describe("a year's change", () => {
+  it('reads against its prior, or names a first year or first full year', () => {
+    expect.hasAssertions()
+
+    expect(yearChangeText(108.2, { kind: 'against', prior: 100 })).toStrictEqual({
+      text: '▲ 8.2%',
+      tone: 'up',
+    })
+    expect(yearChangeText(500, { kind: 'first-year' })).toStrictEqual({
+      text: 'First year',
+      tone: 'flat',
+    })
+    expect(yearChangeText(500, { kind: 'first-full-year' })).toStrictEqual({
+      text: 'First full year',
+      tone: 'flat',
+    })
+  })
+
+  it.each([
+    [0.124, '+12%'],
+    [-0.05, '−5%'],
+    [0.001, '0%'],
+  ])('grows %d a year, read as %s', (rate, text) => {
+    expect.hasAssertions()
+
+    expect(growthText(rate)).toBe(text)
+  })
+})
+
 describe('the months of a period', () => {
   it('runs from its first month to its last, across a year end', () => {
     expect.hasAssertions()
@@ -106,6 +139,21 @@ describe('the days of a period', () => {
         )
         expect(monthText('2026-03', false)).toBe('Mar')
         expect(monthText('2025-12', true)).toBe('Dec 25')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    },
+  )
+
+  it.each(['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati'])(
+    'start each week on the same Kuala Lumpur day on a host in %s',
+    (hostTz) => {
+      expect.hasAssertions()
+
+      vi.stubEnv('TZ', hostTz)
+      try {
+        expect(weekStartText(2026, 1)).toBe('1 Jan')
+        expect(weekStartText(2026, 45)).toBe('5 Nov')
       } finally {
         vi.unstubAllEnvs()
       }
@@ -148,11 +196,28 @@ describe('the pace summary', () => {
   it('compares this year with last year at the same week and projects the year', () => {
     expect.hasAssertions()
 
-    const summary = paceSummary({ lastWeek: 20, points })
+    expect(runningTakeaway({ lastWeek: 20, points }, 2026)).toBe(
+      '2026 is 10% ahead of 2025 at this point. At this pace it ends near RM\u00A0440.',
+    )
+  })
 
-    expect(summary).toMatchObject({ lastYear: 2025, year: 2026 })
-    expect(summary?.ahead).toBeCloseTo(0.1)
-    expect(summary?.projected).toBeCloseTo(440)
+  it('says when this year is ahead of every earlier year too', () => {
+    expect.hasAssertions()
+
+    const older = [
+      { cumulative: 210, week: 20, year: 2023 },
+      { cumulative: 150, week: 20, year: 2024 },
+    ]
+
+    expect(runningTakeaway({ lastWeek: 20, points: [...older, ...points] }, 2026)).toBe(
+      '2026 is 10% ahead of 2025 at this point, and ahead of every earlier year. At this pace it ends near RM\u00A0440.',
+    )
+    expect(
+      runningTakeaway(
+        { lastWeek: 20, points: [{ cumulative: 230, week: 20, year: 2023 }, ...points] },
+        2026,
+      ),
+    ).toBe('2026 is 10% ahead of 2025 at this point. At this pace it ends near RM\u00A0440.')
   })
 
   it('reads each year at the latest week on or before, whatever order the points come in', () => {
@@ -166,15 +231,75 @@ describe('the pace summary', () => {
       { cumulative: 100, week: 10, year: 2025 },
     ]
 
-    expect(paceSummary({ lastWeek: 20, points: outOfOrder })).toStrictEqual(
-      paceSummary({ lastWeek: 20, points }),
+    expect(runningTakeaway({ lastWeek: 20, points: outOfOrder }, 2026)).toBe(
+      runningTakeaway({ lastWeek: 20, points }, 2026),
     )
   })
 
-  it('has nothing to say without last year', () => {
+  it('has nothing to compare without last year', () => {
     expect.hasAssertions()
 
-    expect(paceSummary({ lastWeek: 20, points: points.slice(3) })).toBeNull()
-    expect(paceSummary({ lastWeek: 20, points: [] })).toBeNull()
+    const general = 'Running total from 1 January, one line per year.'
+
+    expect(runningTakeaway({ lastWeek: 20, points: points.slice(3) }, 2026)).toBe(general)
+    expect(runningTakeaway({ lastWeek: 20, points: [] }, 2026)).toBe(general)
+  })
+})
+
+describe('the weekly takeaway', () => {
+  const points = [
+    { cumulative: 0, week: 1, weekly: 100, year: 2025 },
+    { cumulative: 0, week: 14, weekly: 900.4, year: 2025 },
+    { cumulative: 0, week: 2, weekly: 2000, year: 2026 },
+  ]
+
+  it("names the picked year's biggest week, against the other year shown", () => {
+    expect.hasAssertions()
+
+    expect(weeklyTakeaway(points, [2025, 2026], 2025)).toBe(
+      'Each week of 2025 against 2026. Its biggest week began 2 Apr, with RM\u00A0900.',
+    )
+    expect(weeklyTakeaway(points, [2024], 2024)).toBe('Each week of 2024.')
+  })
+})
+
+describe('the pace chart years', () => {
+  const years = [2022, 2023, 2024, 2025, 2026]
+
+  it('shows every year as a running total, and two years each week', () => {
+    expect.hasAssertions()
+
+    expect(shownYears(years, { measure: 'cumulative', picked: 2024, thisYear: 2026 })).toBe(years)
+    expect(shownYears(years, { measure: 'weekly', picked: 2024, thisYear: 2026 })).toStrictEqual([
+      2023, 2024,
+    ])
+    expect(shownYears(years, { measure: 'weekly', picked: 2022, thisYear: 2026 })).toStrictEqual([
+      2022, 2023,
+    ])
+    expect(shownYears([2026], { measure: 'weekly', picked: 2026, thisYear: 2026 })).toStrictEqual([
+      2026,
+    ])
+  })
+
+  const running = { measure: 'cumulative', picked: 2023, thisYear: 2026 } as const
+
+  it('keeps this year bright, picks out another year, and fades older years', () => {
+    expect.hasAssertions()
+
+    expect(yearColor(2026, running)).toBe('var(--color-chart-1)')
+    expect(yearColor(2023, running)).toBe('var(--color-chart-2)')
+    expect(yearColor(2025, running)).toBe(
+      'color-mix(in oklab, var(--color-fg-muted) 85%, transparent)',
+    )
+    expect(yearColor(2018, running)).toBe(
+      'color-mix(in oklab, var(--color-fg-muted) 20%, transparent)',
+    )
+  })
+
+  it('draws the picked year bright each week, and the other year muted', () => {
+    expect.hasAssertions()
+
+    expect(yearColor(2023, { ...running, measure: 'weekly' })).toBe('var(--color-chart-1)')
+    expect(yearColor(2026, { ...running, measure: 'weekly' })).toBe('var(--color-fg-subtle)')
   })
 })

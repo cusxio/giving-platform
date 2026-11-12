@@ -1,6 +1,13 @@
-import type { Analytics } from '#/modules/analytics'
+import type { EveryYear } from '#/modules/analytics'
 
-type Point = Analytics['pace']['points'][number]
+import { compactCurrency, weekStartText, wholeCurrency } from './format'
+
+type Point = Pick<EveryYear['pace']['points'][number], 'cumulative' | 'week' | 'year'>
+
+interface Pace {
+  readonly lastWeek: number
+  readonly points: readonly Point[]
+}
 
 function totalAt(points: readonly Point[], year: number, week: number) {
   let latest: Point | undefined
@@ -16,19 +23,57 @@ function totalAt(points: readonly Point[], year: number, week: number) {
   return latest?.cumulative ?? 0
 }
 
-const totalOf = (points: readonly Point[], year: number) => totalAt(points, year, 53)
+const totalOf = (points: readonly Point[], year: number) =>
+  totalAt(points, year, Number.POSITIVE_INFINITY)
 
-export function paceSummary(pace: Analytics['pace']) {
-  const year = Math.max(...pace.points.map((point) => point.year))
+function paceSummary(pace: Pace, year: number) {
   const soFar = totalAt(pace.points, year, pace.lastWeek)
   const lastYearSoFar = totalAt(pace.points, year - 1, pace.lastWeek)
-  if (!Number.isFinite(year) || lastYearSoFar === 0) {
+  if (lastYearSoFar === 0) {
     return null
   }
+  const earlier = new Set(pace.points.map((point) => point.year).filter((y) => y < year - 1))
   return {
     ahead: soFar / lastYearSoFar - 1,
+    aheadOfEvery:
+      earlier.size > 0 &&
+      soFar > lastYearSoFar &&
+      [...earlier].every((y) => soFar > totalAt(pace.points, y, pace.lastWeek)),
     lastYear: year - 1,
     projected: totalOf(pace.points, year - 1) * (soFar / lastYearSoFar),
     year,
   }
+}
+
+export function runningTakeaway(pace: Pace, year: number) {
+  const summary = paceSummary(pace, year)
+  if (summary === null) {
+    return 'Running total from 1 January, one line per year.'
+  }
+  const ahead = Math.round(summary.ahead * 100)
+  const position =
+    ahead === 0
+      ? `level with ${summary.lastYear}`
+      : `${Math.abs(ahead)}% ${ahead > 0 ? 'ahead of' : 'behind'} ${summary.lastYear}`
+  const every = summary.aheadOfEvery ? ', and ahead of every earlier year' : ''
+  return `${year} is ${position} at this point${every}. At this pace it ends near ${compactCurrency.format(summary.projected)}.`
+}
+
+export function weeklyTakeaway(
+  points: EveryYear['pace']['points'],
+  shown: readonly number[],
+  picked: number,
+) {
+  const against = shown.find((year) => year !== picked)
+  const intro =
+    against === undefined ? `Each week of ${picked}.` : `Each week of ${picked} against ${against}.`
+  const biggest = points
+    .filter((point) => point.year === picked)
+    .reduce<EveryYear['pace']['points'][number] | null>(
+      (top, point) => (top === null || point.weekly > top.weekly ? point : top),
+      null,
+    )
+  return biggest === null
+    ? intro
+    : `${intro} Its biggest week began ${weekStartText(picked, biggest.week)}, with ${wholeCurrency.format(biggest.weekly)}.`
 }

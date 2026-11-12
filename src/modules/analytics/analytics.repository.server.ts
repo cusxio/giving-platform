@@ -119,22 +119,42 @@ export const fundTotals = defineQuery(
   rows,
 )
 
-export const weeklyCumulativeTotalsByYear = defineQuery(
-  'analytics.weeklyCumulativeTotalsByYear',
-  (db, span: Span) => {
+const localYear = sql<number>`EXTRACT(YEAR FROM ${localTime})::integer`
+
+export const yearTotals = defineQuery(
+  'analytics.yearTotals',
+  (db) =>
+    db
+      .select({
+        donors: countDistinct(transactions.userId),
+        firstDay: sql<string>`to_char(MIN(${localTime}), 'YYYY-MM-DD')`,
+        gifts: count(),
+        median: sql<number>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${transactions.amount})::float`,
+        received: safeSum(transactions.amount),
+        year: localYear,
+      })
+      .from(transactions)
+      .where(eq(transactions.status, COUNTED_STATUS))
+      .groupBy(localYear)
+      .orderBy(asc(localYear)),
+  rows,
+)
+
+export const weeklyTotalsByYear = defineQuery(
+  'analytics.weeklyTotalsByYear',
+  (db) => {
     const week = sql<number>`((EXTRACT(DOY FROM ${localTime})::integer - 1) / 7 + 1)`
-    const year = sql<number>`EXTRACT(YEAR FROM ${localTime})::integer`
 
     const weeklyTotals = db.$with('weekly_totals').as(
       db
         .select({
           week: week.as('week'),
           weeklyAmount: safeSum(transactions.amount).as('weekly_amount'),
-          year: year.as('year'),
+          year: localYear.as('year'),
         })
         .from(transactions)
-        .where(countedWithin(span))
-        .groupBy(year, week),
+        .where(eq(transactions.status, COUNTED_STATUS))
+        .groupBy(localYear, week),
     )
 
     return db
@@ -142,6 +162,7 @@ export const weeklyCumulativeTotalsByYear = defineQuery(
       .select({
         cumulative: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})::integer`,
         week: weeklyTotals.week,
+        weeklyAmount: weeklyTotals.weeklyAmount,
         year: weeklyTotals.year,
       })
       .from(weeklyTotals)

@@ -8,7 +8,7 @@ import { recordingLogger } from '#/server/testing/recording-logger'
 import { errValue, okValue } from '#/server/testing/result'
 import { MEMBER, SU, testContext } from '#/server/testing/test-context'
 
-import type { getAnalytics } from './analytics.functions'
+import type { getAnalytics, getEveryYear } from './analytics.functions'
 import {
   countHeld,
   donorWindows,
@@ -18,10 +18,12 @@ import {
   monthlyByFund,
   paymentMethodOutcomes,
   periodTotals,
-  weeklyCumulativeTotalsByYear,
+  weeklyTotalsByYear,
+  yearTotals,
 } from './analytics.repository.server'
 import { getAnalyticsAction, loadAnalytics } from './analytics.server'
-import type { Analytics } from './analytics.types'
+import type { Analytics, EveryYear } from './analytics.types'
+import { getEveryYearAction, loadEveryYear } from './every-year.server'
 import { GIFT_BAND_BOUNDS } from './gift-bands'
 import { resolvePeriod, spanOf, weekOfYear, windowsOf } from './period'
 
@@ -71,7 +73,6 @@ function pageDb() {
         ? [{ amount: 20_000, fundName: 'Tithe', gifts: 2, guest: 0, signedIn: 20_000 }]
         : [{ amount: 9000, fundName: 'Mission', gifts: 1, guest: 9000, signedIn: 0 }],
     )
-    .on(weeklyCumulativeTotalsByYear, () => [{ cumulative: 150_000, week: 1, year: 2026 }])
     .on(giftSizeBands, (span) => (isPeriod(span) ? [{ amount: 30_000, bucket: 2, gifts: 3 }] : []))
     .on(givingHeatmap, () => [{ block: 3, gifts: 4, weekday: 7 }])
     .on(paymentMethodOutcomes, () => [{ cancelled: 1, failed: 2, method: 'CC', succeeded: 3 }])
@@ -87,7 +88,6 @@ const PAGE_QUERIES = [
   donorWindows.queryName,
   fundTotals.queryName,
   fundTotals.queryName,
-  weeklyCumulativeTotalsByYear.queryName,
   giftSizeBands.queryName,
   giftSizeBands.queryName,
   givingHeatmap.queryName,
@@ -107,7 +107,7 @@ describe('the analytics workflow', () => {
     expect(db.roundTrips).toStrictEqual([PAGE_QUERIES])
   })
 
-  it('reads the period, the same days last year, and the pace from 1 January two years back', async () => {
+  it('reads the period and the same days last year', async () => {
     expect.hasAssertions()
 
     const db = pageDb()
@@ -118,8 +118,7 @@ describe('the analytics workflow', () => {
       [spanOf({ end: '2026-11-10', start: '2026-01-01' })],
       [spanOf({ end: '2025-11-10', start: '2025-01-01' })],
     ])
-    expect(db.calls[7]?.args).toStrictEqual([spanOf({ end: '2026-11-10', start: '2024-01-01' })])
-    expect(db.calls[8]?.args).toStrictEqual([windows.period, GIFT_BAND_BOUNDS])
+    expect(db.calls[7]?.args).toStrictEqual([windows.period, GIFT_BAND_BOUNDS])
   })
 
   it('answers in ringgit, with each figure beside last year', async () => {
@@ -141,17 +140,6 @@ describe('the analytics workflow', () => {
       user: { amount: 290, gifts: 2 },
     })
     expect(analytics.attention).toStrictEqual({ held: 2, stalePending: 1 })
-  })
-
-  it("marks the pace chart at the period's last week", async () => {
-    expect.hasAssertions()
-
-    const analytics = okValue(await loadAnalytics({ db: pageDb() }, {}, TODAY))
-
-    expect(analytics.pace).toStrictEqual({
-      lastWeek: 45,
-      points: [{ cumulative: 1500, week: 1, year: 2026 }],
-    })
   })
 
   it("lines last year's months up with this year's", async () => {
@@ -186,6 +174,56 @@ describe('the analytics workflow', () => {
     expect(analytics.whenPeopleGive.filter((cell) => cell.gifts > 0)).toStrictEqual([
       { block: 3, gifts: 4, weekday: 7 },
     ])
+  })
+})
+
+function everyYearDb() {
+  return createFakeDb()
+    .on(yearTotals, () => [
+      { donors: 3, firstDay: '2025-01-02', gifts: 4, median: 5000, received: 40_000, year: 2025 },
+      { donors: 2, firstDay: '2026-01-05', gifts: 3, median: 5050, received: 30_000, year: 2026 },
+    ])
+    .on(periodTotals, () => totals(25_000))
+    .on(weeklyTotalsByYear, () => [
+      { cumulative: 40_000, week: 1, weeklyAmount: 40_000, year: 2025 },
+      { cumulative: 30_000, week: 2, weeklyAmount: 30_000, year: 2026 },
+    ])
+}
+
+describe('the every year workflow', () => {
+  it('reads every year, the same days last year and every week in one round trip', async () => {
+    expect.hasAssertions()
+
+    const db = everyYearDb()
+
+    okValue(await loadEveryYear({ db }, TODAY))
+
+    expect(db.roundTrips).toStrictEqual([
+      [yearTotals.queryName, periodTotals.queryName, weeklyTotalsByYear.queryName],
+    ])
+    expect(db.calls[1]?.args).toStrictEqual([spanOf({ end: '2025-11-10', start: '2025-01-01' })])
+  })
+
+  it('answers in ringgit, this year against the same days last year', async () => {
+    expect.hasAssertions()
+
+    const everyYear = okValue(await loadEveryYear({ db: everyYearDb() }, TODAY))
+
+    expect(everyYear.kpis.thisYear).toStrictEqual({
+      change: { kind: 'against', prior: 250 },
+      received: 300,
+    })
+    expect(everyYear.years.map((row) => [row.year, row.received, row.median])).toStrictEqual([
+      [2026, 300, 50.5],
+      [2025, 400, 50],
+    ])
+    expect(everyYear.pace).toStrictEqual({
+      lastWeek: 45,
+      points: [
+        { cumulative: 400, week: 1, weekly: 400, year: 2025 },
+        { cumulative: 300, week: 2, weekly: 300, year: 2026 },
+      ],
+    })
   })
 })
 
@@ -231,19 +269,25 @@ describe('the analytics action', () => {
     expect(db.roundTrips).toHaveLength(1)
   })
 
-  it('names no donor anywhere in its answer', async () => {
+  it('names no donor anywhere in its answer, on either tab', async () => {
     expect.hasAssertions()
 
     const analytics = await getAnalyticsAction({
       context: testContext(SU, { db: pageDb() }),
       data: {},
     })
+    const everyYear = await getEveryYearAction({
+      context: testContext(SU, { db: everyYearDb() }),
+      data: undefined,
+    })
 
     expectTypeOf<
-      Extract<DeepKeys<Analytics>, 'email' | 'firstName' | 'lastName' | 'userId'>
+      Extract<DeepKeys<Analytics | EveryYear>, 'email' | 'firstName' | 'lastName' | 'userId'>
     >().toBeNever()
     expect(keysOf(analytics).filter((key) => DONOR_KEYS.has(key))).toStrictEqual([])
     expect(keysOf(analytics)).toContain('segments')
+    expect(keysOf(everyYear).filter((key) => DONOR_KEYS.has(key))).toStrictEqual([])
+    expect(keysOf(everyYear)).toContain('donors')
   })
 
   it('refuses a date that is not a calendar day, without reading', async () => {
@@ -282,6 +326,52 @@ describe('the analytics action', () => {
   })
 })
 
+describe('the every year action', () => {
+  it('answers only a super user', async () => {
+    expect.hasAssertions()
+
+    const db = everyYearDb()
+
+    const everyYear = await getEveryYearAction({
+      context: testContext(SU, { db }),
+      data: undefined,
+    })
+    const member = await getEveryYearAction({
+      context: testContext(MEMBER, { db }),
+      data: undefined,
+    }).catch((error: unknown) => error)
+    const guest = await getEveryYearAction({
+      context: testContext(null, { db }),
+      data: undefined,
+    }).catch((error: unknown) => error)
+
+    expectTypeOf<Awaited<ReturnType<typeof getEveryYear>>>().toEqualTypeOf<EveryYear>()
+    expect(everyYear.kpis.received).toStrictEqual({ gifts: 7, received: 700 })
+    expect(isNotFound(member)).toBe(true)
+    expect(isRedirect(guest)).toBe(true)
+    expect(db.roundTrips).toHaveLength(1)
+  })
+
+  it('logs a failed read and answers a generic error', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = everyYearDb().on(weeklyTotalsByYear, () => {
+      throw new Error('relation "transactions" does not exist')
+    })
+
+    await expect(
+      getEveryYearAction({ context: testContext(SU, { db, logger }), data: undefined }),
+    ).rejects.toThrow(new Error('Internal Server Error'))
+    expect(events).toMatchObject([
+      {
+        event: 'analytics.every_year.failed',
+        op: [yearTotals, periodTotals, weeklyTotalsByYear].map((q) => q.queryName).join(' + '),
+      },
+    ])
+  })
+})
+
 async function sqlOf(query: Parameters<ReturnType<typeof createDriverDb>['run']>[0]) {
   const statements: string[] = []
   const db = createDriverDb((sql) => {
@@ -306,6 +396,18 @@ describe('the analytics statements', () => {
     await expect(sqlOf(monthlyByFund(windows.period))).resolves.toContain(
       `group by to_char(${local}, 'YYYY-MM'), "funds"."name"`,
     )
+    await expect(sqlOf(yearTotals())).resolves.toContain(
+      `group by EXTRACT(YEAR FROM ${local})::integer order by`,
+    )
+  })
+
+  it('read every year of counted gifts, with no date bounds', async () => {
+    expect.hasAssertions()
+
+    for (const sql of [await sqlOf(yearTotals()), await sqlOf(weeklyTotalsByYear())]) {
+      expect(sql).toContain('where "transactions"."status" = $1')
+      expect(sql).not.toContain('"transactions"."created_at" >=')
+    }
   })
 
   it('bands gift sizes with width_bucket over the bounds it is given', async () => {
@@ -347,7 +449,7 @@ const SQL_WEEK =
   /\(\(EXTRACT\(DOY FROM \("transactions"\."created_at" AT TIME ZONE 'Asia\/Kuala_Lumpur'\)\)::integer - (?<offset>\d+)\) \/ (?<length>\d+) \+ (?<first>\d+)\)/u
 
 async function sqlWeekOfDay() {
-  const sql = await sqlOf(weeklyCumulativeTotalsByYear(windows.period))
+  const sql = await sqlOf(weeklyTotalsByYear())
   const week = SQL_WEEK.exec(sql)?.groups
   if (week === undefined) {
     throw new Error(`no week expression in: ${sql}`)

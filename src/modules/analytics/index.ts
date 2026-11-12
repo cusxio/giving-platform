@@ -1,4 +1,5 @@
-export { analyticsQuery } from './analytics.queries'
-export type { Analytics } from './analytics.types'
+export { analyticsQuery, everyYearQuery } from './analytics.queries'
+export type { Analytics, EveryYear } from './analytics.types'
 export type { GiftBand, Range, Rate } from './analytics'
+export type { Change } from './every-year'
 export { weekOfYear } from './period'

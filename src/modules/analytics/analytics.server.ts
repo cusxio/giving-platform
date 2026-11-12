@@ -9,7 +9,7 @@ import type { Parsed } from '#/server/input.server'
 import { parseWith } from '#/server/input.server'
 import { defineRead } from '#/server/procedure.server'
 
-import { paceRange, toAnalytics } from './analytics'
+import { toAnalytics } from './analytics'
 import {
   countHeld,
   donorWindows,
@@ -19,10 +19,9 @@ import {
   monthlyByFund,
   paymentMethodOutcomes,
   periodTotals,
-  weeklyCumulativeTotalsByYear,
 } from './analytics.repository.server'
 import { GIFT_BAND_BOUNDS } from './gift-bands'
-import { isIsoDate, isoDateOf, resolvePeriod, spanOf, windowsOf } from './period'
+import { isIsoDate, isoDateOf, resolvePeriod, windowsOf } from './period'
 
 const isoDate = Type.Refine(Type.String({ maxLength: 10 }), isIsoDate, () => 'must be a date')
 const analyticsInput = parseWith(
@@ -41,7 +40,6 @@ export async function loadAnalytics(deps: Pick<Deps, 'db'>, input: AnalyticsInpu
     donorWindows(windows),
     fundTotals(windows.period),
     fundTotals(windows.compare),
-    weeklyCumulativeTotalsByYear(spanOf(paceRange(period.period))),
     giftSizeBands(windows.period, GIFT_BAND_BOUNDS),
     giftSizeBands(windows.compare, GIFT_BAND_BOUNDS),
     givingHeatmap(windows.period),
@@ -58,7 +56,6 @@ export async function loadAnalytics(deps: Pick<Deps, 'db'>, input: AnalyticsInpu
       donors,
       funds,
       compareFunds,
-      pace,
       bands,
       compareBands,
       heatmap,
@@ -77,7 +74,6 @@ export async function loadAnalytics(deps: Pick<Deps, 'db'>, input: AnalyticsInpu
         held,
         heatmap,
         monthly,
-        pace,
         payments,
         stalePending,
         totals,

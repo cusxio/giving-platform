@@ -9,10 +9,10 @@ type Search = Record<string, unknown>
 /** Runs a route's search validation and beforeLoad, as the router would, and returns the throw.
  * The router keeps the raw keys beside the validated ones, so beforeLoad sees both. */
 function visit(route: typeof InsightsRoute | typeof ReportsRoute, raw: Search) {
-  const validate = route.options.validateSearch as (search: Search) => Search
+  const validate = route.options.validateSearch as ((search: Search) => Search) | undefined
   const beforeLoad = route.options.beforeLoad as unknown as (options: { search: Search }) => unknown
   try {
-    beforeLoad({ search: { ...raw, ...validate(raw) } })
+    beforeLoad({ search: { ...raw, ...validate?.(raw) } })
   } catch (error) {
     return error
   }
@@ -20,25 +20,18 @@ function visit(route: typeof InsightsRoute | typeof ReportsRoute, raw: Search) {
 }
 
 describe('the old analytics addresses', () => {
-  it.each([
-    [{}, { end: undefined, start: undefined }],
-    [
-      { end: '2026-10-31', start: '2026-10-01' },
-      { end: '2026-10-31', start: '2026-10-01' },
-    ],
-    [
-      { end: 'garbage', start: '2026-10-01' },
-      { end: undefined, start: '2026-10-01' },
-    ],
-  ])('send /insights?%o to /analytics with %o', (raw, search) => {
-    expect.hasAssertions()
+  it.each([{}, { end: '2026-10-31', start: '2026-10-01' }])(
+    'send /insights?%o to every year at /analytics, as Insights showed',
+    (raw) => {
+      expect.hasAssertions()
 
-    const thrown = visit(InsightsRoute, raw)
+      const thrown = visit(InsightsRoute, raw)
 
-    expect(isRedirect(thrown)).toBe(true)
-    expect(thrown).toMatchObject({ options: { to: '/analytics' } })
-    expect((thrown as { options: { search: Search } }).options.search).toStrictEqual(search)
-  })
+      expect(isRedirect(thrown)).toBe(true)
+      expect(thrown).toMatchObject({ options: { to: '/analytics' } })
+      expect((thrown as { options: { search?: Search } }).options.search).toBeUndefined()
+    },
+  )
 
   it.each([
     [{}, { end: undefined, start: undefined }],
@@ -50,13 +43,13 @@ describe('the old analytics addresses', () => {
       { end_date: 20_261_031, start_date: '2026-13-40' },
       { end: undefined, start: undefined },
     ],
-  ])('send /reports?%o to /analytics with %o', (raw, search) => {
+  ])('send /reports?%o to /analytics/period with %o', (raw, search) => {
     expect.hasAssertions()
 
     const thrown = visit(ReportsRoute, raw)
 
     expect(isRedirect(thrown)).toBe(true)
-    expect(thrown).toMatchObject({ options: { to: '/analytics' } })
+    expect(thrown).toMatchObject({ options: { to: '/analytics/period' } })
     expect((thrown as { options: { search: Search } }).options.search).toStrictEqual(search)
   })
 })

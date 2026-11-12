@@ -38,13 +38,6 @@ const analytics: Analytics = {
   },
   monthly: [{ amount: 500, fundName: 'Tithe', month: '2026-03' }],
   monthlyLastYear: [{ amount: 400, month: '2026-03' }],
-  pace: {
-    lastWeek: 45,
-    points: [
-      { cumulative: 400, week: 10, year: 2025 },
-      { cumulative: 500, week: 11, year: 2026 },
-    ],
-  },
   payments: [{ cancelled: 1, failed: 1, method: 'CC', succeeded: 4 }],
   period: { end: '2026-11-10', start: '2026-01-01' },
   signedInGuest: { guest: { amount: 100, gifts: 1 }, user: { amount: 400, gifts: 3 } },
@@ -64,7 +57,7 @@ vi.mock<typeof Charts>(import('./-components/charts'), async (actual) => {
   return actual()
 })
 
-const { Route } = await import('./route')
+const { Route } = await import('./period')
 
 const loader = Route.options.loader as (options: {
   context: unknown
@@ -75,7 +68,7 @@ const DEPS = { end: undefined, start: undefined }
 
 vi.spyOn(Route, 'useSearch').mockReturnValue(DEPS)
 
-describe('the analytics loader', () => {
+describe('the period loader', () => {
   it('loads the chart code with the data, not with the route', async () => {
     expect.hasAssertions()
     expect(chartCode.loaded).toBe(false)
@@ -86,7 +79,7 @@ describe('the analytics loader', () => {
   })
 })
 
-describe('the analytics page', () => {
+describe('the period tab', () => {
   it('draws every section and chart in the first render once the loader has run', async () => {
     expect.hasAssertions()
     const queryClient = new QueryClient()
@@ -99,7 +92,7 @@ describe('the analytics page', () => {
     expect(html).toContain('1 Jan to 10 Nov 2026, compared with 1 Jan to 10 Nov 2025')
     expect(html).toContain('2 payments are held. Resolve them at eGHL.')
     expect(html).toContain('2 of 3')
-    expect(html.match(/<svg[^>]*class="ts-chart/gu)?.length).toBe(4)
+    expect(html.match(/<svg[^>]*class="ts-chart/gu)?.length).toBe(3)
     expect(html).toContain('Gifts of RM 500 or more are 100% of gifts and 100% of the money.')
   })
 })
