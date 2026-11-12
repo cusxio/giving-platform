@@ -18,8 +18,9 @@ import { Route as appsuRouteRouteImport } from './routes/(app)/(su)/route'
 import { Route as appOverviewRouteRouteImport } from './routes/(app)/overview/route'
 import { Route as appSettingsRouteRouteImport } from './routes/(app)/settings/route'
 import { Route as appTransactionsRouteRouteImport } from './routes/(app)/transactions/route'
-import { Route as appsuInsightsRouteRouteImport } from './routes/(app)/(su)/insights/route'
-import { Route as appsuReportsRouteRouteImport } from './routes/(app)/(su)/reports/route'
+import { Route as appsuAnalyticsRouteRouteImport } from './routes/(app)/(su)/analytics/route'
+import { Route as appsuInsightsRouteImport } from './routes/(app)/(su)/insights'
+import { Route as appsuReportsRouteImport } from './routes/(app)/(su)/reports'
 import { Route as appTransactionTransactionIdRouteImport } from './routes/(app)/transaction/$transactionId'
 import { Route as authAuthLoginRouteImport } from './routes/(auth)/auth.login'
 import { Route as authWelcomeSignupRouteImport } from './routes/(auth)/welcome.signup'
@@ -71,12 +72,17 @@ const appTransactionsRouteRoute = appTransactionsRouteRouteImport.update({
   path: '/transactions',
   getParentRoute: () => appRouteRoute,
 } as any)
-const appsuInsightsRouteRoute = appsuInsightsRouteRouteImport.update({
+const appsuAnalyticsRouteRoute = appsuAnalyticsRouteRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => appsuRouteRoute,
+} as any)
+const appsuInsightsRoute = appsuInsightsRouteImport.update({
   id: '/insights',
   path: '/insights',
   getParentRoute: () => appsuRouteRoute,
 } as any)
-const appsuReportsRouteRoute = appsuReportsRouteRouteImport.update({
+const appsuReportsRoute = appsuReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
   getParentRoute: () => appsuRouteRoute,
@@ -131,8 +137,9 @@ export interface FileRoutesByFullPath {
   '/overview': typeof appOverviewRouteRoute
   '/settings': typeof appSettingsRouteRoute
   '/transactions': typeof appTransactionsRouteRoute
-  '/insights': typeof appsuInsightsRouteRoute
-  '/reports': typeof appsuReportsRouteRoute
+  '/analytics': typeof appsuAnalyticsRouteRoute
+  '/insights': typeof appsuInsightsRoute
+  '/reports': typeof appsuReportsRoute
   '/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
@@ -149,8 +156,9 @@ export interface FileRoutesByTo {
   '/overview': typeof appOverviewRouteRoute
   '/settings': typeof appSettingsRouteRoute
   '/transactions': typeof appTransactionsRouteRoute
-  '/insights': typeof appsuInsightsRouteRoute
-  '/reports': typeof appsuReportsRouteRoute
+  '/analytics': typeof appsuAnalyticsRouteRoute
+  '/insights': typeof appsuInsightsRoute
+  '/reports': typeof appsuReportsRoute
   '/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
@@ -171,8 +179,9 @@ export interface FileRoutesById {
   '/(app)/overview': typeof appOverviewRouteRoute
   '/(app)/settings': typeof appSettingsRouteRoute
   '/(app)/transactions': typeof appTransactionsRouteRoute
-  '/(app)/(su)/insights': typeof appsuInsightsRouteRoute
-  '/(app)/(su)/reports': typeof appsuReportsRouteRoute
+  '/(app)/(su)/analytics': typeof appsuAnalyticsRouteRoute
+  '/(app)/(su)/insights': typeof appsuInsightsRoute
+  '/(app)/(su)/reports': typeof appsuReportsRoute
   '/(app)/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/(auth)/auth/login': typeof authAuthLoginRoute
   '/(auth)/welcome/signup': typeof authWelcomeSignupRoute
@@ -191,6 +200,7 @@ export interface FileRouteTypes {
     | '/overview'
     | '/settings'
     | '/transactions'
+    | '/analytics'
     | '/insights'
     | '/reports'
     | '/transaction/$transactionId'
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/overview'
     | '/settings'
     | '/transactions'
+    | '/analytics'
     | '/insights'
     | '/reports'
     | '/transaction/$transactionId'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/(app)/overview'
     | '/(app)/settings'
     | '/(app)/transactions'
+    | '/(app)/(su)/analytics'
     | '/(app)/(su)/insights'
     | '/(app)/(su)/reports'
     | '/(app)/transaction/$transactionId'
@@ -320,18 +332,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof appTransactionsRouteRouteImport
       parentRoute: typeof appRouteRoute
     }
+    '/(app)/(su)/analytics': {
+      id: '/(app)/(su)/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof appsuAnalyticsRouteRouteImport
+      parentRoute: typeof appsuRouteRoute
+    }
     '/(app)/(su)/insights': {
       id: '/(app)/(su)/insights'
       path: '/insights'
       fullPath: '/insights'
-      preLoaderRoute: typeof appsuInsightsRouteRouteImport
+      preLoaderRoute: typeof appsuInsightsRouteImport
       parentRoute: typeof appsuRouteRoute
     }
     '/(app)/(su)/reports': {
       id: '/(app)/(su)/reports'
       path: '/reports'
       fullPath: '/reports'
-      preLoaderRoute: typeof appsuReportsRouteRouteImport
+      preLoaderRoute: typeof appsuReportsRouteImport
       parentRoute: typeof appsuRouteRoute
     }
     '/(app)/transaction/$transactionId': {
@@ -394,13 +413,15 @@ declare module '@tanstack/react-router' {
 }
 
 interface appsuRouteRouteChildren {
-  appsuInsightsRouteRoute: typeof appsuInsightsRouteRoute
-  appsuReportsRouteRoute: typeof appsuReportsRouteRoute
+  appsuAnalyticsRouteRoute: typeof appsuAnalyticsRouteRoute
+  appsuInsightsRoute: typeof appsuInsightsRoute
+  appsuReportsRoute: typeof appsuReportsRoute
 }
 
 const appsuRouteRouteChildren: appsuRouteRouteChildren = {
-  appsuInsightsRouteRoute: appsuInsightsRouteRoute,
-  appsuReportsRouteRoute: appsuReportsRouteRoute,
+  appsuAnalyticsRouteRoute: appsuAnalyticsRouteRoute,
+  appsuInsightsRoute: appsuInsightsRoute,
+  appsuReportsRoute: appsuReportsRoute,
 }
 
 const appsuRouteRouteWithChildren = appsuRouteRoute._addFileChildren(

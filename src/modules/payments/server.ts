@@ -4,4 +4,4 @@ export { handleEghlCallback, handleEghlReturnGet, handleEghlReturnPost } from '.
 export type { PaymentGateway } from './gateway'
 export { handleReconcile } from './reconcile.server'
 export { unexpiredSavedCards } from './saved-cards.repository.server'
-export { hasGuestTransaction } from './transactions.repository.server'
+export { countStalePending, hasGuestTransaction } from './transactions.repository.server'

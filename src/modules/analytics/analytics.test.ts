@@ -1,134 +1,346 @@
 import { isNotFound, isRedirect } from '@tanstack/react-router'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
+import { countStalePending } from '#/modules/payments/server'
+import { createDriverDb } from '#/server/testing/driver-db'
 import { createFakeDb } from '#/server/testing/fake-db'
 import { recordingLogger } from '#/server/testing/recording-logger'
-import { okValue } from '#/server/testing/result'
+import { errValue, okValue } from '#/server/testing/result'
 import { MEMBER, SU, testContext } from '#/server/testing/test-context'
 
-import type { getInsights, getReports } from './analytics.functions'
+import type { getAnalytics } from './analytics.functions'
 import {
+  countHeld,
+  donorWindows,
   fundTotals,
-  insightsSummary,
+  giftSizeBands,
+  givingHeatmap,
+  monthlyByFund,
+  paymentMethodOutcomes,
+  periodTotals,
   weeklyCumulativeTotalsByYear,
 } from './analytics.repository.server'
-import { getInsightsAction, getReportsAction, loadInsights, loadReport } from './analytics.server'
-import type { Insights } from './insights'
+import { getAnalyticsAction, loadAnalytics } from './analytics.server'
+import type { Analytics } from './analytics.types'
+import { GIFT_BAND_BOUNDS } from './gift-bands'
+import { resolvePeriod, spanOf, windowsOf } from './period'
 
-const weekly = () => [{ cumulativeAmount: 1500, week: 1, weeklyAmount: 1500, year: 2025 }]
-const range = {
-  endExclusive: new Date('2025-02-01T16:00:00Z'),
-  start: new Date('2025-01-01T16:00:00Z'),
+const TODAY = '2026-11-10'
+const period = resolvePeriod({}, TODAY)
+const windows = windowsOf(period)
+
+const totals = (received: number) => ({
+  donors: 2,
+  gifts: 3,
+  guestAmount: 1000,
+  guestGifts: 1,
+  median: 5050,
+  received,
+  userAmount: received - 1000,
+  userGifts: 2,
+})
+
+const isPeriod = (span: { readonly start: Date }) =>
+  span.start.getTime() === windows.period.start.getTime()
+
+/** Answers every query of the page with a little of everything. */
+function pageDb() {
+  return createFakeDb()
+    .on(periodTotals, (span) => (isPeriod(span) ? totals(30_000) : totals(20_000)))
+    .on(monthlyByFund, (span) =>
+      isPeriod(span)
+        ? [{ amount: 12_345, fundName: 'Tithe', month: '2026-01' }]
+        : [
+            { amount: 5000, fundName: 'Tithe', month: '2025-01' },
+            { amount: 2500, fundName: 'Mission', month: '2025-01' },
+          ],
+    )
+    .on(donorWindows, () => [
+      {
+        compare: 1000,
+        firstGiftAt: new Date('2020-01-01T00:00:00Z'),
+        last12Months: 5000,
+        months12to24: 1000,
+        months24to36: 1000,
+        monthsGivenLast12: 7,
+        period: 5000,
+        yearBeforePeriod: 1000,
+      },
+    ])
+    .on(fundTotals, (span) =>
+      isPeriod(span)
+        ? [{ amount: 20_000, fundName: 'Tithe', gifts: 2, guest: 0, signedIn: 20_000 }]
+        : [{ amount: 9000, fundName: 'Mission', gifts: 1, guest: 9000, signedIn: 0 }],
+    )
+    .on(weeklyCumulativeTotalsByYear, () => [{ cumulative: 150_000, week: 1, year: 2026 }])
+    .on(giftSizeBands, (span) => (isPeriod(span) ? [{ amount: 30_000, bucket: 2, gifts: 3 }] : []))
+    .on(givingHeatmap, () => [{ block: 3, gifts: 4, weekday: 7 }])
+    .on(paymentMethodOutcomes, () => [{ cancelled: 1, failed: 2, method: 'CC', succeeded: 3 }])
+    .on(countHeld, () => 2)
+    .on(countStalePending, () => 1)
 }
-const tithe = () => [{ createdAs: 'user' as const, fundName: 'Tithe', totalAmount: 12_345 }]
 
-describe('the insights', () => {
-  it('read the summary and the weekly totals in one round trip', async () => {
+const PAGE_QUERIES = [
+  periodTotals.queryName,
+  periodTotals.queryName,
+  monthlyByFund.queryName,
+  monthlyByFund.queryName,
+  donorWindows.queryName,
+  fundTotals.queryName,
+  fundTotals.queryName,
+  weeklyCumulativeTotalsByYear.queryName,
+  giftSizeBands.queryName,
+  giftSizeBands.queryName,
+  givingHeatmap.queryName,
+  paymentMethodOutcomes.queryName,
+  countHeld.queryName,
+  countStalePending.queryName,
+]
+
+describe('the analytics workflow', () => {
+  it('reads the whole page in one round trip', async () => {
     expect.hasAssertions()
 
-    const db = createFakeDb()
-      .on(insightsSummary, () => [])
-      .on(weeklyCumulativeTotalsByYear, weekly)
+    const db = pageDb()
 
-    const insights = okValue(await loadInsights({ db }))
+    okValue(await loadAnalytics({ db }, {}, TODAY))
 
-    expect(insights.summary.noOfContributions).toBe(0)
-    expect(insights.weeklyCumulativeTotalsByYear).toStrictEqual([
-      { cumulativeAmount: 15, week: 1, weeklyAmount: 15, year: 2025 },
+    expect(db.roundTrips).toStrictEqual([PAGE_QUERIES])
+  })
+
+  it('reads the period, the same days last year, and the pace from 1 January two years back', async () => {
+    expect.hasAssertions()
+
+    const db = pageDb()
+
+    okValue(await loadAnalytics({ db }, {}, TODAY))
+
+    expect(db.calls.slice(0, 2).map((call) => call.args)).toStrictEqual([
+      [spanOf({ end: '2026-11-10', start: '2026-01-01' })],
+      [spanOf({ end: '2025-11-10', start: '2025-01-01' })],
     ])
-    expect(db.roundTrips).toStrictEqual([
-      [insightsSummary.queryName, weeklyCumulativeTotalsByYear.queryName],
+    expect(db.calls[7]?.args).toStrictEqual([spanOf({ end: '2026-11-10', start: '2024-01-01' })])
+    expect(db.calls[8]?.args).toStrictEqual([windows.period, GIFT_BAND_BOUNDS])
+  })
+
+  it('answers in ringgit, with each figure beside last year', async () => {
+    expect.hasAssertions()
+
+    const analytics = okValue(await loadAnalytics({ db: pageDb() }, {}, TODAY))
+
+    expect(analytics.period).toStrictEqual(period.period)
+    expect(analytics.compare).toStrictEqual(period.compare)
+    expect(analytics.kpis).toStrictEqual({
+      donors: { prior: 2, value: 2 },
+      gaveAgain: { prior: { gaveAgain: 1, of: 1 }, value: { gaveAgain: 1, of: 1 } },
+      gifts: { prior: 3, value: 3 },
+      medianGift: { prior: 50.5, value: 50.5 },
+      received: { prior: 200, value: 300 },
+    })
+    expect(analytics.signedInGuest).toStrictEqual({
+      guest: { amount: 10, gifts: 1 },
+      user: { amount: 290, gifts: 2 },
+    })
+    expect(analytics.attention).toStrictEqual({ held: 2, stalePending: 1 })
+  })
+
+  it("marks the pace chart at the period's last week", async () => {
+    expect.hasAssertions()
+
+    const analytics = okValue(await loadAnalytics({ db: pageDb() }, {}, TODAY))
+
+    expect(analytics.pace).toStrictEqual({
+      lastWeek: 45,
+      points: [{ cumulative: 1500, week: 1, year: 2026 }],
+    })
+  })
+
+  it("lines last year's months up with this year's", async () => {
+    expect.hasAssertions()
+
+    const analytics = okValue(await loadAnalytics({ db: pageDb() }, {}, TODAY))
+
+    expect(analytics.monthly).toStrictEqual([
+      { amount: 123.45, fundName: 'Tithe', month: '2026-01' },
+    ])
+    expect(analytics.monthlyLastYear).toStrictEqual([{ amount: 75, month: '2026-01' }])
+  })
+
+  it('lists every fund given to in either span, largest first', async () => {
+    expect.hasAssertions()
+
+    const analytics = okValue(await loadAnalytics({ db: pageDb() }, {}, TODAY))
+
+    expect(analytics.funds).toStrictEqual([
+      { amount: 200, fundName: 'Tithe', gifts: 2, guest: 0, prior: 0, signedIn: 200 },
+      { amount: 0, fundName: 'Mission', gifts: 0, guest: 0, prior: 90, signedIn: 0 },
     ])
   })
 
-  it('answer only a super user', async () => {
+  it('fills every weekday and three-hour block', async () => {
     expect.hasAssertions()
 
-    const db = createFakeDb()
-      .on(insightsSummary, () => [])
-      .on(weeklyCumulativeTotalsByYear, weekly)
+    const analytics = okValue(await loadAnalytics({ db: pageDb() }, {}, TODAY))
 
-    const insights = await getInsightsAction({ context: testContext(SU, { db }) })
-    const member = await getInsightsAction({ context: testContext(MEMBER, { db }) }).catch(
+    expect(analytics.whenPeopleGive).toHaveLength(56)
+    expect(analytics.whenPeopleGive[0]).toStrictEqual({ block: 0, gifts: 0, weekday: 1 })
+    expect(analytics.whenPeopleGive.filter((cell) => cell.gifts > 0)).toStrictEqual([
+      { block: 3, gifts: 4, weekday: 7 },
+    ])
+  })
+})
+
+const DONOR_KEYS = new Set(['email', 'firstName', 'lastName', 'userId'])
+
+/** Every key at any depth of a JSON-like value. */
+function keysOf(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => keysOf(item))
+  }
+  if (typeof value === 'object' && value !== null) {
+    const entries = Object.entries(value)
+    return [...entries.map(([key]) => key), ...entries.flatMap(([, inner]) => keysOf(inner))]
+  }
+  return []
+}
+
+type DeepKeys<T> = T extends readonly (infer Item)[]
+  ? DeepKeys<Item>
+  : T extends object
+    ? { [K in keyof T]-?: K | DeepKeys<T[K]> }[keyof T]
+    : never
+
+describe('the analytics action', () => {
+  it('answers only a super user', async () => {
+    expect.hasAssertions()
+
+    const db = pageDb()
+
+    const analytics = await getAnalyticsAction({ context: testContext(SU, { db }), data: {} })
+    const member = await getAnalyticsAction({
+      context: testContext(MEMBER, { db }),
+      data: {},
+    }).catch((error: unknown) => error)
+    const guest = await getAnalyticsAction({ context: testContext(null, { db }), data: {} }).catch(
       (error: unknown) => error,
     )
-    const guest = await getInsightsAction({ context: testContext(null, { db }) }).catch(
-      (error: unknown) => error,
-    )
 
-    expectTypeOf<Awaited<ReturnType<typeof getInsights>>>().toEqualTypeOf<Insights>()
-    expect(insights.summary.noOfContributions).toBe(0)
+    expectTypeOf<Awaited<ReturnType<typeof getAnalytics>>>().toEqualTypeOf<Analytics>()
+    expect(analytics.kpis.gifts.value).toBe(3)
     expect(isNotFound(member)).toBe(true)
     expect(isRedirect(guest)).toBe(true)
     expect(guest).toMatchObject({ options: { to: '/auth/login' } })
     expect(db.roundTrips).toHaveLength(1)
   })
 
-  it('log a failed read and answer a generic error', async () => {
+  it('names no donor anywhere in its answer', async () => {
+    expect.hasAssertions()
+
+    const analytics = await getAnalyticsAction({
+      context: testContext(SU, { db: pageDb() }),
+      data: {},
+    })
+
+    expectTypeOf<
+      Extract<DeepKeys<Analytics>, 'email' | 'firstName' | 'lastName' | 'userId'>
+    >().toBeNever()
+    expect(keysOf(analytics).filter((key) => DONOR_KEYS.has(key))).toStrictEqual([])
+    expect(keysOf(analytics)).toContain('segments')
+  })
+
+  it('refuses a date that is not a calendar day, without reading', async () => {
     expect.hasAssertions()
 
     const { events, logger } = recordingLogger()
-    const db = createFakeDb()
-      .on(insightsSummary, () => {
-        throw new Error('relation "transactions" does not exist')
-      })
-      .on(weeklyCumulativeTotalsByYear, weekly)
-
-    await expect(getInsightsAction({ context: testContext(SU, { db, logger }) })).rejects.toThrow(
-      new Error('Internal Server Error'),
-    )
-    expect(events).toMatchObject([
-      {
-        event: 'analytics.insights.failed',
-        op: `${insightsSummary.queryName} + ${weeklyCumulativeTotalsByYear.queryName}`,
-      },
-    ])
-  })
-})
-
-describe('a report', () => {
-  it('totals each fund over the range in ringgit', async () => {
-    expect.hasAssertions()
-
-    const db = createFakeDb().on(fundTotals, tithe)
-
-    expect(okValue(await loadReport({ db }, range))).toStrictEqual([
-      { createdAs: 'user', fundName: 'Tithe', totalAmount: 123.45 },
-    ])
-    expect(db.calls).toStrictEqual([{ args: [range], name: fundTotals.queryName }])
-  })
-
-  it('reads the range a super user asked for', async () => {
-    expect.hasAssertions()
-
-    const db = createFakeDb().on(fundTotals, tithe)
-    const data = { endDateUTCExclusive: range.endExclusive, startDateUTC: range.start }
-    expectTypeOf<Awaited<ReturnType<typeof getReports>>>().toEqualTypeOf<
-      { createdAs: 'guest' | 'user'; fundName: string; totalAmount: number }[]
-    >()
+    const db = pageDb()
 
     await expect(
-      getReportsAction({ context: testContext(SU, { db }), data }),
-    ).resolves.toStrictEqual([{ createdAs: 'user', fundName: 'Tithe', totalAmount: 123.45 }])
-    expect(db.calls).toStrictEqual([{ args: [range], name: fundTotals.queryName }])
-  })
-
-  it('refuses a range that is not two dates, without reading', async () => {
-    expect.hasAssertions()
-
-    const { events, logger } = recordingLogger()
-    const db = createFakeDb().on(fundTotals, tithe)
-    const data = { endDateUTCExclusive: new Date('nope'), startDateUTC: '2025-01-01' }
-
-    await expect(
-      getReportsAction({ context: testContext(SU, { db, logger }), data }),
+      getAnalyticsAction({
+        context: testContext(SU, { db, logger }),
+        data: { end: '2026-02-30', start: '2026-01-01' },
+      }),
     ).rejects.toThrow(new Error('Invalid input'))
     expect(events).toMatchObject([
       {
-        event: 'analytics.reports.validation_failed',
-        issues: [{ message: 'must be a valid date', path: '/endDateUTCExclusive' }],
+        event: 'analytics.read.validation_failed',
+        issues: [{ message: 'must be a date', path: '/end' }],
       },
     ])
     expect(db.calls).toStrictEqual([])
+  })
+
+  it('logs a failed read and answers a generic error', async () => {
+    expect.hasAssertions()
+
+    const { events, logger } = recordingLogger()
+    const db = pageDb().on(countHeld, () => {
+      throw new Error('relation "transactions" does not exist')
+    })
+
+    await expect(
+      getAnalyticsAction({ context: testContext(SU, { db, logger }), data: {} }),
+    ).rejects.toThrow(new Error('Internal Server Error'))
+    expect(events).toMatchObject([{ event: 'analytics.read.failed', op: PAGE_QUERIES.join(' + ') }])
+  })
+})
+
+async function sqlOf(query: Parameters<ReturnType<typeof createDriverDb>['run']>[0]) {
+  const statements: string[] = []
+  const db = createDriverDb((sql) => {
+    statements.push(sql.replaceAll(/\s+/gu, ' '))
+    return Promise.resolve({ rows: [] })
+  })
+  await db.run(query)
+  return statements.join('\n')
+}
+
+describe('the analytics statements', () => {
+  it('group by exactly the Kuala Lumpur expressions they select', async () => {
+    expect.hasAssertions()
+
+    const local = `("transactions"."created_at" AT TIME ZONE 'Asia/Kuala_Lumpur')`
+    const weekday = `EXTRACT(ISODOW FROM ${local})::integer`
+    const block = `(EXTRACT(HOUR FROM ${local})::integer / 3)`
+
+    await expect(sqlOf(givingHeatmap(windows.period))).resolves.toContain(
+      `group by ${weekday}, ${block}`,
+    )
+    await expect(sqlOf(monthlyByFund(windows.period))).resolves.toContain(
+      `group by to_char(${local}, 'YYYY-MM'), "funds"."name"`,
+    )
+  })
+
+  it('bands gift sizes with width_bucket over the bounds it is given', async () => {
+    expect.hasAssertions()
+
+    const bucket = `width_bucket("transactions"."amount", ARRAY[5000, 10000, 20000, 50000, 100000]::integer[])`
+
+    await expect(sqlOf(giftSizeBands(windows.period, GIFT_BAND_BOUNDS))).resolves.toContain(
+      `group by ${bucket}`,
+    )
+    const fractional = await createDriverDb(() => Promise.resolve({ rows: [] })).run(
+      giftSizeBands(windows.period, [1.5]),
+    )
+    expect(errValue(fractional).cause).toStrictEqual(
+      new Error('gift band bounds must be integers: 1.5'),
+    )
+  })
+
+  it('groups donors by id without selecting it', async () => {
+    expect.hasAssertions()
+
+    const sql = await sqlOf(donorWindows(windows))
+    const selected = sql.slice(0, sql.indexOf(' from '))
+
+    expect(selected).not.toContain('user_id')
+    expect(sql).toContain('group by "transactions"."user_id"')
+  })
+
+  it("reads each transaction's newest payments row", async () => {
+    expect.hasAssertions()
+
+    await expect(sqlOf(paymentMethodOutcomes(windows.period))).resolves.toContain(
+      'left join lateral (select "payment_method" from "payments" where "payments"."transaction_id" = "transactions"."id" order by "payments"."id" desc limit $',
+    )
   })
 })

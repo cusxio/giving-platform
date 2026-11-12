@@ -24,11 +24,6 @@ export function TableCell(props: HTMLAttributes<HTMLTableCellElement>) {
   )
 }
 
-export function TableFooter(props: HTMLAttributes<HTMLTableSectionElement>) {
-  const { className, ...rest } = props
-  return <tfoot className={cx('border border-border', className)} {...rest} />
-}
-
 export function TableHead(props: HTMLAttributes<HTMLTableCellElement>) {
   const { className, ...rest } = props
   return (
