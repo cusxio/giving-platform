@@ -25,7 +25,6 @@ interface YearChartProps {
   lastYear: readonly number[] | null
   privacyMode: boolean
   thisYear: readonly number[]
-  /** Today's day index, when the year is the current one. */
   today: number | null
   year: number
 }
@@ -33,7 +32,6 @@ interface YearChartProps {
 const toRows = (totals: readonly number[], year: number): DayTotal[] =>
   totals.map((total, day) => ({ day, total, year }))
 
-/** Running totals of a year against last year by the same date, on one day axis. */
 export function YearChart(props: YearChartProps) {
   const { lastYear, privacyMode, thisYear, today, year } = props
 
@@ -51,21 +49,30 @@ export function YearChart(props: YearChartProps) {
     return defineChart({
       focus: 'group-x',
       marks: [
-        areaY(current, { fill: THIS_YEAR, fillOpacity: 0.08, x: 'day', y1: 0, y2: 'total' }),
+        areaY(current, {
+          fill: THIS_YEAR,
+          fillOpacity: 0.08,
+          x: 'day',
+          y1: 0,
+          y2: 'total',
+          z: 'year',
+        }),
         lineY(previous, {
           stroke: LAST_YEAR,
           strokeDasharray: '5 5',
           strokeWidth: 1.5,
           x: 'day',
           y: 'total',
+          z: 'year',
         }),
-        lineY(current, { stroke: THIS_YEAR, strokeWidth: 2.5, x: 'day', y: 'total' }),
+        lineY(current, { stroke: THIS_YEAR, strokeWidth: 2.5, x: 'day', y: 'total', z: 'year' }),
         ruleX(today === null ? [] : [today], { stroke: LAST_YEAR, strokeDasharray: '2 3' }),
         dot(today === null || latest === undefined ? [] : [latest], {
           fill: THIS_YEAR,
           r: 4,
           x: 'day',
           y: 'total',
+          z: 'year',
         }),
       ],
       scales: {
@@ -87,11 +94,9 @@ export function YearChart(props: YearChartProps) {
       },
       tooltip: {
         content: (points) => {
-          // The area, line and dot of one year each answer for the same day.
-          const rows = [...new Map(points.map((point) => [point.datum.year, point])).values()]
-          const day = rows[0]?.datum.day ?? 0
+          const day = points[0]?.datum.day ?? 0
           return {
-            rows: rows.map((point) => ({
+            rows: points.map((point) => ({
               color: point.datum.year === year ? THIS_YEAR : LAST_YEAR,
               label: String(point.datum.year),
               value: money(point.datum.total, privacyMode),
@@ -124,7 +129,6 @@ interface YearsChartProps {
   years: readonly { total: number; year: number }[]
 }
 
-/** Each year's total, the latest year highlighted, labelled directly above its bar. */
 export function YearsChart(props: YearsChartProps) {
   const { privacyMode, years } = props
 
