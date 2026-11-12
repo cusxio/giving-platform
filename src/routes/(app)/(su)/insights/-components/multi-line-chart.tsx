@@ -1,14 +1,11 @@
-import { useCallback, useMemo } from 'react'
-import type { TooltipContentProps } from 'recharts'
-import { Line, LineChart, Tooltip } from 'recharts'
+import { defineChart, lineY } from '@tanstack/charts'
+import { Chart } from '@tanstack/charts/react'
+import { scaleLinear } from '@tanstack/charts/scales/linear'
+import { tooltip } from '@tanstack/charts/tooltip'
+import { useMemo } from 'react'
 
 import { ChartContainer, ChartTitle } from '#/components/ui/chart'
 import { createCurrencyFormatter } from '#/core/formatters'
-import { cx } from '#/styles/cx'
-
-import { CartesianGrid } from '../../../-components/charts/cartesian-grid'
-import { XAxis } from '../../../-components/charts/x-axis'
-import { YAXis } from '../../../-components/charts/y-axis'
 
 interface Data {
   cumulativeAmount: number
@@ -22,159 +19,86 @@ interface MultiLineChartProps {
   metric: 'cumulative' | 'weekly'
 }
 
-type WeeklyTooltipPayload = readonly { payload: WeeklyData }[]
+const YEAR_COLORS = [
+  'var(--color-chart-1)',
+  'var(--color-chart-2)',
+  'var(--color-chart-3)',
+  'var(--color-chart-5)',
+  'var(--color-chart-4)',
+]
 
-interface WeeklyData {
-  [year: string]: number
-  week: number
-}
+const compactCurrency = createCurrencyFormatter({ notation: 'compact' })
+const currency = createCurrencyFormatter({ showSymbol: true })
 
 export function MultiLineChart(props: MultiLineChartProps) {
   const { data, metric } = props
-  const metricKey: 'cumulativeAmount' | 'weeklyAmount' =
-    metric === 'weekly' ? 'weeklyAmount' : 'cumulativeAmount'
+  const metricKey = metric === 'weekly' ? 'weeklyAmount' : 'cumulativeAmount'
   const chartTitle = metric === 'weekly' ? 'Weekly Transactions' : 'Cumulative Weekly Transactions'
 
   const years = useMemo(() => [...new Set(data.map((d) => d.year))], [data])
-
-  const chartData = useMemo(() => convertToWeeklyFormat(data, metricKey), [data, metricKey])
-
-  const yTickFormatter = useCallback(
-    (value: number) => createCurrencyFormatter({ notation: 'compact' }).format(value),
-    [],
+  const colors = useMemo(
+    () => years.map((_, index) => YEAR_COLORS[index % YEAR_COLORS.length] ?? 'currentColor'),
+    [years],
   )
 
-  const xTickFormatter = useCallback((value: string) => Number(value).toString(), [])
+  const definition = useMemo(
+    () =>
+      defineChart({
+        color: { domain: years, range: colors },
+        focus: 'group-x',
+        marks: [
+          lineY(data, {
+            color: 'year',
+            strokeWidth: 1.5,
+            x: 'week',
+            y: (row) => row[metricKey],
+            z: 'year',
+          }),
+        ],
+        scales: {
+          x: { axis: { ticks: { format: String } }, scale: scaleLinear },
+          y: {
+            axis: { ticks: { format: (amount) => compactCurrency.format(amount) } },
+            grid: true,
+            nice: true,
+            scale: scaleLinear,
+          },
+        },
+        tooltip: {
+          content: (points) => ({
+            rows: points.map((point) => ({
+              color: point.color,
+              label: String(point.datum.year),
+              value: currency.format(point.datum[metricKey]),
+            })),
+            title: `Week ${points[0]?.datum.week ?? ''}`,
+          }),
+          use: tooltip,
+        },
+      }),
+    [colors, data, metricKey, years],
+  )
 
   return (
     <ChartContainer>
       <ChartTitle>{chartTitle}</ChartTitle>
 
       <div className="mt-4 flex items-center justify-center gap-4">
-        {years.map((year) => (
+        {years.map((year, index) => (
           <div className="flex items-center gap-x-2" key={year}>
-            <span className={cx('h-3 w-3', 'bg-current', getColorForYear(year, years))} />
+            <span className="h-3 w-3" style={{ backgroundColor: colors[index] }} />
             <span className="text-sm text-fg-subtle">{year}</span>
           </div>
         ))}
       </div>
 
-      <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 0, top: 0 }} responsive>
-        <CartesianGrid />
-
-        <Tooltip
-          content={(tooltipProps) => <TooltipContent {...tooltipProps} years={years} />}
-          cursor={false}
-          useTranslate3d
-        />
-
-        <XAxis dataKey="week" interval="equidistantPreserveStart" tickFormatter={xTickFormatter} />
-        <YAXis tickFormatter={yTickFormatter} />
-
-        {years.map((year) => {
-          const className = getColorForYear(year, years)
-          return (
-            <Line
-              activeDot={{ className, fill: 'currentColor', strokeWidth: 0 }}
-              className={className}
-              dataKey={year}
-              dot={false}
-              key={year}
-              stroke="currentColor"
-              strokeWidth={1.5}
-              type="monotoneX"
-            />
-          )
-        })}
-      </LineChart>
+      <Chart
+        ariaLabel={chartTitle}
+        aspectRatio={16 / 9}
+        className="px-4 pt-4 pb-2"
+        definition={definition}
+        initialWidth={480}
+      />
     </ChartContainer>
-  )
-}
-
-function convertToWeeklyFormat(
-  data: Data[],
-  metricKey: 'cumulativeAmount' | 'weeklyAmount',
-): WeeklyData[] {
-  // Group data by week
-  const weekMap = new Map<number, Map<number, number>>()
-
-  for (const item of data) {
-    if (!weekMap.has(item.week)) {
-      weekMap.set(item.week, new Map())
-    }
-    weekMap.get(item.week)?.set(item.year, item[metricKey])
-  }
-
-  // Convert to desired format
-  const result: WeeklyData[] = []
-
-  for (const [week, yearData] of weekMap.entries()) {
-    const weekEntry: WeeklyData = { week }
-    for (const [year, amount] of yearData.entries()) {
-      weekEntry[year] = amount
-    }
-    const insertIndex = result.findIndex((entry) => entry.week > week)
-    if (insertIndex === -1) {
-      result.push(weekEntry)
-    } else {
-      result.splice(insertIndex, 0, weekEntry)
-    }
-  }
-
-  return result
-}
-
-function getColorForYear(year: number | string, years: (number | string)[]) {
-  const chartColors = [
-    'text-chart-1',
-    'text-chart-2',
-    'text-chart-3',
-    'text-chart-5',
-    'text-chart-4',
-  ]
-  const index = years.indexOf(year)
-  return chartColors[index % chartColors.length]
-}
-
-function TooltipContent(props: TooltipContentProps & { years: number[] }) {
-  const payload = props.payload as WeeklyTooltipPayload
-
-  const current = payload[0]?.payload
-  const years = Object.keys(current ?? {}).filter((key) => key !== 'week')
-
-  const currentcyFormatter = useCallback(
-    (value: number) => createCurrencyFormatter({ showSymbol: true }).format(value),
-    [],
-  )
-
-  return (
-    <div className="min-w-40 border border-border bg-base-1">
-      {current && (
-        <>
-          <div className="border-b border-border px-4 py-2">
-            <span className="text-sm">Week {current.week}</span>
-          </div>
-          <div className="grid-y-1 grid px-4 py-2">
-            {years.map((year) => (
-              <div className="flex items-center gap-x-2" key={year}>
-                <span
-                  className={cx(
-                    'h-3 w-3',
-                    'bg-current',
-                    getColorForYear(Number(year), props.years),
-                  )}
-                />
-                <div className="flex min-w-0 flex-1 gap-x-2">
-                  <span className="text-sm text-fg-muted tabular-nums">{year}</span>
-                  <span className="font-mono text-sm">
-                    {currentcyFormatter(Number(current[year]))}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
   )
 }

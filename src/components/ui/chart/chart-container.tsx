@@ -21,6 +21,10 @@ export function ChartContainer(props: ChartContainerProps) {
         '**:[[class*="recharts-cartesian-grid"]]:outline-hidden',
         '**:[[id^="recharts-zindex"]]:outline-hidden',
         '[&_.recharts-cartesian-axis-tick-value]:text-xs [&_.recharts-cartesian-axis-tick-value]:text-fg-subtle [&_.recharts-cartesian-axis-tick-value]:select-none',
+        '[&_.ts-chart-host]:text-fg-subtle [&_.ts-chart-host]:select-none',
+        '[&_.ts-chart:focus:not(:focus-visible)]:outline-none',
+        '[--ts-chart-tooltip-background:var(--color-base-1)] [--ts-chart-tooltip-color:var(--color-fg-default)]',
+        '[--ts-chart-tooltip-border-radius:0] [--ts-chart-tooltip-border:1px_solid_var(--color-border)] [--ts-chart-tooltip-shadow:none]',
         className,
       )}
       {...rest}
