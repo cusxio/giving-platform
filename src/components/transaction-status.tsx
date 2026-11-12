@@ -15,19 +15,30 @@ export const transactionStatusStyles: Record<Status, string> = {
   success: cx('bg-base-success text-fg-success'),
 }
 
+const STATUS_LABELS: Record<Status, { hint?: string; label: string }> = {
+  cancelled: { label: 'Cancelled' },
+  failed: { label: 'Failed' },
+  held: { label: 'Held' },
+  pending: { hint: 'Waiting for the payment to be confirmed', label: 'Processing' },
+  refunded: { label: 'Refunded' },
+  success: { label: 'Success' },
+}
+
 export function TransactionStatus(props: TransactionStatusProps) {
   const { status, className } = props
+  const { hint, label } = STATUS_LABELS[status]
   return (
     <span
       className={cx(
         'inline-flex items-center justify-center',
         'h-6 rounded-full px-3 select-none',
-        'text-sm capitalize',
+        'text-sm',
         transactionStatusStyles[status],
         className,
       )}
+      title={hint}
     >
-      {status}
+      {label}
     </span>
   )
 }

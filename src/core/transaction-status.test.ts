@@ -79,10 +79,10 @@ describe('the transaction status machine', () => {
     expect(sourcesOf('pending')).toStrictEqual([])
   })
 
-  it('lists success, failed, cancelled and refunded in history, not pending or held, and counts only success', () => {
+  it('lists pending, success, failed, cancelled and refunded in history, not held, and counts only success', () => {
     expect.hasAssertions()
 
-    expect(LISTED_STATUSES).toStrictEqual(['success', 'failed', 'cancelled', 'refunded'])
+    expect(LISTED_STATUSES).toStrictEqual(['pending', 'success', 'failed', 'cancelled', 'refunded'])
     expect(COUNTED_STATUS).toBe('success')
   })
 })
