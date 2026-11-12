@@ -1,6 +1,6 @@
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 
-const currency = createCurrencyFormatter({ decimal: 'always', showSymbol: true })
+const currency = createCurrencyFormatter({ showSymbol: true })
 
 /** Ringgit with its symbol, or the symbol and a dash in privacy mode. */
 export const money = (amount: number, privacyMode: boolean) => currency.format(amount, privacyMode)
