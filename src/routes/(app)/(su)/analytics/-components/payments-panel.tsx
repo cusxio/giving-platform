@@ -15,7 +15,6 @@ const METHOD_NAMES: Record<string, string> = {
 const methodName = (method: string | null) =>
   method === null ? 'Not recorded' : (METHOD_NAMES[method] ?? method)
 
-/** Below this paid share a method's rate reads as a warning. */
 const LOW_PAID_SHARE = 0.9
 
 export function PaymentsPanel(props: { payments: Analytics['payments'] }) {

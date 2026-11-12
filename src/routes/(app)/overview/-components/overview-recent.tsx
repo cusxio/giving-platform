@@ -58,9 +58,8 @@ export function OverviewRecent(props: OverviewRecentProps) {
                 </TableCell>
                 <TableCell>
                   <span className="flex flex-wrap gap-x-3 gap-y-1">
-                    {gift.funds.map((fundName, index) => (
-                      // oxlint-disable-next-line react/no-array-index-key -- a gift can name a fund twice
-                      <FundName fundName={fundName} key={index} />
+                    {gift.funds.map((fundName) => (
+                      <FundName fundName={fundName} key={fundName} />
                     ))}
                   </span>
                 </TableCell>

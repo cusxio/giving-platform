@@ -16,10 +16,8 @@ import type { TransactionStatus } from '#/core/transaction-status'
 /** A Kuala Lumpur calendar year, or every year. */
 export type OverviewYear = 'all' | number
 
-/** A gift that failed this recently, with nothing tried after it, gets a notice. */
 const FAILED_GIFT_NOTICE_DAYS = 7
 
-/** One fund row of a successful gift, ordered by gift date then item. */
 interface GiftItemRow {
   readonly amount: number
   readonly createdAt: Date
@@ -28,7 +26,6 @@ interface GiftItemRow {
   readonly transactionId: string
 }
 
-/** One fund row of the donor's newest transaction among some statuses, in item order. */
 interface NewestItemRow {
   readonly amount: number
   readonly createdAt: Date
@@ -58,7 +55,6 @@ interface Gift {
   readonly items: readonly { readonly amount: number; readonly fundName: string }[]
 }
 
-/** The give page's search params: ringgit per fund. */
 type GiveSearch = Partial<Record<Fund, number>>
 
 export function getYearDateRange(year: OverviewYear) {
@@ -81,7 +77,6 @@ export function scopeFor<Donor>(donor: Donor, year: OverviewYear) {
   return { donor, endExclusive: endDateUTCExclusive, start: startDateUTC }
 }
 
-/** A year's scope widened to start a year earlier, so the hero can compare with last year. */
 export function giftScopeFor<Donor>(donor: Donor, year: OverviewYear) {
   const scope = scopeFor(donor, year)
   return year === 'all' ? scope : { ...scope, start: getYearDateRange(year - 1).startDateUTC }
@@ -108,7 +103,6 @@ function dayIndex(date: Date, year: number) {
   return differenceInDays(startOfDay(moved), startOfYear(moved))
 }
 
-/** Running totals in ringgit at the end of each of `length` days of `year`. */
 function runningTotals(gifts: readonly Gift[], year: number, length: number) {
   const perDay = Array.from({ length }, () => 0)
   for (const gift of gifts) {
@@ -121,7 +115,6 @@ function runningTotals(gifts: readonly Gift[], year: number, length: number) {
   return perDay.map((cents) => centsToRinggit((total += cents)))
 }
 
-/** Gifts in the rows' order, which is oldest first. */
 function groupGifts(rows: readonly GiftItemRow[]): Gift[] {
   const byId = new Map<string, Gift>()
   for (const row of rows) {
@@ -137,7 +130,6 @@ function groupGifts(rows: readonly GiftItemRow[]): Gift[] {
   return [...byId.values()]
 }
 
-/** The middle gift, or the mean of the two middle gifts, in cents rounded to a cent. */
 export function median(amounts: readonly number[]) {
   // oxlint-disable-next-line unicorn/no-array-sort -- Avoid toSorted until the runtime lib supports it.
   const sorted = [...amounts].sort((a, b) => a - b)
@@ -170,16 +162,19 @@ function yearHero(gifts: readonly Gift[], year: number, now: TZDate) {
 }
 
 function allHero(gifts: readonly Gift[], now: TZDate) {
-  const [first] = gifts
+  let earliest: Gift | undefined
   const totals = new Map<number, number>()
   for (const gift of gifts) {
     const year = klYear(gift.createdAt)
     totals.set(year, (totals.get(year) ?? 0) + gift.amount)
+    if (earliest === undefined || gift.createdAt < earliest.createdAt) {
+      earliest = gift
+    }
   }
-  const firstYear = first ? klYear(first.createdAt) : now.getFullYear()
+  const firstYear = earliest ? klYear(earliest.createdAt) : now.getFullYear()
   return {
     kind: 'all' as const,
-    since: first?.createdAt ?? null,
+    since: earliest?.createdAt ?? null,
     total: centsToRinggit(gifts.reduce((sum, gift) => sum + gift.amount, 0)),
     years: Array.from({ length: now.getFullYear() - firstYear + 1 }, (_, i) => ({
       total: centsToRinggit(totals.get(firstYear + i) ?? 0),
@@ -188,7 +183,6 @@ function allHero(gifts: readonly Gift[], now: TZDate) {
   }
 }
 
-/** Amount per fund, largest first, with each fund's share of the whole. */
 function fundShares(gifts: readonly Gift[]) {
   const byFund = new Map<string, number>()
   for (const { items } of gifts) {
@@ -241,7 +235,6 @@ function rhythm(gifts: readonly Gift[], year: number, now: TZDate) {
   }
 }
 
-/** A gift to repeat: its fund rows, and the give page search that prefills them. */
 function repeatable(rows: readonly NewestItemRow[]) {
   const [first] = rows
   if (first === undefined) {
@@ -280,7 +273,6 @@ function failedGift(rows: readonly NewestItemRow[], now: TZDate) {
 const yearMonth = (date: TZDate) =>
   `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}`
 
-/** The first saved card that expires this month or next. */
 function expiringCard(cards: readonly CardRow[], now: TZDate) {
   const nextMonth = new TZDate(now.getFullYear(), now.getMonth() + 1, 1, clientTz)
   const window = new Set([yearMonth(now), yearMonth(nextMonth)])
@@ -296,16 +288,12 @@ function expiringCard(cards: readonly CardRow[], now: TZDate) {
 
 export interface OverviewRows {
   readonly cards: readonly CardRow[]
-  /** Successful gifts' fund rows from `giftScopeFor`. */
   readonly giftItems: readonly GiftItemRow[]
-  /** The fund rows of the donor's newest transaction, whatever its status. */
   readonly newestAny: readonly NewestItemRow[]
-  /** The fund rows of the donor's newest successful transaction. */
   readonly newestSuccess: readonly NewestItemRow[]
   readonly recent: readonly RecentRow[]
 }
 
-/** Amounts arrive in cents and leave in ringgit. `now` fixes today, so tests can pin it. */
 export function summarizeOverview(year: OverviewYear, rows: OverviewRows, now: Date) {
   const today = new TZDate(now, clientTz)
   const gifts = groupGifts(rows.giftItems)

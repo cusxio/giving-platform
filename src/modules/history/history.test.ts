@@ -87,7 +87,6 @@ const savedCard = {
   updatedAt: row.createdAt,
   userId: 2,
 }
-/** The newest gift failed; the newest success is `row`. */
 const newestItem = (statuses: readonly TransactionStatus[]) => {
   const failed = statuses.length > 1
   return [
@@ -113,7 +112,6 @@ const overviewQueries = [
   newestGiftItems.queryName,
   unexpiredSavedCards.queryName,
 ]
-/** 1 March 2025 in Kuala Lumpur. */
 const MARCH_1 = new Date('2025-03-01T04:00:00Z')
 
 const pageDb = () =>

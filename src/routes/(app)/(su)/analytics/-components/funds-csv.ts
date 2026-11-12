@@ -13,7 +13,6 @@ const COLUMNS = [
 const field = (value: string) =>
   /[",\r\n]/u.test(value) ? `"${value.replaceAll('"', '""')}"` : value
 
-/** The funds table as CSV: aggregates only, like the page. */
 export function fundsCsv(funds: Analytics['funds']): string {
   const lines = [
     COLUMNS.map(([header]) => header),

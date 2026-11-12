@@ -6,14 +6,12 @@ export interface Range {
   readonly start: string
 }
 
-/** Instants, from `start` up to but not including `end`. */
 export interface Span {
   readonly end: Date
   readonly start: Date
 }
 
 export interface Period {
-  /** The same days one year earlier. */
   readonly compare: Range
   readonly period: Range
 }
@@ -43,7 +41,6 @@ function shiftDays(iso: string, days: number): string {
   return isoOfUtc(new Date(Date.UTC(year, month - 1, day + days)))
 }
 
-/** 29 February lands on 28 February in a year without one. */
 export function shiftYears(iso: string, years: number): string {
   const { day, month, year } = partsOf(iso)
   const lastDay = new Date(Date.UTC(year + years, month, 0)).getUTCDate()
@@ -52,11 +49,9 @@ export function shiftYears(iso: string, years: number): string {
 
 export const yearOf = (iso: string) => partsOf(iso).year
 
-/** The Kuala Lumpur day an instant falls on. */
 export const isoDateOf = (instant: Date) =>
   new Intl.DateTimeFormat('en-CA', { timeZone: clientTz }).format(instant)
 
-/** The instant a Kuala Lumpur day starts. */
 const dayStart = (iso: string) => new Date(startOfDay(new TZDate(iso, clientTz)))
 
 export const spanOf = (range: Range): Span => ({
@@ -64,10 +59,6 @@ export const spanOf = (range: Range): Span => ({
   start: dayStart(range.start),
 })
 
-/**
- * The period a search asks for: this year so far by default. Its end is never after today, so it
- * always compares like with like.
- */
 export function resolvePeriod(
   search: { readonly end?: string; readonly start?: string },
   today: string,
@@ -81,28 +72,21 @@ export function resolvePeriod(
   }
 }
 
-/** Weeks counted from 1 January, so the first days of a year never land in the last year's week. */
 export function weekOfYear(iso: string): number {
   const { day, month, year } = partsOf(iso)
   const dayOfYear = (Date.UTC(year, month - 1, day) - Date.UTC(year, 0, 1)) / 86_400_000
   return Math.floor(dayOfYear / 7) + 1
 }
 
-/** Every span the page reads, as instants. */
 export interface Windows {
   readonly compare: Span
-  /** The year up to the period's last day, which a donor must give in to have "given again". */
   readonly last12Months: Span
-  /** The year before that, whose donors the gave-again rate follows. */
   readonly months12to24: Span
-  /** The year before that, for last year's gave-again rate. */
   readonly months24to36: Span
   readonly period: Span
-  /** The year before the period starts, which tells a returning donor from one who came back. */
   readonly yearBeforePeriod: Span
 }
 
-/** The year that ends `yearsBack` years before `end`, such as 11 Nov 2024 to 10 Nov 2025. */
 export const trailingYear = (end: string, yearsBack: number): Range => ({
   end: shiftYears(end, -yearsBack),
   start: shiftDays(shiftYears(end, -yearsBack - 1), 1),

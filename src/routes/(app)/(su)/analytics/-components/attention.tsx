@@ -5,7 +5,6 @@ import { Swatch } from './panel'
 
 const payments = (n: number) => `${count.format(n)} ${n === 1 ? 'payment is' : 'payments are'}`
 
-/** What an operator must resolve at eGHL. Nothing shows when nothing waits. */
 export function Attention(props: { attention: Analytics['attention'] }) {
   const { held, stalePending } = props.attention
   const notices = [

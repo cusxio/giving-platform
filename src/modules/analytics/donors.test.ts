@@ -4,8 +4,6 @@ import type { DonorRow } from './donors'
 import { classifyDonors } from './donors'
 import { resolvePeriod, windowsOf } from './period'
 
-// 1 Jan to 10 Nov 2026, against 1 Jan to 10 Nov 2025. The gave-again rate follows the donors of
-// 11 Nov 2024 to 10 Nov 2025, and last year's rate those of 11 Nov 2023 to 10 Nov 2024.
 const windows = windowsOf(resolvePeriod({}, '2026-11-10'))
 
 const day = (iso: string) => new Date(`${iso}T00:00:00+08:00`)
@@ -25,10 +23,9 @@ function donor(row: Partial<Omit<DonorRow, 'firstGiftAt'>> & { first: string }):
   }
 }
 
-/** Gave once in 2019 and never since: gives every test three years of history. */
-const LONG_GONE = donor({ first: '2019-05-01' })
+const THREE_YEARS_OF_HISTORY = donor({ first: '2019-05-01' })
 
-const classify = (...rows: DonorRow[]) => classifyDonors([LONG_GONE, ...rows], windows)
+const classify = (...rows: DonorRow[]) => classifyDonors([THREE_YEARS_OF_HISTORY, ...rows], windows)
 
 describe('who gave this period', () => {
   it('splits donors into new, returning, and back after a gap', () => {

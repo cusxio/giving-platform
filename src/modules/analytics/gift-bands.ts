@@ -1,6 +1,5 @@
 import { centsToRinggit } from '#/core/money'
 
-/** Gift sizes, each from its lower bound in cents up to the next band's. */
 const GIFT_BANDS = [
   { band: 'under-50', from: 0 },
   { band: '50-99', from: 5000 },
@@ -21,7 +20,6 @@ interface BucketRow {
   readonly gifts: number
 }
 
-/** Every band in order, in ringgit, with zeros for a band no gift fell in. */
 export function giftSizes(period: readonly BucketRow[], compare: readonly BucketRow[]) {
   return GIFT_BANDS.map(({ band }, bucket) => {
     const now = period.find((row) => row.bucket === bucket)

@@ -8,7 +8,6 @@ import type { Analytics } from '#/modules/analytics'
 
 import { BLOCKS, WEEKDAYS, count } from './format'
 
-/** Five steps from none to the busiest block, so colour reads as "fewer" to "more". */
 const LEVELS = [0, 1, 2, 3, 4]
 const LEVEL_COLORS = [
   'var(--color-elevated)',

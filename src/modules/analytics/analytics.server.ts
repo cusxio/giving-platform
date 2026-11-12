@@ -30,7 +30,6 @@ const analyticsInput = parseWith(
 )
 export type AnalyticsInput = Parsed<typeof analyticsInput>
 
-/** Reads the whole page in one round trip. `today` is the Kuala Lumpur day it runs on. */
 export async function loadAnalytics(deps: Pick<Deps, 'db'>, input: AnalyticsInput, today: string) {
   const period = resolvePeriod(input, today)
   const windows = windowsOf(period)

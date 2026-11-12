@@ -129,7 +129,6 @@ interface BucketRow {
   readonly gifts: number
 }
 
-/** What the page's one batch read. Amounts are cents. */
 export interface AnalyticsReads {
   readonly bands: readonly BucketRow[]
   readonly compareBands: readonly BucketRow[]
@@ -155,7 +154,6 @@ export interface AnalyticsReads {
   readonly totals: TotalsRow | null
 }
 
-/** The pace chart draws the period's last year up to its last day, and the two whole years before. */
 export const paceRange = (period: Range): Range => ({
   end: period.end,
   start: `${yearOf(period.end) - 2}-01-01`,

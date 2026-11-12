@@ -100,10 +100,6 @@ function RouteComponent() {
   const changePeriod: DateRangePickerProps['onChange'] = useCallback(
     (next) => {
       setRange(next)
-      // A first click picks only the start. Wait for the end, or for a cleared range.
-      if (next?.from !== undefined && next.to === undefined) {
-        return
-      }
       navigate({
         search: {
           end: next?.to ? toIsoDate(next.to) : undefined,

@@ -4,8 +4,7 @@ import type { Analytics, Rate } from '#/modules/analytics'
 import { count, percent, rangeText, rateText, shareText } from './format'
 import { Note, Panel, Swatch } from './panel'
 
-/** Average gave-again rates of US nonprofits, the benchmark the page draws as a tick. */
-const BENCHMARK = { firstTime: 0.19, repeat: 0.59 }
+const US_GAVE_AGAIN_AVERAGE = { firstTime: 0.19, repeat: 0.59 }
 
 interface Part {
   color: string
@@ -111,13 +110,13 @@ export function DonorsPanel(props: { donors: Analytics['donors'] }) {
 
         <Column title="Gave again within 12 months">
           <GaveAgainRow
-            benchmark={BENCHMARK.firstTime}
+            benchmark={US_GAVE_AGAIN_AVERAGE.firstTime}
             label="First-time givers"
             note="Their first gift was in the window."
             rate={gaveAgain.firstTime}
           />
           <GaveAgainRow
-            benchmark={BENCHMARK.repeat}
+            benchmark={US_GAVE_AGAIN_AVERAGE.repeat}
             label="Repeat givers"
             note="They had given before the window too."
             rate={gaveAgain.repeat}

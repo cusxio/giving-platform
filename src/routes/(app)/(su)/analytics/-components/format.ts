@@ -1,8 +1,8 @@
 import { FUND_CHART_COLOR_MAP } from '#/core/brand/funds'
+import { TZDate, clientTz } from '#/core/date'
 import { createCurrencyFormatter, createDateFormatter } from '#/core/formatters'
 import type { Range, Rate } from '#/modules/analytics'
 
-/** Below this many donors a share reads as a count, so 2 of 3 never reads as 67%. */
 const MIN_FOR_PERCENT = 10
 
 const NO_VALUE = '—'
@@ -13,17 +13,13 @@ export const count = new Intl.NumberFormat('en-MY')
 
 export const percent = (share: number) => `${Math.round(share * 100)}%`
 
-/** A share of donors, or the plain count when there are too few for a percentage to mean much. */
 export function shareText(part: number, whole: number) {
   return whole >= MIN_FOR_PERCENT ? percent(part / whole) : null
 }
 
 export interface RateText {
-  /** The headline: a percentage, a count such as "2 of 3", or a dash. */
   readonly main: string
-  /** The counts behind a percentage, or why there is no rate. */
   readonly detail: string
-  /** From 0 to 1, for a meter. */
   readonly share: number
 }
 
@@ -40,7 +36,6 @@ export function rateText(rate: Rate | null): RateText {
 
 export type Tone = 'down' | 'flat' | 'up'
 
-/** How a figure moved against last year, such as "▲ 8.2%". */
 export function changeText(value: number, prior: number): { text: string; tone: Tone } {
   if (prior === 0) {
     return value === 0
@@ -58,7 +53,6 @@ export function changeText(value: number, prior: number): { text: string; tone: 
   }
 }
 
-/** How a rate moved against last year, in percentage points. */
 export function rateChangeText(
   value: Rate | null,
   prior: Rate | null,
@@ -90,10 +84,14 @@ export const TONE_CLASS: Record<Tone, string> = {
 const dayMonth = createDateFormatter({ day: 'numeric', month: 'short' })
 const dayMonthYear = createDateFormatter({ day: 'numeric', month: 'short', year: 'numeric' })
 
-/** Noon UTC is the same calendar day in Kuala Lumpur. */
-const dateOf = (iso: string) => new Date(`${iso}T12:00:00Z`)
+const dateOf = (iso: string) =>
+  new TZDate(
+    Number(iso.slice(0, 4)),
+    Number(iso.slice(5, 7)) - 1,
+    Number(iso.slice(8, 10)),
+    clientTz,
+  )
 
-/** Such as "1 Jan to 10 Nov 2026", or "1 Dec 2025 to 31 Jan 2026" across a year. */
 export function rangeText(range: Range) {
   const start = dateOf(range.start)
   const end = dateOf(range.end)
@@ -107,11 +105,9 @@ export function rangeText(range: Range) {
 const monthShort = createDateFormatter({ month: 'short' })
 const monthYear = createDateFormatter({ month: 'short', year: '2-digit' })
 
-/** A `YYYY-MM` month, with its year only when the period spans more than one. */
 export const monthText = (month: string, withYear: boolean) =>
   (withYear ? monthYear : monthShort).format(dateOf(`${month}-15`))
 
-/** Every `YYYY-MM` from the period's first month to its last. */
 export function monthsOf(range: Range): string[] {
   const months: string[] = []
   let year = Number(range.start.slice(0, 4))
@@ -131,15 +127,12 @@ export function monthsOf(range: Range): string[] {
   }
 }
 
-/** Weekday 1 to 7, Monday first, as the server counts them. */
 export const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-/** Three-hour blocks 0 to 7, by the hour each starts. */
 export const BLOCKS = ['12am', '3am', '6am', '9am', '12pm', '3pm', '6pm', '9pm']
 
 const hasColor = (key: string): key is keyof typeof FUND_CHART_COLOR_MAP =>
   Object.hasOwn(FUND_CHART_COLOR_MAP, key)
 
-/** The brand's chart colour for a fund, matched by name, as a CSS colour. */
 export function fundColor(fundName: string): string {
   const key = fundName.toLowerCase()
   const token = hasColor(key) ? FUND_CHART_COLOR_MAP[key] : 'text-chart-2'

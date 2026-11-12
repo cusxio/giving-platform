@@ -220,7 +220,6 @@ describe('the overview loader', () => {
   })
 })
 
-/** Every page section that shows an amount and needs no router. */
 function renderAmounts(privacyMode: boolean) {
   return [
     createElement(OverviewHero, { hero: yearHero, privacyMode }),
@@ -234,7 +233,6 @@ function renderAmounts(privacyMode: boolean) {
 
 const svgText = (html: string) =>
   [...html.matchAll(/<text[^>]*>(?<label>[^<]*)<\/text>/gu)].map((m) => m.groups?.label ?? '')
-/** What a reader sees: the markup's text, without attributes such as SVG coordinates. */
 const visibleText = (html: string) => html.replaceAll(/<[^>]*>/gu, ' ').replaceAll(/\s+/gu, ' ')
 
 describe('the overview charts', () => {

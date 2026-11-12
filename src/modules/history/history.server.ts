@@ -27,7 +27,6 @@ import type { OverviewYear } from './overview'
 import { giftScopeFor, scopeFor, summarizeOverview } from './overview'
 import { PAGE_SIZE, toTransactionsPage } from './transactions-page'
 
-/** One neon-http round trip for every read, then pure aggregation as of `now`. */
 export async function loadOverview(
   deps: Pick<Deps, 'db'>,
   input: { readonly donor: Donor; readonly now: Date; readonly year: OverviewYear },

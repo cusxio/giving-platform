@@ -33,7 +33,6 @@ function inScope(scope: DonorScope) {
   ]
 }
 
-/** The scope's newest listed transactions, each with its fund names in item order. */
 export const recentTransactions = defineQuery(
   'history.recentTransactions',
   (db, scope: DonorScope) =>
@@ -57,7 +56,6 @@ export const recentTransactions = defineQuery(
   rows,
 )
 
-/** The fund rows of the scope's successful transactions, oldest first, then in item order. */
 export const successGiftItems = defineQuery(
   'history.successGiftItems',
   (db, scope: DonorScope) =>
@@ -77,7 +75,6 @@ export const successGiftItems = defineQuery(
   rows,
 )
 
-/** The fund rows of the donor's newest transaction among `statuses`, in item order. */
 export const newestGiftItems = defineQuery(
   'history.newestGiftItems',
   (db, donor: Donor, statuses: readonly TransactionStatus[]) => {

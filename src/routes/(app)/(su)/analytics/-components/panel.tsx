@@ -10,7 +10,6 @@ interface PanelProps {
   title: string
 }
 
-/** A titled card. It sits on ChartContainer so a chart inside gets the app's chart styles. */
 export function Panel(props: PanelProps) {
   const { aside, children, className, title } = props
   return (

@@ -1,8 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { Analytics } from '#/modules/analytics'
 
-import { changeText, monthsOf, rateChangeText, rateText, shareText } from './format'
+import {
+  changeText,
+  monthText,
+  monthsOf,
+  rangeText,
+  rateChangeText,
+  rateText,
+  shareText,
+} from './format'
 import { fundsCsv, fundsCsvName } from './funds-csv'
 import { paceSummary } from './pace-summary'
 
@@ -84,6 +92,27 @@ describe('the months of a period', () => {
   })
 })
 
+describe('the days of a period', () => {
+  it.each(['UTC', 'America/Los_Angeles', 'Asia/Kuala_Lumpur', 'Pacific/Kiritimati'])(
+    'read as the same Kuala Lumpur days on a host in %s',
+    (hostTz) => {
+      expect.hasAssertions()
+
+      vi.stubEnv('TZ', hostTz)
+      try {
+        expect(rangeText({ end: '2026-11-10', start: '2026-01-01' })).toBe('1 Jan to 10 Nov 2026')
+        expect(rangeText({ end: '2026-03-08', start: '2025-12-31' })).toBe(
+          '31 Dec 2025 to 8 Mar 2026',
+        )
+        expect(monthText('2026-03', false)).toBe('Mar')
+        expect(monthText('2025-12', true)).toBe('Dec 25')
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    },
+  )
+})
+
 const FUNDS: Analytics['funds'] = [
   { amount: 1234.5, fundName: 'Tithe', gifts: 12, guest: 34.5, prior: 1000, signedIn: 1200 },
   { amount: 0, fundName: 'Building, "new"', gifts: 0, guest: 0, prior: 75, signedIn: 0 },
@@ -124,6 +153,22 @@ describe('the pace summary', () => {
     expect(summary).toMatchObject({ lastYear: 2025, year: 2026 })
     expect(summary?.ahead).toBeCloseTo(0.1)
     expect(summary?.projected).toBeCloseTo(440)
+  })
+
+  it('reads each year at the latest week on or before, whatever order the points come in', () => {
+    expect.hasAssertions()
+
+    const outOfOrder = [
+      { cumulative: 220, week: 19, year: 2026 },
+      { cumulative: 400, week: 53, year: 2025 },
+      { cumulative: 200, week: 20, year: 2025 },
+      { cumulative: 150, week: 12, year: 2026 },
+      { cumulative: 100, week: 10, year: 2025 },
+    ]
+
+    expect(paceSummary({ lastWeek: 20, points: outOfOrder })).toStrictEqual(
+      paceSummary({ lastWeek: 20, points }),
+    )
   })
 
   it('has nothing to say without last year', () => {

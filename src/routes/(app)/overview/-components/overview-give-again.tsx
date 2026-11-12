@@ -22,11 +22,10 @@ export function OverviewGiveAgain(props: OverviewGiveAgainProps) {
       <div className="flex flex-col gap-y-4 p-4">
         <span className="text-xs text-fg-subtle">Your last gift, {dayMonth.format(gift.date)}</span>
         <ul className="flex flex-wrap gap-2">
-          {gift.items.map((item, index) => (
+          {gift.items.map((item) => (
             <li
               className="flex items-center gap-x-2 border border-border px-2.5 py-1.5 text-sm text-fg-1"
-              // oxlint-disable-next-line react/no-array-index-key -- a gift can name a fund twice
-              key={index}
+              key={item.fundName}
             >
               <FundName fundName={item.fundName} />
               <span className="tabular-nums">{money(item.amount, privacyMode)}</span>

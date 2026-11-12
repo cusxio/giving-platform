@@ -5,7 +5,6 @@ import { cx } from '#/styles/cx'
 interface LegendItem {
   color: string
   label: string
-  /** A line for a tick or series line, a square for an area. */
   shape?: 'line' | 'square'
 }
 

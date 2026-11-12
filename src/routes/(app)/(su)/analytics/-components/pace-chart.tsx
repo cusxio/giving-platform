@@ -6,19 +6,19 @@ import { tooltip } from '@tanstack/charts/tooltip'
 import { useMemo } from 'react'
 
 import type { Analytics } from '#/modules/analytics'
+import { weekOfYear } from '#/modules/analytics'
 
 import { compactCurrency, currency, monthText } from './format'
 import { Legend } from './legend'
 
-/** Oldest to newest: past years recede, this year stands out. */
 const YEAR_COLORS = ['var(--color-fg-subtle)', 'var(--color-fg-muted)', 'var(--color-chart-2)']
 
-const DAY = 86_400_000
+const TICK_YEAR = 2001
 
-/** The week each month starts in, counted from 1 January as the server counts, for month ticks. */
-const MONTH_STARTS = Array.from(
-  { length: 12 },
-  (_, month) => Math.floor((Date.UTC(2001, month, 1) - Date.UTC(2001, 0, 1)) / DAY / 7) + 1,
+const tickMonth = (month: number) => `${TICK_YEAR}-${String(month).padStart(2, '0')}`
+
+const MONTH_STARTS = Array.from({ length: 12 }, (_, index) =>
+  weekOfYear(`${tickMonth(index + 1)}-01`),
 )
 
 const monthOfWeek = (week: number) => MONTH_STARTS.filter((start) => start <= week).length
@@ -45,8 +45,7 @@ export function PaceChart(props: { pace: Analytics['pace'] }) {
           x: {
             axis: {
               ticks: {
-                format: (week) =>
-                  monthText(`2001-${String(monthOfWeek(week)).padStart(2, '0')}`, false),
+                format: (week) => monthText(tickMonth(monthOfWeek(week)), false),
                 values: MONTH_STARTS,
               },
             },

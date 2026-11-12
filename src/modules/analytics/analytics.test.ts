@@ -23,7 +23,7 @@ import {
 import { getAnalyticsAction, loadAnalytics } from './analytics.server'
 import type { Analytics } from './analytics.types'
 import { GIFT_BAND_BOUNDS } from './gift-bands'
-import { resolvePeriod, spanOf, windowsOf } from './period'
+import { resolvePeriod, spanOf, weekOfYear, windowsOf } from './period'
 
 const TODAY = '2026-11-10'
 const period = resolvePeriod({}, TODAY)
@@ -43,7 +43,6 @@ const totals = (received: number) => ({
 const isPeriod = (span: { readonly start: Date }) =>
   span.start.getTime() === windows.period.start.getTime()
 
-/** Answers every query of the page with a little of everything. */
 function pageDb() {
   return createFakeDb()
     .on(periodTotals, (span) => (isPeriod(span) ? totals(30_000) : totals(20_000)))
@@ -192,7 +191,6 @@ describe('the analytics workflow', () => {
 
 const DONOR_KEYS = new Set(['email', 'firstName', 'lastName', 'userId'])
 
-/** Every key at any depth of a JSON-like value. */
 function keysOf(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap((item) => keysOf(item))
@@ -342,5 +340,39 @@ describe('the analytics statements', () => {
     await expect(sqlOf(paymentMethodOutcomes(windows.period))).resolves.toContain(
       'left join lateral (select "payment_method" from "payments" where "payments"."transaction_id" = "transactions"."id" order by "payments"."id" desc limit $',
     )
+  })
+})
+
+const SQL_WEEK =
+  /\(\(EXTRACT\(DOY FROM \("transactions"\."created_at" AT TIME ZONE 'Asia\/Kuala_Lumpur'\)\)::integer - (?<offset>\d+)\) \/ (?<length>\d+) \+ (?<first>\d+)\)/u
+
+async function sqlWeekOfDay() {
+  const sql = await sqlOf(weeklyCumulativeTotalsByYear(windows.period))
+  const week = SQL_WEEK.exec(sql)?.groups
+  if (week === undefined) {
+    throw new Error(`no week expression in: ${sql}`)
+  }
+  const offset = Number(week.offset)
+  const length = Number(week.length)
+  const first = Number(week.first)
+  return (dayOfYear: number) => Math.trunc((dayOfYear - offset) / length) + first
+}
+
+describe('the week a day falls in', () => {
+  it.each([
+    ['2026-01-01', 1, 1],
+    ['2026-01-02', 2, 1],
+    ['2026-01-03', 3, 1],
+    ['2026-01-07', 7, 1],
+    ['2026-01-08', 8, 2],
+    ['2026-12-31', 365, 53],
+    ['2024-12-31', 366, 53],
+  ])('is the same in SQL and TS for %s, day %i: week %i', async (iso, dayOfYear, week) => {
+    expect.hasAssertions()
+
+    const sqlWeek = await sqlWeekOfDay()
+
+    expect(sqlWeek(dayOfYear)).toBe(week)
+    expect(weekOfYear(iso)).toBe(week)
   })
 })

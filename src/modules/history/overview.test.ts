@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { OverviewRows } from './overview'
 import { getYearDateRange, giftScopeFor, median, summarizeOverview } from './overview'
 
-// Kuala Lumpur is UTC+8: 16:00Z is midnight there.
 const kl = (local: string) => new Date(`${local}+08:00`)
 
-/** 10 March 2026, 9 pm in Kuala Lumpur: day index 68 of 2026. */
 const NOW = kl('2026-03-10T21:00:00')
 
 function gift(local: string, items: Record<string, number>) {
@@ -36,7 +34,6 @@ function newest(local: string, status: Status, funds: Record<string, number>[] =
   )
 }
 
-/** The year hero, or a failed test when the view is all years. */
 function yearHeroOf(overview: ReturnType<typeof summarizeOverview>) {
   if (overview.hero.kind !== 'year') {
     throw new Error('expected the year hero')
@@ -146,12 +143,12 @@ describe('the year hero', () => {
 })
 
 describe('the all-years hero', () => {
-  it('totals each year from the first gift to this year, gaps included', () => {
+  it('totals each year from the earliest gift to this year, gaps included', () => {
     expect.hasAssertions()
 
     const giftItems = [
-      ...gift('2023-12-31T23:00:00', { Tithe: 10_000 }),
       ...gift('2025-06-01T10:00:00', { Tithe: 2000, Offering: 500 }),
+      ...gift('2023-12-31T23:00:00', { Tithe: 10_000 }),
     ]
 
     expect(summarizeOverview('all', rows({ giftItems }), NOW).hero).toStrictEqual({
@@ -355,8 +352,7 @@ describe('the expiring card notice', () => {
   it('reaches into January from December, by the Kuala Lumpur month', () => {
     expect.hasAssertions()
 
-    // 16:30Z on 30 November is already 1 December in Kuala Lumpur.
-    const december = new Date('2026-11-30T16:30:00Z')
+    const december = kl('2026-12-01T00:30:00')
 
     expect(
       summarizeOverview(2026, rows({ cards: [card('202701')] }), december).notices.expiringCard,

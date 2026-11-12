@@ -1,31 +1,23 @@
-import type { Windows } from './period'
+import type { Span, Windows } from './period'
 
-/**
- * One donor's successful gifts, in cents, summed over each window. It carries no id, and it never
- * leaves the server: only the counts `classifyDonors` makes of it do.
- */
 export interface DonorRow {
   readonly compare: number
   readonly firstGiftAt: Date
   readonly last12Months: number
   readonly months12to24: number
   readonly months24to36: number
-  /** Distinct calendar months with a gift in `last12Months`. */
   readonly monthsGivenLast12: number
   readonly period: number
   readonly yearBeforePeriod: number
 }
 
-/** Of `of` donors, `gaveAgain` gave again. */
 export interface Rate {
   readonly gaveAgain: number
   readonly of: number
 }
 
-/** A regular giver gave in at least this many of the last 12 months. */
 export const REGULAR_MIN_MONTHS = 6
 
-/** A change of at most this share of last year's amount counts as "about the same". */
 const SAME_WITHIN_PERCENT = 10
 
 type Change = 'less' | 'more' | 'same'
@@ -37,19 +29,17 @@ function changeOf(now: number, before: number): Change {
   return now > before ? 'more' : 'less'
 }
 
-/**
- * The gave-again rate of the donors who gave in `window`, by whether `window` held their first
- * gift. `null` when the history does not reach back to the window's start, because then every
- * donor would look like a first-time giver.
- */
+const historyReachesStartOf = (window: Span, earliest: Date | undefined) =>
+  earliest !== undefined && earliest <= window.start
+
 function gaveAgain(
   rows: readonly DonorRow[],
   earliest: Date | undefined,
-  window: Windows['months12to24'],
+  window: Span,
   gaveIn: (row: DonorRow) => number,
   gaveAfter: (row: DonorRow) => number,
 ) {
-  if (earliest === undefined || earliest > window.start) {
+  if (!historyReachesStartOf(window, earliest)) {
     return { all: null, firstTime: null, repeat: null }
   }
   const firstTime = { gaveAgain: 0, of: 0 }

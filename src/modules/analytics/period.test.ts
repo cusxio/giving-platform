@@ -1,14 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  isIsoDate,
-  isoDateOf,
-  resolvePeriod,
-  shiftYears,
-  spanOf,
-  weekOfYear,
-  windowsOf,
-} from './period'
+import { isIsoDate, isoDateOf, resolvePeriod, shiftYears, spanOf, windowsOf } from './period'
 
 describe('the period a search asks for', () => {
   it('is this year so far by default, against the same days last year', () => {
@@ -81,17 +73,6 @@ describe('calendar days', () => {
     expect.hasAssertions()
 
     expect(isoDateOf(new Date('2026-11-10T16:30:00Z'))).toBe('2026-11-11')
-  })
-
-  it.each([
-    ['2026-01-01', 1],
-    ['2026-01-07', 1],
-    ['2026-01-08', 2],
-    ['2026-12-31', 53],
-  ])('puts %s in week %i, counted from 1 January', (iso, week) => {
-    expect.hasAssertions()
-
-    expect(weekOfYear(iso)).toBe(week)
   })
 })
 
