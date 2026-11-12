@@ -6,12 +6,13 @@ import { Route as ReportsRoute } from './reports'
 
 type Search = Record<string, unknown>
 
-/** Runs a route's search validation and beforeLoad, as the router would, and returns the throw. */
+/** Runs a route's search validation and beforeLoad, as the router would, and returns the throw.
+ * The router keeps the raw keys beside the validated ones, so beforeLoad sees both. */
 function visit(route: typeof InsightsRoute | typeof ReportsRoute, raw: Search) {
   const validate = route.options.validateSearch as (search: Search) => Search
   const beforeLoad = route.options.beforeLoad as unknown as (options: { search: Search }) => unknown
   try {
-    beforeLoad({ search: validate(raw) })
+    beforeLoad({ search: { ...raw, ...validate(raw) } })
   } catch (error) {
     return error
   }
@@ -35,7 +36,8 @@ describe('the old analytics addresses', () => {
     const thrown = visit(InsightsRoute, raw)
 
     expect(isRedirect(thrown)).toBe(true)
-    expect(thrown).toMatchObject({ options: { search, to: '/analytics' } })
+    expect(thrown).toMatchObject({ options: { to: '/analytics' } })
+    expect((thrown as { options: { search: Search } }).options.search).toStrictEqual(search)
   })
 
   it.each([
@@ -54,6 +56,7 @@ describe('the old analytics addresses', () => {
     const thrown = visit(ReportsRoute, raw)
 
     expect(isRedirect(thrown)).toBe(true)
-    expect(thrown).toMatchObject({ options: { search, to: '/analytics' } })
+    expect(thrown).toMatchObject({ options: { to: '/analytics' } })
+    expect((thrown as { options: { search: Search } }).options.search).toStrictEqual(search)
   })
 })

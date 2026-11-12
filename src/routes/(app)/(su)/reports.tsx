@@ -7,6 +7,6 @@ export const Route = createFileRoute('/(app)/(su)/reports')({
   validateSearch: (search) => periodSearch(search.start_date, search.end_date),
 
   beforeLoad({ search }) {
-    throw redirect({ search, to: '/analytics' })
+    throw redirect({ search: { end: search.end, start: search.start }, to: '/analytics' })
   },
 })
