@@ -17,7 +17,6 @@ interface YearRow {
 }
 
 interface WeekRow {
-  readonly cumulative: number
   readonly week: number
   readonly weeklyAmount: number
   readonly year: number
@@ -77,28 +76,35 @@ export const sameDaysLastYear = (today: string): Range => ({
   start: `${yearOf(today) - 1}-01-01`,
 })
 
-function paceOf(weeks: readonly WeekRow[]): EveryYear['pace']['points'] {
-  const points = new Map<
-    string,
-    { cumulative: number; week: number; weekly: number; year: number }
-  >()
+/**
+ * One point for every week of each year that has gifts, through today's week for this year. A week
+ * without gifts is 0 that week and keeps the running total, so lines never join across a gap.
+ */
+function paceOf(
+  weeks: readonly WeekRow[],
+  year: number,
+  lastWeek: number,
+): EveryYear['pace']['points'] {
+  const weeklyCents = new Map<number, Map<number, number>>()
   for (const row of weeks) {
+    const byWeek = weeklyCents.get(row.year) ?? new Map<number, number>()
     const week = Math.min(row.week, LAST_WEEK)
-    const key = `${row.year}-${week}`
-    const seen = points.get(key)
-    points.set(key, {
-      cumulative: Math.max(seen?.cumulative ?? 0, row.cumulative),
-      week,
-      weekly: (seen?.weekly ?? 0) + row.weeklyAmount,
-      year: row.year,
-    })
+    byWeek.set(week, (byWeek.get(week) ?? 0) + row.weeklyAmount)
+    weeklyCents.set(row.year, byWeek)
   }
-  return [...points.values()].map((point) => ({
-    cumulative: centsToRinggit(point.cumulative),
-    week: point.week,
-    weekly: centsToRinggit(point.weekly),
-    year: point.year,
-  }))
+  return [...weeklyCents].flatMap(([of, byWeek]) => {
+    let cumulative = 0
+    return Array.from({ length: of === year ? lastWeek : LAST_WEEK }, (_, index) => {
+      const weekly = byWeek.get(index + 1) ?? 0
+      cumulative += weekly
+      return {
+        cumulative: centsToRinggit(cumulative),
+        week: index + 1,
+        weekly: centsToRinggit(weekly),
+        year: of,
+      }
+    })
+  })
 }
 
 function growthOf(fullYears: readonly YearRow[]): EveryYear['kpis']['growth'] {
@@ -116,6 +122,7 @@ function growthOf(fullYears: readonly YearRow[]): EveryYear['kpis']['growth'] {
 
 export function toEveryYear(today: string, reads: EveryYearReads): EveryYear {
   const year = yearOf(today)
+  const lastWeek = Math.min(weekOfYear(today), LAST_WEEK)
   const [first] = reads.years
   const firstYear = first?.year ?? year
   const startedLate = first !== undefined && weekOfYear(first.firstDay) > 1
@@ -152,7 +159,7 @@ export function toEveryYear(today: string, reads: EveryYearReads): EveryYear {
       },
       thisYear: { change: changeOf(year), received: centsToRinggit(receivedIn(year)) },
     },
-    pace: { lastWeek: Math.min(weekOfYear(today), LAST_WEEK), points: paceOf(reads.weeks) },
+    pace: { lastWeek, points: paceOf(reads.weeks, year, lastWeek) },
     year,
     years: reads.years
       .map((row) => ({

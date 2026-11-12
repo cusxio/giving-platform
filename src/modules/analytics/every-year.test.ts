@@ -147,20 +147,53 @@ describe('every year of giving', () => {
     const everyYear = toEveryYear('2026-12-31', {
       sameDaysLastYear: null,
       weeks: [
-        { cumulative: 100_000, week: 52, weeklyAmount: 10_000, year: 2025 },
-        { cumulative: 102_000, week: 53, weeklyAmount: 2000, year: 2025 },
-        { cumulative: 5000, week: 1, weeklyAmount: 5000, year: 2026 },
+        { week: 51, weeklyAmount: 90_000, year: 2025 },
+        { week: 52, weeklyAmount: 10_000, year: 2025 },
+        { week: 53, weeklyAmount: 2000, year: 2025 },
       ],
       years: [],
     })
 
-    expect(everyYear.pace).toStrictEqual({
-      lastWeek: 52,
-      points: [
-        { cumulative: 1020, week: 52, weekly: 120, year: 2025 },
-        { cumulative: 50, week: 1, weekly: 50, year: 2026 },
-      ],
+    expect(everyYear.pace.lastWeek).toBe(52)
+    expect(everyYear.pace.points.at(-1)).toStrictEqual({
+      cumulative: 1020,
+      week: 52,
+      weekly: 120,
+      year: 2025,
     })
+  })
+
+  it('keeps every week, so a week without gifts is zero and the running total stays flat', () => {
+    expect.hasAssertions()
+
+    const everyYear = toEveryYear('2026-01-20', {
+      sameDaysLastYear: null,
+      weeks: [
+        { week: 2, weeklyAmount: 5000, year: 2025 },
+        { week: 5, weeklyAmount: 3000, year: 2025 },
+        { week: 1, weeklyAmount: 1000, year: 2026 },
+      ],
+      years: [],
+    })
+    const pointsOf = (year: number) =>
+      everyYear.pace.points
+        .filter((point) => point.year === year)
+        .map((point) => [point.week, point.weekly, point.cumulative])
+
+    expect(pointsOf(2025)).toHaveLength(52)
+    expect(pointsOf(2025).slice(0, 6)).toStrictEqual([
+      [1, 0, 0],
+      [2, 50, 50],
+      [3, 0, 50],
+      [4, 0, 50],
+      [5, 30, 80],
+      [6, 0, 80],
+    ])
+    expect(pointsOf(2026)).toStrictEqual([
+      [1, 10, 10],
+      [2, 0, 10],
+      [3, 0, 10],
+    ])
   })
 })
 

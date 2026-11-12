@@ -185,8 +185,8 @@ function everyYearDb() {
     ])
     .on(periodTotals, () => totals(25_000))
     .on(weeklyTotalsByYear, () => [
-      { cumulative: 40_000, week: 1, weeklyAmount: 40_000, year: 2025 },
-      { cumulative: 30_000, week: 2, weeklyAmount: 30_000, year: 2026 },
+      { week: 1, weeklyAmount: 40_000, year: 2025 },
+      { week: 2, weeklyAmount: 30_000, year: 2026 },
     ])
 }
 
@@ -217,13 +217,11 @@ describe('the every year workflow', () => {
       [2026, 300, 50.5],
       [2025, 400, 50],
     ])
-    expect(everyYear.pace).toStrictEqual({
-      lastWeek: 45,
-      points: [
-        { cumulative: 400, week: 1, weekly: 400, year: 2025 },
-        { cumulative: 300, week: 2, weekly: 300, year: 2026 },
-      ],
-    })
+    expect(everyYear.pace.lastWeek).toBe(45)
+    expect(everyYear.pace.points.filter((point) => point.weekly > 0)).toStrictEqual([
+      { cumulative: 400, week: 1, weekly: 400, year: 2025 },
+      { cumulative: 300, week: 2, weekly: 300, year: 2026 },
+    ])
   })
 })
 

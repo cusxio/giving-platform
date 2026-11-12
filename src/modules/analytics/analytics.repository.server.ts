@@ -145,28 +145,12 @@ export const weeklyTotalsByYear = defineQuery(
   (db) => {
     const week = sql<number>`((EXTRACT(DOY FROM ${localTime})::integer - 1) / 7 + 1)`
 
-    const weeklyTotals = db.$with('weekly_totals').as(
-      db
-        .select({
-          week: week.as('week'),
-          weeklyAmount: safeSum(transactions.amount).as('weekly_amount'),
-          year: localYear.as('year'),
-        })
-        .from(transactions)
-        .where(eq(transactions.status, COUNTED_STATUS))
-        .groupBy(localYear, week),
-    )
-
     return db
-      .with(weeklyTotals)
-      .select({
-        cumulative: sql<number>`SUM(${weeklyTotals.weeklyAmount}) OVER (PARTITION BY ${weeklyTotals.year} ORDER BY ${weeklyTotals.week})::integer`,
-        week: weeklyTotals.week,
-        weeklyAmount: weeklyTotals.weeklyAmount,
-        year: weeklyTotals.year,
-      })
-      .from(weeklyTotals)
-      .orderBy(asc(weeklyTotals.year), asc(weeklyTotals.week))
+      .select({ week, weeklyAmount: safeSum(transactions.amount), year: localYear })
+      .from(transactions)
+      .where(eq(transactions.status, COUNTED_STATUS))
+      .groupBy(localYear, week)
+      .orderBy(asc(localYear), asc(week))
   },
   rows,
 )
