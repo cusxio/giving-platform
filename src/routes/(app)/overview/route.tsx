@@ -8,13 +8,16 @@ import { useAuthUser } from '#/modules/account'
 import { availableYearsQuery, overviewQuery } from '#/modules/history'
 import { cx } from '#/styles/cx'
 
-import { charts } from '../-components/charts/load-charts'
-
 import { BibleVerse } from './-components/bible-verse'
 import { GreetUser } from './-components/greet-user'
-import { OverviewCharts } from './-components/overview-charts'
+import { heroCharts } from './-components/load-hero-charts'
 import { OverviewEmpty } from './-components/overview-empty'
-import { OverviewTransactions } from './-components/overview-transactions'
+import { OverviewFunds } from './-components/overview-funds'
+import { OverviewGiveAgain } from './-components/overview-give-again'
+import { OverviewHero } from './-components/overview-hero'
+import { OverviewNotices } from './-components/overview-notices'
+import { OverviewRecent } from './-components/overview-recent'
+import { OverviewRhythm } from './-components/overview-rhythm'
 import { OverviewWelcome } from './-components/overview-welcome'
 import { OverviewYearSelector, hasMultipleYears } from './-components/overview-year-selector'
 
@@ -54,7 +57,7 @@ export const Route = createFileRoute('/(app)/overview')({
 
     const ready = Promise.all([
       queryClient.query({ ...overviewQuery(userId, journey, effectiveYear), staleTime: 'static' }),
-      charts.load(),
+      heroCharts.load(),
     ])
     ready.catch(() => {})
 
@@ -91,13 +94,7 @@ function RouteComponent() {
   } = useAuthUser()
 
   const {
-    data: {
-      summary,
-      monthlyContributions,
-      monthlyContributionsFrequency,
-      cumulativeContributions,
-      transactions,
-    },
+    data: { funds, giveAgain, hero, notices, recent, rhythm },
   } = useSuspenseQueryDeferred(overviewQuery(user.id, user.journey, year))
 
   const showYearSelector = hasMultipleYears(years)
@@ -117,31 +114,50 @@ function RouteComponent() {
   }
 
   return (
-    <div className={cx('mx-auto w-full shrink-0 grow p-4', 'max-w-120 bp-overview-2col:max-w-5xl')}>
-      <GreetUser user={user} />
-
-      <div className={cx('flex flex-col', 'gap-y-4 lg:gap-y-8', !showYearSelector && 'mt-4')}>
+    <div className="mx-auto w-full max-w-5xl shrink-0 grow p-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <GreetUser user={user} />
         {showYearSelector && <OverviewYearSelector year={year} years={years} />}
+      </div>
 
-        {transactions.length > 0 ? (
+      <div className="mt-6 flex flex-col gap-4">
+        <OverviewNotices notices={notices} privacyMode={privacyMode} />
+
+        {recent.length > 0 ? (
           <>
+            <div className="flex flex-wrap gap-4">
+              <OverviewHero className="flex-[999_1_34rem]" hero={hero} privacyMode={privacyMode} />
+              <OverviewFunds className="flex-[1_1_18rem]" funds={funds} privacyMode={privacyMode} />
+            </div>
+
+            {(rhythm !== null || giveAgain !== null) && (
+              <div className="flex flex-wrap gap-4">
+                {rhythm && typeof year === 'number' && (
+                  <OverviewRhythm
+                    className="flex-[1_1_18rem]"
+                    isCurrentYear={hero.kind === 'year' && hero.today !== null}
+                    privacyMode={privacyMode}
+                    rhythm={rhythm}
+                    year={year}
+                  />
+                )}
+                {giveAgain && (
+                  <OverviewGiveAgain
+                    className="flex-[1_1_18rem]"
+                    gift={giveAgain}
+                    privacyMode={privacyMode}
+                  />
+                )}
+              </div>
+            )}
+
             <BibleVerse />
-            <OverviewCharts
-              cumulativeContributions={cumulativeContributions}
-              monthlyContributions={monthlyContributions}
-              monthlyContributionsFrequency={monthlyContributionsFrequency}
-              privacyMode={privacyMode}
-              summary={summary}
-            />
+            <OverviewRecent privacyMode={privacyMode} recent={recent} />
           </>
         ) : (
           typeof year === 'number' && <OverviewEmpty year={year} />
         )}
       </div>
-
-      {transactions.length > 0 && (
-        <OverviewTransactions privacyMode={privacyMode} transactions={transactions} year={year} />
-      )}
     </div>
   )
 }

@@ -2,6 +2,9 @@ import { Result } from 'better-result'
 import { Type } from 'typebox'
 import { Compile } from 'typebox/compile'
 
+import { now } from '#/core/date'
+import { COUNTED_STATUS, TRANSACTION_STATUSES } from '#/core/transaction-status'
+import { unexpiredSavedCards } from '#/modules/payments/server'
 import { requireUser } from '#/server/authorize.server'
 import type { Deps } from '#/server/deps.server'
 import type { Parsed } from '#/server/input.server'
@@ -12,30 +15,34 @@ import { TransactionNotFound } from './history.errors'
 import type { Donor, TransactionId } from './history.repository.server'
 import {
   countTransactions,
+  newestGiftItems,
   recentTransactions,
-  successFundItems,
-  successTimeline,
+  successGiftItems,
   successYears,
   transactionById,
   transactionItemsOf,
   transactionsPage,
 } from './history.repository.server'
 import type { OverviewYear } from './overview'
-import { scopeFor, summarizeOverview } from './overview'
+import { giftScopeFor, scopeFor, summarizeOverview } from './overview'
 import { PAGE_SIZE, toTransactionsPage } from './transactions-page'
 
-/** One neon-http round trip for the three reads, then pure aggregation. */
+/** One neon-http round trip for every read, then pure aggregation as of `now`. */
 export async function loadOverview(
   deps: Pick<Deps, 'db'>,
-  input: { readonly donor: Donor; readonly year: OverviewYear },
+  input: { readonly donor: Donor; readonly now: Date; readonly year: OverviewYear },
 ) {
-  const scope = scopeFor(input.donor, input.year)
+  const { donor, year } = input
   const read = await deps.db.batch([
-    recentTransactions(scope),
-    successTimeline(scope),
-    successFundItems(scope),
+    successGiftItems(giftScopeFor(donor, year)),
+    recentTransactions(scopeFor(donor, year)),
+    newestGiftItems(donor, TRANSACTION_STATUSES),
+    newestGiftItems(donor, [COUNTED_STATUS]),
+    unexpiredSavedCards(donor.id),
   ])
-  return read.map(([recent, timeline, fundItems]) => summarizeOverview(recent, timeline, fundItems))
+  return read.map(([giftItems, recent, newestAny, newestSuccess, cards]) =>
+    summarizeOverview(year, { cards, giftItems, newestAny, newestSuccess, recent }, input.now),
+  )
 }
 
 export function loadAvailableYears(deps: Pick<Deps, 'db'>, donor: Donor) {
@@ -79,7 +86,7 @@ export const getOverviewAction = defineRead({
   event: 'history.overview',
   input: overviewInput,
   run: ({ deps, user }, { year }) =>
-    loadOverview(deps, { donor: { id: user.id, journey: user.journey }, year }),
+    loadOverview(deps, { donor: { id: user.id, journey: user.journey }, now: now(), year }),
   wire: {},
 })
 

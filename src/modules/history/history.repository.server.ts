@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm'
 
 import { clientTz } from '#/core/date'
+import type { TransactionStatus } from '#/core/transaction-status'
 import { COUNTED_STATUS, LISTED_STATUSES } from '#/core/transaction-status'
 import { defineQuery, firstOrNull, rows } from '#/server/db.server'
 import type { Transaction, User } from '#/server/schema.server'
@@ -32,6 +33,7 @@ function inScope(scope: DonorScope) {
   ]
 }
 
+/** The scope's newest listed transactions, each with its fund names in item order. */
 export const recentTransactions = defineQuery(
   'history.recentTransactions',
   (db, scope: DonorScope) =>
@@ -39,39 +41,72 @@ export const recentTransactions = defineQuery(
       .select({
         amount: transactions.amount,
         createdAt: transactions.createdAt,
+        funds: sql<
+          string[]
+        >`coalesce(array_agg(${funds.name} order by ${transactionItems.id}) filter (where ${funds.name} is not null), '{}')`,
         id: transactions.id,
         status: transactions.status,
       })
       .from(transactions)
+      .leftJoin(transactionItems, eq(transactionItems.transactionId, transactions.id))
+      .leftJoin(funds, eq(funds.id, transactionItems.fundId))
       .where(and(...inScope(scope), inArray(transactions.status, LISTED_STATUSES)))
+      .groupBy(transactions.id)
       .orderBy(desc(transactions.createdAt))
       .limit(15),
   rows,
 )
 
-export const successTimeline = defineQuery(
-  'history.successTimeline',
-  (db, scope: DonorScope) =>
-    db
-      .select({ amount: transactions.amount, createdAt: transactions.createdAt })
-      .from(transactions)
-      .where(and(...inScope(scope), eq(transactions.status, COUNTED_STATUS))),
-  rows,
-)
-
-export const successFundItems = defineQuery(
-  'history.successFundItems',
+/** The fund rows of the scope's successful transactions, oldest first, then in item order. */
+export const successGiftItems = defineQuery(
+  'history.successGiftItems',
   (db, scope: DonorScope) =>
     db
       .select({
+        amount: transactionItems.amount,
         createdAt: transactions.createdAt,
-        fundId: transactionItems.fundId,
         fundName: funds.name,
+        giftAmount: transactions.amount,
+        transactionId: transactions.id,
       })
       .from(transactionItems)
       .innerJoin(transactions, eq(transactionItems.transactionId, transactions.id))
       .innerJoin(funds, eq(transactionItems.fundId, funds.id))
-      .where(and(...inScope(scope), eq(transactions.status, COUNTED_STATUS))),
+      .where(and(...inScope(scope), eq(transactions.status, COUNTED_STATUS)))
+      .orderBy(asc(transactions.createdAt), asc(transactionItems.id)),
+  rows,
+)
+
+/** The fund rows of the donor's newest transaction among `statuses`, in item order. */
+export const newestGiftItems = defineQuery(
+  'history.newestGiftItems',
+  (db, donor: Donor, statuses: readonly TransactionStatus[]) => {
+    const newest = db
+      .select({ id: transactions.id })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, donor.id),
+          inArray(transactions.status, [...statuses]),
+          startFreshOnly(donor.journey),
+        ),
+      )
+      .orderBy(desc(transactions.createdAt))
+      .limit(1)
+    return db
+      .select({
+        amount: transactionItems.amount,
+        createdAt: transactions.createdAt,
+        fundName: funds.name,
+        giftAmount: transactions.amount,
+        status: transactions.status,
+      })
+      .from(transactionItems)
+      .innerJoin(transactions, eq(transactionItems.transactionId, transactions.id))
+      .innerJoin(funds, eq(transactionItems.fundId, funds.id))
+      .where(inArray(transactionItems.transactionId, newest))
+      .orderBy(asc(transactionItems.id))
+  },
   rows,
 )
 

@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { clientTz, now } from '#/core/date'
 import type * as History from '#/modules/history'
 
-import type * as Charts from '../-components/charts'
+import type * as HeroCharts from './-components/hero-charts'
 
 type Year = number | 'all'
 
@@ -32,13 +32,15 @@ vi.mock<typeof History>(import('#/modules/history'), async (actual) => {
 
 const chartCode = vi.hoisted(() => ({ loaded: false }))
 
-vi.mock<typeof Charts>(import('../-components/charts'), async (actual) => {
+vi.mock<typeof HeroCharts>(import('./-components/hero-charts'), async (actual) => {
   chartCode.loaded = true
   return actual()
 })
 
 const { Route } = await import('./route')
-const { OverviewCharts } = await import('./-components/overview-charts')
+const { OverviewFunds } = await import('./-components/overview-funds')
+const { OverviewHero } = await import('./-components/overview-hero')
+const { OverviewRhythm } = await import('./-components/overview-rhythm')
 
 interface Search {
   readonly year?: Year
@@ -51,20 +53,33 @@ const loader = Route.options.loader as (options: {
 }) => Promise<unknown>
 
 const thisYear = now(clientTz).getFullYear()
-const overview = { transactions: [] }
-const charts = {
-  cumulativeContributions: [{ cumulativeAmount: 100, day: '2026-01-05' }],
-  monthlyContributions: [{ month: 1, totalAmount: 100 }],
-  monthlyContributionsFrequency: [{ General: 1, month: 1 }],
-  privacyMode: false,
-  summary: {
-    averageAmount: 100,
-    largestAmount: 100,
-    largestAmountDate: null,
-    noOfContributions: 1,
-    totalAmount: 100,
-    totalFundsSupported: 1,
-  },
+const overview = { recent: [] }
+const yearHero = {
+  kind: 'year' as const,
+  lastYear: Array.from({ length: 365 }, (_, day) => day * 4.5),
+  lastYearSameDay: 450,
+  thisYear: Array.from({ length: 101 }, (_, day) => day * 12.34),
+  today: 100,
+  total: 1234,
+  year: 2026,
+}
+const allHero = {
+  kind: 'all' as const,
+  since: new Date('2024-12-01T00:00:00Z'),
+  total: 3456.78,
+  years: [
+    { total: 1222.22, year: 2025 },
+    { total: 2234.56, year: 2026 },
+  ],
+}
+const funds = [{ amount: 3456.78, fundName: 'Tithe', share: 1 }]
+const rhythm = {
+  gifts: 7,
+  largest: { amount: 2234.56, date: new Date('2026-03-01T00:00:00Z'), funds: ['Tithe'] },
+  months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, total: i < 4 ? 432.1 : null })),
+  monthsGiven: 4,
+  monthsSoFar: 4,
+  usualGift: 432.1,
 }
 const toOverview = { replace: true, search: { year: undefined }, to: '/overview' }
 
@@ -205,6 +220,23 @@ describe('the overview loader', () => {
   })
 })
 
+/** Every page section that shows an amount and needs no router. */
+function renderAmounts(privacyMode: boolean) {
+  return [
+    createElement(OverviewHero, { hero: yearHero, privacyMode }),
+    createElement(OverviewHero, { hero: allHero, privacyMode }),
+    createElement(OverviewFunds, { funds, privacyMode }),
+    createElement(OverviewRhythm, { isCurrentYear: true, privacyMode, rhythm, year: 2026 }),
+  ]
+    .map((element) => renderToString(element))
+    .join('')
+}
+
+const svgText = (html: string) =>
+  [...html.matchAll(/<text[^>]*>(?<label>[^<]*)<\/text>/gu)].map((m) => m.groups?.label ?? '')
+/** What a reader sees: the markup's text, without attributes such as SVG coordinates. */
+const visibleText = (html: string) => html.replaceAll(/<[^>]*>/gu, ' ').replaceAll(/\s+/gu, ' ')
+
 describe('the overview charts', () => {
   it('draw in the first render once the loader has run', async () => {
     expect.hasAssertions()
@@ -214,10 +246,26 @@ describe('the overview charts', () => {
     )
     await load({})
 
-    const html = renderToString(createElement(OverviewCharts, charts))
+    const html = renderAmounts(false)
 
-    expect(html).toContain('Contribution by Month')
-    expect(html).toContain('Contribution Activity')
-    expect(html).toContain('Cumulative Contribution')
+    expect(html).toContain('Running total for 2026 compared with 2025')
+    expect(html).toContain('Total given each year')
+    expect(svgText(html)).toStrictEqual(expect.arrayContaining(['Jan', 'Dec', '2025', '2026']))
+    expect(visibleText(html)).toMatch(/RM\s1,222\.22 RM\s2,234\.56/u)
+  })
+
+  it('hide every amount in privacy mode, axis ticks and bar labels included', async () => {
+    expect.hasAssertions()
+    given(
+      () => Promise.resolve([thisYear]),
+      () => Promise.resolve(overview),
+    )
+    await load({})
+
+    const html = renderAmounts(true)
+
+    expect(visibleText(html)).not.toMatch(/1,234|3,456|2,234|1,222|432|\d(?:\.\d)?K/u)
+    expect(svgText(html).filter((label) => /\d/u.test(label))).toStrictEqual(['2025', '2026'])
+    expect(html).toContain('RM —')
   })
 })
