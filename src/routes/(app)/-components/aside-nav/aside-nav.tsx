@@ -4,7 +4,6 @@ import {
   ChartLineUpIcon,
   GearIcon,
   HandHeartIcon,
-  InvoiceIcon,
   ReceiptIcon,
 } from '@phosphor-icons/react/dist/ssr'
 import { useMemo } from 'react'
@@ -37,10 +36,7 @@ export function AsideNav(props: AsideNavProps) {
     ]
 
     if (user.role === 'su') {
-      baseNavItems.push(
-        { icon: ChartLineUpIcon, name: 'Insights', to: '/insights' },
-        { icon: InvoiceIcon, name: 'Reports', to: '/reports' },
-      )
+      baseNavItems.push({ icon: ChartLineUpIcon, name: 'Analytics', to: '/analytics' })
     }
 
     return baseNavItems

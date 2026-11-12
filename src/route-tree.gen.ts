@@ -18,8 +18,9 @@ import { Route as appsuRouteRouteImport } from './routes/(app)/(su)/route'
 import { Route as appOverviewRouteRouteImport } from './routes/(app)/overview/route'
 import { Route as appSettingsRouteRouteImport } from './routes/(app)/settings/route'
 import { Route as appTransactionsRouteRouteImport } from './routes/(app)/transactions/route'
-import { Route as appsuInsightsRouteRouteImport } from './routes/(app)/(su)/insights/route'
-import { Route as appsuReportsRouteRouteImport } from './routes/(app)/(su)/reports/route'
+import { Route as appsuAnalyticsRouteRouteImport } from './routes/(app)/(su)/analytics/route'
+import { Route as appsuInsightsRouteImport } from './routes/(app)/(su)/insights'
+import { Route as appsuReportsRouteImport } from './routes/(app)/(su)/reports'
 import { Route as appTransactionTransactionIdRouteImport } from './routes/(app)/transaction/$transactionId'
 import { Route as authAuthLoginRouteImport } from './routes/(auth)/auth.login'
 import { Route as authWelcomeSignupRouteImport } from './routes/(auth)/welcome.signup'
@@ -28,6 +29,8 @@ import { Route as ApiEghlCallbackRouteImport } from './routes/api/eghl.callback'
 import { Route as ApiEghlCronRouteImport } from './routes/api/eghl.cron'
 import { Route as ApiEghlReturnRouteImport } from './routes/api/eghl.return'
 import { Route as TransactionReceiptTransactionIdRouteImport } from './routes/transaction/receipt/$transactionId'
+import { Route as appsuAnalyticsIndexRouteImport } from './routes/(app)/(su)/analytics/index'
+import { Route as appsuAnalyticsPeriodRouteImport } from './routes/(app)/(su)/analytics/period'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -71,12 +74,17 @@ const appTransactionsRouteRoute = appTransactionsRouteRouteImport.update({
   path: '/transactions',
   getParentRoute: () => appRouteRoute,
 } as any)
-const appsuInsightsRouteRoute = appsuInsightsRouteRouteImport.update({
+const appsuAnalyticsRouteRoute = appsuAnalyticsRouteRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => appsuRouteRoute,
+} as any)
+const appsuInsightsRoute = appsuInsightsRouteImport.update({
   id: '/insights',
   path: '/insights',
   getParentRoute: () => appsuRouteRoute,
 } as any)
-const appsuReportsRouteRoute = appsuReportsRouteRouteImport.update({
+const appsuReportsRoute = appsuReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
   getParentRoute: () => appsuRouteRoute,
@@ -123,6 +131,16 @@ const TransactionReceiptTransactionIdRoute =
     path: '/transaction/receipt/$transactionId',
     getParentRoute: () => rootRouteImport,
   } as any)
+const appsuAnalyticsIndexRoute = appsuAnalyticsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => appsuAnalyticsRouteRoute,
+} as any)
+const appsuAnalyticsPeriodRoute = appsuAnalyticsPeriodRouteImport.update({
+  id: '/period',
+  path: '/period',
+  getParentRoute: () => appsuAnalyticsRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,8 +149,9 @@ export interface FileRoutesByFullPath {
   '/overview': typeof appOverviewRouteRoute
   '/settings': typeof appSettingsRouteRoute
   '/transactions': typeof appTransactionsRouteRoute
-  '/insights': typeof appsuInsightsRouteRoute
-  '/reports': typeof appsuReportsRouteRoute
+  '/analytics': typeof appsuAnalyticsRouteRouteWithChildren
+  '/insights': typeof appsuInsightsRoute
+  '/reports': typeof appsuReportsRoute
   '/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
@@ -141,6 +160,8 @@ export interface FileRoutesByFullPath {
   '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
   '/transaction/receipt/$transactionId': typeof TransactionReceiptTransactionIdRoute
+  '/analytics/period': typeof appsuAnalyticsPeriodRoute
+  '/analytics/': typeof appsuAnalyticsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -149,8 +170,8 @@ export interface FileRoutesByTo {
   '/overview': typeof appOverviewRouteRoute
   '/settings': typeof appSettingsRouteRoute
   '/transactions': typeof appTransactionsRouteRoute
-  '/insights': typeof appsuInsightsRouteRoute
-  '/reports': typeof appsuReportsRouteRoute
+  '/insights': typeof appsuInsightsRoute
+  '/reports': typeof appsuReportsRoute
   '/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/auth/login': typeof authAuthLoginRoute
   '/welcome/signup': typeof authWelcomeSignupRoute
@@ -159,6 +180,8 @@ export interface FileRoutesByTo {
   '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
   '/transaction/receipt/$transactionId': typeof TransactionReceiptTransactionIdRoute
+  '/analytics/period': typeof appsuAnalyticsPeriodRoute
+  '/analytics': typeof appsuAnalyticsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -171,8 +194,9 @@ export interface FileRoutesById {
   '/(app)/overview': typeof appOverviewRouteRoute
   '/(app)/settings': typeof appSettingsRouteRoute
   '/(app)/transactions': typeof appTransactionsRouteRoute
-  '/(app)/(su)/insights': typeof appsuInsightsRouteRoute
-  '/(app)/(su)/reports': typeof appsuReportsRouteRoute
+  '/(app)/(su)/analytics': typeof appsuAnalyticsRouteRouteWithChildren
+  '/(app)/(su)/insights': typeof appsuInsightsRoute
+  '/(app)/(su)/reports': typeof appsuReportsRoute
   '/(app)/transaction/$transactionId': typeof appTransactionTransactionIdRoute
   '/(auth)/auth/login': typeof authAuthLoginRoute
   '/(auth)/welcome/signup': typeof authWelcomeSignupRoute
@@ -181,6 +205,8 @@ export interface FileRoutesById {
   '/api/eghl/cron': typeof ApiEghlCronRoute
   '/api/eghl/return': typeof ApiEghlReturnRoute
   '/transaction/receipt/$transactionId': typeof TransactionReceiptTransactionIdRoute
+  '/(app)/(su)/analytics/period': typeof appsuAnalyticsPeriodRoute
+  '/(app)/(su)/analytics/': typeof appsuAnalyticsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -191,6 +217,7 @@ export interface FileRouteTypes {
     | '/overview'
     | '/settings'
     | '/transactions'
+    | '/analytics'
     | '/insights'
     | '/reports'
     | '/transaction/$transactionId'
@@ -201,6 +228,8 @@ export interface FileRouteTypes {
     | '/api/eghl/cron'
     | '/api/eghl/return'
     | '/transaction/receipt/$transactionId'
+    | '/analytics/period'
+    | '/analytics/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -219,6 +248,8 @@ export interface FileRouteTypes {
     | '/api/eghl/cron'
     | '/api/eghl/return'
     | '/transaction/receipt/$transactionId'
+    | '/analytics/period'
+    | '/analytics'
   id:
     | '__root__'
     | '/'
@@ -230,6 +261,7 @@ export interface FileRouteTypes {
     | '/(app)/overview'
     | '/(app)/settings'
     | '/(app)/transactions'
+    | '/(app)/(su)/analytics'
     | '/(app)/(su)/insights'
     | '/(app)/(su)/reports'
     | '/(app)/transaction/$transactionId'
@@ -240,6 +272,8 @@ export interface FileRouteTypes {
     | '/api/eghl/cron'
     | '/api/eghl/return'
     | '/transaction/receipt/$transactionId'
+    | '/(app)/(su)/analytics/period'
+    | '/(app)/(su)/analytics/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -320,18 +354,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof appTransactionsRouteRouteImport
       parentRoute: typeof appRouteRoute
     }
+    '/(app)/(su)/analytics': {
+      id: '/(app)/(su)/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof appsuAnalyticsRouteRouteImport
+      parentRoute: typeof appsuRouteRoute
+    }
     '/(app)/(su)/insights': {
       id: '/(app)/(su)/insights'
       path: '/insights'
       fullPath: '/insights'
-      preLoaderRoute: typeof appsuInsightsRouteRouteImport
+      preLoaderRoute: typeof appsuInsightsRouteImport
       parentRoute: typeof appsuRouteRoute
     }
     '/(app)/(su)/reports': {
       id: '/(app)/(su)/reports'
       path: '/reports'
       fullPath: '/reports'
-      preLoaderRoute: typeof appsuReportsRouteRouteImport
+      preLoaderRoute: typeof appsuReportsRouteImport
       parentRoute: typeof appsuRouteRoute
     }
     '/(app)/transaction/$transactionId': {
@@ -390,17 +431,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TransactionReceiptTransactionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/(app)/(su)/analytics/': {
+      id: '/(app)/(su)/analytics/'
+      path: '/'
+      fullPath: '/analytics/'
+      preLoaderRoute: typeof appsuAnalyticsIndexRouteImport
+      parentRoute: typeof appsuAnalyticsRouteRoute
+    }
+    '/(app)/(su)/analytics/period': {
+      id: '/(app)/(su)/analytics/period'
+      path: '/period'
+      fullPath: '/analytics/period'
+      preLoaderRoute: typeof appsuAnalyticsPeriodRouteImport
+      parentRoute: typeof appsuAnalyticsRouteRoute
+    }
   }
 }
 
+interface appsuAnalyticsRouteRouteChildren {
+  appsuAnalyticsPeriodRoute: typeof appsuAnalyticsPeriodRoute
+  appsuAnalyticsIndexRoute: typeof appsuAnalyticsIndexRoute
+}
+
+const appsuAnalyticsRouteRouteChildren: appsuAnalyticsRouteRouteChildren = {
+  appsuAnalyticsPeriodRoute: appsuAnalyticsPeriodRoute,
+  appsuAnalyticsIndexRoute: appsuAnalyticsIndexRoute,
+}
+
+const appsuAnalyticsRouteRouteWithChildren =
+  appsuAnalyticsRouteRoute._addFileChildren(appsuAnalyticsRouteRouteChildren)
+
 interface appsuRouteRouteChildren {
-  appsuInsightsRouteRoute: typeof appsuInsightsRouteRoute
-  appsuReportsRouteRoute: typeof appsuReportsRouteRoute
+  appsuAnalyticsRouteRoute: typeof appsuAnalyticsRouteRouteWithChildren
+  appsuInsightsRoute: typeof appsuInsightsRoute
+  appsuReportsRoute: typeof appsuReportsRoute
 }
 
 const appsuRouteRouteChildren: appsuRouteRouteChildren = {
-  appsuInsightsRouteRoute: appsuInsightsRouteRoute,
-  appsuReportsRouteRoute: appsuReportsRouteRoute,
+  appsuAnalyticsRouteRoute: appsuAnalyticsRouteRouteWithChildren,
+  appsuInsightsRoute: appsuInsightsRoute,
+  appsuReportsRoute: appsuReportsRoute,
 }
 
 const appsuRouteRouteWithChildren = appsuRouteRoute._addFileChildren(

@@ -37,7 +37,7 @@ export function DateRangePickerButton(props: DateRangePickerButtonProps) {
     >
       <span>
         {value?.from && value.to
-          ? dateFormatter.formatRange(value.from, value.to)
+          ? dateFormatter.formatRange(value.from, value.to).replaceAll(/\s+/gu, ' ')
           : 'Pick a date range'}
       </span>
       <CaretDownIcon size={12} weight="bold" />

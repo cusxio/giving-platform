@@ -41,7 +41,7 @@ const LISTED_IN_HISTORY = {
   cancelled: true,
   failed: true,
   held: false,
-  pending: false,
+  pending: true,
   refunded: true,
   success: true,
 } as const satisfies Record<TransactionStatus, boolean>
