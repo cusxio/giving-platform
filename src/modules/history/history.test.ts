@@ -341,11 +341,18 @@ describe('the overview', () => {
     expectTypeOf<OverviewInput>().toEqualTypeOf<{ year: 'all' | number }>()
     type Wire = Awaited<ReturnType<typeof getOverview>>
     expectTypeOf<Wire['hero']['kind']>().toEqualTypeOf<'all' | 'year'>()
+    interface PaceYear {
+      runningTotals: number[]
+      total: number
+      year: number
+    }
     expectTypeOf<Extract<Wire['hero'], { kind: 'all' }>>().toEqualTypeOf<{
       kind: 'all'
+      lastYearSameDay: number | null
       since: Date | null
+      today: number
       total: number
-      years: { total: number; year: number }[]
+      years: [PaceYear, ...PaceYear[]]
     }>()
     expectTypeOf<Extract<Wire['hero'], { kind: 'year' }>>().toEqualTypeOf<{
       kind: 'year'
@@ -356,6 +363,10 @@ describe('the overview', () => {
       total: number
       year: number
     }>()
+    type RhythmMonth =
+      | { month: number; state: 'before' | 'noGift' | 'notYet' }
+      | { month: number; state: 'given'; total: number }
+    type Largest = { amount: number; date: Date; funds: string[] } | null
     expectTypeOf<Omit<Wire, 'hero'>>().toEqualTypeOf<{
       funds: { amount: number; fundName: string; share: number }[]
       giveAgain: Repeatable | null
@@ -374,14 +385,26 @@ describe('the overview', () => {
         id: string
         status: Row['status']
       }[]
-      rhythm: {
-        gifts: number
-        largest: { amount: number; date: Date; funds: string[] } | null
-        months: { month: number; total: number | null }[]
-        monthsGiven: number
-        monthsSoFar: number
-        usualGift: number
-      } | null
+      rhythm:
+        | {
+            gifts: number
+            kind: 'year'
+            largest: Largest
+            months: RhythmMonth[]
+            monthsGiven: number
+            monthsSoFar: number
+            usualGift: number
+          }
+        | {
+            firstGift: Date | null
+            gifts: number
+            kind: 'all'
+            largest: Largest
+            monthsGiven: number
+            monthsSoFar: number
+            usualGift: number
+            years: { months: RhythmMonth[]; year: number }[]
+          }
     }>()
 
     const overview = await getOverviewAction({

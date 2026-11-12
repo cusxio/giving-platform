@@ -7,6 +7,7 @@ export const money = (amount: number, privacyMode: boolean) => currency.format(a
 export const dayMonth = createDateFormatter({ day: 'numeric', month: 'short' })
 export const dayMonthYear = createDateFormatter({ day: 'numeric', month: 'short', year: 'numeric' })
 export const monthYear = createDateFormatter({ month: 'short', year: 'numeric' })
+export const longMonthYear = createDateFormatter({ month: 'long', year: 'numeric' })
 
 const fundList = new Intl.ListFormat('en', { type: 'conjunction' })
 

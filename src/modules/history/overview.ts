@@ -88,7 +88,6 @@ export function fundOf(fundName: string): Fund | undefined {
 }
 
 const klYear = (date: Date) => new TZDate(date, clientTz).getFullYear()
-const klMonth = (date: Date) => new TZDate(date, clientTz).getMonth() + 1
 
 const daysIn = (year: number) =>
   differenceInDays(new TZDate(year + 1, 0, 1, clientTz), new TZDate(year, 0, 1, clientTz))
@@ -161,25 +160,41 @@ function yearHero(gifts: readonly Gift[], year: number, now: TZDate) {
   }
 }
 
-function allHero(gifts: readonly Gift[], now: TZDate) {
+function earliestGift(gifts: readonly Gift[]) {
   let earliest: Gift | undefined
-  const totals = new Map<number, number>()
   for (const gift of gifts) {
-    const year = klYear(gift.createdAt)
-    totals.set(year, (totals.get(year) ?? 0) + gift.amount)
     if (earliest === undefined || gift.createdAt < earliest.createdAt) {
       earliest = gift
     }
   }
-  const firstYear = earliest ? klYear(earliest.createdAt) : now.getFullYear()
+  return earliest
+}
+
+function allHero(gifts: readonly Gift[], now: TZDate) {
+  const currentYear = now.getFullYear()
+  const today = dayIndex(now, currentYear)
+  const since = earliestGift(gifts)?.createdAt ?? null
+  const firstYear = since ? klYear(since) : currentYear
+  const yearRow = (year: number) => {
+    const totals = runningTotals(
+      gifts.filter((gift) => klYear(gift.createdAt) === year),
+      currentYear,
+      year === currentYear ? today + 1 : daysIn(currentYear),
+    )
+    return { runningTotals: totals, total: totals.at(-1) ?? 0, year }
+  }
+  const years: [ReturnType<typeof yearRow>, ...ReturnType<typeof yearRow>[]] = [
+    yearRow(currentYear),
+    ...Array.from({ length: currentYear - firstYear }, (_, i) => yearRow(currentYear - 1 - i)),
+  ]
+
   return {
     kind: 'all' as const,
-    since: earliest?.createdAt ?? null,
+    lastYearSameDay: years[1]?.runningTotals[today] ?? null,
+    since,
+    today,
     total: centsToRinggit(gifts.reduce((sum, gift) => sum + gift.amount, 0)),
-    years: Array.from({ length: now.getFullYear() - firstYear + 1 }, (_, i) => ({
-      total: centsToRinggit(totals.get(firstYear + i) ?? 0),
-      year: firstYear + i,
-    })),
+    years,
   }
 }
 
@@ -203,35 +218,93 @@ function fundShares(gifts: readonly Gift[]) {
   )
 }
 
-function rhythm(gifts: readonly Gift[], year: number, now: TZDate) {
-  const monthsSoFar = now.getFullYear() === year ? now.getMonth() + 1 : 12
-  const perMonth = new Map<number, number>()
+/** Months since year 0, so consecutive calendar months differ by one. */
+const monthNumber = (date: Date) => {
+  const local = new TZDate(date, clientTz)
+  return local.getFullYear() * 12 + local.getMonth()
+}
+
+type RhythmMonth =
+  | { month: number; state: 'before' | 'noGift' | 'notYet' }
+  | { month: number; state: 'given'; total: number }
+
+/** The twelve months of `year`. `from` and `to` are the month numbers of the first and last that count. */
+function rhythmMonths(
+  year: number,
+  centsByMonth: ReadonlyMap<number, number>,
+  from: number,
+  to: number,
+): RhythmMonth[] {
+  return Array.from({ length: 12 }, (_, i): RhythmMonth => {
+    const key = year * 12 + i
+    const month = i + 1
+    if (key < from) {
+      return { month, state: 'before' }
+    }
+    if (key > to) {
+      return { month, state: 'notYet' }
+    }
+    const cents = centsByMonth.get(key)
+    return cents === undefined
+      ? { month, state: 'noGift' }
+      : { month, state: 'given', total: centsToRinggit(cents) }
+  })
+}
+
+function giftStats(gifts: readonly Gift[]) {
+  const centsByMonth = new Map<number, number>()
   let largest: Gift | undefined
   for (const gift of gifts) {
-    const month = klMonth(gift.createdAt)
-    perMonth.set(month, (perMonth.get(month) ?? 0) + gift.amount)
+    const key = monthNumber(gift.createdAt)
+    centsByMonth.set(key, (centsByMonth.get(key) ?? 0) + gift.amount)
     if (largest === undefined || gift.amount > largest.amount) {
       largest = gift
     }
   }
 
   return {
-    gifts: gifts.length,
-    largest: largest
-      ? {
-          amount: centsToRinggit(largest.amount),
-          date: largest.createdAt,
-          funds: largest.items.map((item) => item.fundName),
-        }
-      : null,
-    /** `total` is null for a month that has not started. */
-    months: Array.from({ length: 12 }, (_, i) => ({
-      month: i + 1,
-      total: i < monthsSoFar ? centsToRinggit(perMonth.get(i + 1) ?? 0) : null,
-    })),
-    monthsGiven: perMonth.size,
+    centsByMonth,
+    stats: {
+      gifts: gifts.length,
+      largest: largest
+        ? {
+            amount: centsToRinggit(largest.amount),
+            date: largest.createdAt,
+            funds: largest.items.map((item) => item.fundName),
+          }
+        : null,
+      monthsGiven: centsByMonth.size,
+      usualGift: centsToRinggit(median(gifts.map((gift) => gift.amount))),
+    },
+  }
+}
+
+function yearRhythm(gifts: readonly Gift[], year: number, now: TZDate) {
+  const monthsSoFar = now.getFullYear() === year ? now.getMonth() + 1 : 12
+  const { centsByMonth, stats } = giftStats(gifts)
+  return {
+    ...stats,
+    kind: 'year' as const,
+    months: rhythmMonths(year, centsByMonth, year * 12, year * 12 + monthsSoFar - 1),
     monthsSoFar,
-    usualGift: centsToRinggit(median(gifts.map((gift) => gift.amount))),
+  }
+}
+
+function allRhythm(gifts: readonly Gift[], now: TZDate) {
+  const { centsByMonth, stats } = giftStats(gifts)
+  const firstGift = earliestGift(gifts)?.createdAt ?? null
+  const to = monthNumber(now)
+  const from = firstGift ? monthNumber(firstGift) : to
+  const currentYear = now.getFullYear()
+  return {
+    ...stats,
+    firstGift,
+    kind: 'all' as const,
+    monthsSoFar: to - from + 1,
+    years: Array.from({ length: currentYear - Math.floor(from / 12) + 1 }, (_, i) => ({
+      months: rhythmMonths(currentYear - i, centsByMonth, from, to),
+      year: currentYear - i,
+    })),
   }
 }
 
@@ -298,15 +371,15 @@ export function summarizeOverview(year: OverviewYear, rows: OverviewRows, now: D
   const today = new TZDate(now, clientTz)
   const gifts = groupGifts(rows.giftItems)
   const shown = year === 'all' ? gifts : gifts.filter((gift) => klYear(gift.createdAt) === year)
-  const isCurrentYear = year === today.getFullYear()
+  const includesToday = year === 'all' || year === today.getFullYear()
 
   return {
     funds: fundShares(shown),
-    giveAgain: isCurrentYear ? repeatable(rows.newestSuccess) : null,
+    giveAgain: includesToday ? repeatable(rows.newestSuccess) : null,
     hero: year === 'all' ? allHero(gifts, today) : yearHero(gifts, year, today),
     notices: {
-      expiringCard: isCurrentYear ? expiringCard(rows.cards, today) : null,
-      failedGift: isCurrentYear ? failedGift(rows.newestAny, today) : null,
+      expiringCard: includesToday ? expiringCard(rows.cards, today) : null,
+      failedGift: includesToday ? failedGift(rows.newestAny, today) : null,
     },
     recent: rows.recent.map((row) => ({
       amount: centsToRinggit(row.amount),
@@ -315,6 +388,6 @@ export function summarizeOverview(year: OverviewYear, rows: OverviewRows, now: D
       id: row.id,
       status: row.status,
     })),
-    rhythm: year === 'all' ? null : rhythm(shown, year, today),
+    rhythm: year === 'all' ? allRhythm(gifts, today) : yearRhythm(shown, year, today),
   }
 }

@@ -1,6 +1,5 @@
-import { areaY, barY, defineChart, dot, lineY, ruleX, text } from '@tanstack/charts'
+import { areaY, defineChart, dot, lineY, ruleX } from '@tanstack/charts'
 import { Chart } from '@tanstack/charts/react'
-import { scaleBand } from '@tanstack/charts/scales/band'
 import { scaleLinear } from '@tanstack/charts/scales/linear'
 import { tooltip } from '@tanstack/charts/tooltip'
 import { useMemo } from 'react'
@@ -9,17 +8,47 @@ import { TZDate, clientTz, differenceInDays } from '#/core/date'
 import { createCurrencyFormatter, monthLabel } from '#/core/formatters'
 
 import { dayMonth, money } from './format'
+import { LAST_YEAR, THIS_YEAR, paceStyle } from './pace'
 
 const compact = createCurrencyFormatter({ notation: 'compact' })
-
-const THIS_YEAR = 'var(--color-chart-1)'
-const LAST_YEAR = 'var(--color-fg-subtle)'
 
 interface DayTotal {
   day: number
   total: number
   year: number
 }
+
+const toRows = (totals: readonly number[], year: number): DayTotal[] =>
+  totals.map((total, day) => ({ day, total, year }))
+
+/** An x scale of the days of `year`, ticked at each month's start. */
+function daysOf(year: number) {
+  const jan1 = new TZDate(year, 0, 1, clientTz)
+  const days = differenceInDays(new TZDate(year + 1, 0, 1, clientTz), jan1)
+  const monthStarts = Array.from({ length: 12 }, (_, month) =>
+    differenceInDays(new TZDate(year, month, 1, clientTz), jan1),
+  )
+  const monthOf = new Map(monthStarts.map((day, month) => [day, month + 1]))
+  return {
+    axis: {
+      ticks: {
+        format: (day: number) => monthLabel(monthOf.get(day) ?? 1, 'short'),
+        values: monthStarts,
+      },
+    },
+    scale: scaleLinear().domain([0, days - 1]),
+  }
+}
+
+const amounts = (privacyMode: boolean) => ({
+  axis: { ticks: { count: 3, format: (amount: number) => compact.format(amount, privacyMode) } },
+  grid: true,
+  nice: true,
+  scale: scaleLinear,
+})
+
+const dayTitle = (year: number, day: number) =>
+  dayMonth.format(new TZDate(year, 0, 1 + day, clientTz))
 
 interface YearChartProps {
   lastYear: readonly number[] | null
@@ -29,19 +58,10 @@ interface YearChartProps {
   year: number
 }
 
-const toRows = (totals: readonly number[], year: number): DayTotal[] =>
-  totals.map((total, day) => ({ day, total, year }))
-
 export function YearChart(props: YearChartProps) {
   const { lastYear, privacyMode, thisYear, today, year } = props
 
   const definition = useMemo(() => {
-    const jan1 = new TZDate(year, 0, 1, clientTz)
-    const days = differenceInDays(new TZDate(year + 1, 0, 1, clientTz), jan1)
-    const monthStarts = Array.from({ length: 12 }, (_, month) =>
-      differenceInDays(new TZDate(year, month, 1, clientTz), jan1),
-    )
-    const monthOf = new Map(monthStarts.map((day, month) => [day, month + 1]))
     const current = toRows(thisYear, year)
     const previous = lastYear ? toRows(lastYear, year - 1) : []
     const latest = current.at(-1)
@@ -75,35 +95,16 @@ export function YearChart(props: YearChartProps) {
           z: 'year',
         }),
       ],
-      scales: {
-        x: {
-          axis: {
-            ticks: {
-              format: (day) => monthLabel(monthOf.get(day) ?? 1, 'short'),
-              values: monthStarts,
-            },
-          },
-          scale: scaleLinear().domain([0, days - 1]),
-        },
-        y: {
-          axis: { ticks: { count: 3, format: (amount) => compact.format(amount, privacyMode) } },
-          grid: true,
-          nice: true,
-          scale: scaleLinear,
-        },
-      },
+      scales: { x: daysOf(year), y: amounts(privacyMode) },
       tooltip: {
-        content: (points) => {
-          const day = points[0]?.datum.day ?? 0
-          return {
-            rows: points.map((point) => ({
-              color: point.datum.year === year ? THIS_YEAR : LAST_YEAR,
-              label: String(point.datum.year),
-              value: money(point.datum.total, privacyMode),
-            })),
-            title: dayMonth.format(new TZDate(year, 0, 1 + day, clientTz)),
-          }
-        },
+        content: (points) => ({
+          rows: points.map((point) => ({
+            color: point.datum.year === year ? THIS_YEAR : LAST_YEAR,
+            label: String(point.datum.year),
+            value: money(point.datum.total, privacyMode),
+          })),
+          title: dayTitle(year, points[0]?.datum.day ?? 0),
+        }),
         use: tooltip,
       },
     })
@@ -124,47 +125,70 @@ export function YearChart(props: YearChartProps) {
   )
 }
 
-interface YearsChartProps {
+interface PaceChartProps {
+  currentYear: number
+  picked: number
   privacyMode: boolean
-  years: readonly { total: number; year: number }[]
+  today: number
+  /** Newest first, each on the current year's calendar. */
+  years: readonly { runningTotals: readonly number[]; year: number }[]
 }
 
-export function YearsChart(props: YearsChartProps) {
-  const { privacyMode, years } = props
+export function PaceChart(props: PaceChartProps) {
+  const { currentYear, picked, privacyMode, today, years } = props
 
   const definition = useMemo(() => {
-    const latest = years.at(-1)?.year
-    const top = Math.max(1, ...years.map((row) => row.total))
+    // oxlint-disable-next-line unicorn/no-array-reverse -- Avoid toReversed until the runtime lib supports it.
+    const oldestFirst = years.filter((row) => row.year !== picked).reverse()
+    const pickedLast = [...oldestFirst, ...years.filter((row) => row.year === picked)]
+    const todayTotal = years.find((row) => row.year === currentYear)?.runningTotals[today]
+
     return defineChart({
-      focus: false,
-      margin: { top: 24 },
+      focus: 'group-x',
       marks: [
-        barY(years, {
-          fill: (row) => (row.year === latest ? THIS_YEAR : LAST_YEAR),
-          maxThickness: 96,
-          radius: 2,
-          x: (row) => String(row.year),
-          y: 'total',
+        ...pickedLast.map(({ runningTotals, year }) => {
+          const style = paceStyle(year, currentYear, picked)
+          return lineY(toRows(runningTotals, year), {
+            stroke: style.color,
+            strokeOpacity: style.opacity,
+            strokeWidth: style.width,
+            ...(style.dashed ? { strokeDasharray: '5 5' } : {}),
+            x: 'day',
+            y: 'total',
+            z: 'year',
+          })
         }),
-        text(years, {
-          dy: -10,
-          fill: 'var(--color-fg-muted)',
-          fontSize: 12,
-          text: (row) => money(row.total, privacyMode),
-          x: (row) => String(row.year),
-          y: 'total',
-        }),
+        ruleX([today], { stroke: LAST_YEAR, strokeDasharray: '2 3' }),
+        dot(
+          todayTotal === undefined ? [] : [{ day: today, total: todayTotal, year: currentYear }],
+          { fill: THIS_YEAR, r: 4, x: 'day', y: 'total', z: 'year' },
+        ),
       ],
-      scales: {
-        x: { axis: { ticks: { size: 0 } }, scale: () => scaleBand().padding(0.3) },
-        y: { axis: false, scale: scaleLinear().domain([0, top]) },
+      scales: { x: daysOf(currentYear), y: amounts(privacyMode) },
+      tooltip: {
+        content: (points) => ({
+          rows: years.flatMap(({ year }) => {
+            const point = points.find((candidate) => candidate.datum.year === year)
+            return point
+              ? [
+                  {
+                    color: paceStyle(year, currentYear, picked).color,
+                    label: String(year),
+                    value: money(point.datum.total, privacyMode),
+                  },
+                ]
+              : []
+          }),
+          title: dayTitle(currentYear, points[0]?.datum.day ?? 0),
+        }),
+        use: tooltip,
       },
     })
-  }, [privacyMode, years])
+  }, [currentYear, picked, privacyMode, today, years])
 
   return (
     <Chart
-      ariaLabel="Total given each year"
+      ariaLabel={`Running total within each year, ${years.at(-1)?.year ?? currentYear} to ${currentYear}`}
       className="px-4 pt-2 pb-2"
       definition={definition}
       height={200}

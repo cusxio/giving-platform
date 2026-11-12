@@ -17,7 +17,7 @@ import { OverviewGiveAgain } from './-components/overview-give-again'
 import { OverviewHero } from './-components/overview-hero'
 import { OverviewNotices } from './-components/overview-notices'
 import { OverviewRecent } from './-components/overview-recent'
-import { OverviewRhythm } from './-components/overview-rhythm'
+import { AllYearsRhythm, OverviewRhythm } from './-components/overview-rhythm'
 import { OverviewWelcome } from './-components/overview-welcome'
 import { OverviewYearSelector, hasMultipleYears } from './-components/overview-year-selector'
 
@@ -130,26 +130,31 @@ function RouteComponent() {
               <OverviewFunds className="flex-[1_1_18rem]" funds={funds} privacyMode={privacyMode} />
             </div>
 
-            {(rhythm !== null || giveAgain !== null) && (
-              <div className="flex flex-wrap gap-4">
-                {rhythm && typeof year === 'number' && (
-                  <OverviewRhythm
-                    className="flex-[1_1_18rem]"
-                    isCurrentYear={hero.kind === 'year' && hero.today !== null}
-                    privacyMode={privacyMode}
-                    rhythm={rhythm}
-                    year={year}
-                  />
-                )}
-                {giveAgain && (
-                  <OverviewGiveAgain
-                    className="flex-[1_1_18rem]"
-                    gift={giveAgain}
-                    privacyMode={privacyMode}
-                  />
-                )}
-              </div>
-            )}
+            <div className="flex flex-wrap gap-4">
+              {rhythm.kind === 'all' && (
+                <AllYearsRhythm
+                  className="flex-[1_1_18rem]"
+                  privacyMode={privacyMode}
+                  rhythm={rhythm}
+                />
+              )}
+              {rhythm.kind === 'year' && typeof year === 'number' && (
+                <OverviewRhythm
+                  className="flex-[1_1_18rem]"
+                  isCurrentYear={hero.kind === 'year' && hero.today !== null}
+                  privacyMode={privacyMode}
+                  rhythm={rhythm}
+                  year={year}
+                />
+              )}
+              {giveAgain && (
+                <OverviewGiveAgain
+                  className="flex-[1_1_18rem]"
+                  gift={giveAgain}
+                  privacyMode={privacyMode}
+                />
+              )}
+            </div>
 
             <BibleVerse />
             <OverviewRecent privacyMode={privacyMode} recent={recent} />
